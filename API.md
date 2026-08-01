@@ -13,7 +13,7 @@ token** (default 15 min, `rojan.security.jwt.access-token-ttl-minutes`) for
 calling the API, and a longer-lived **refresh token** (default 30 days,
 `rojan.security.jwt.refresh-token-ttl-days`) for obtaining a new pair. Each
 token embeds its own type and is only valid for its own purpose — a refresh
-token sent to a protected endpoint is rejected (`403`), and an access token
+token sent to a protected endpoint is rejected (`401`), and an access token
 sent to `/auth/refresh` is rejected (`401`).
 
 Protected endpoints require `Authorization: Bearer <accessToken>`.
@@ -99,12 +99,13 @@ Returns the authenticated caller. Requires a valid **access** token.
 { "id": "5d0c...", "email": "jane@example.com", "fullName": "Jane Doe", "role": "CUSTOMER" }
 ```
 
-**Errors**: `403` missing/invalid/wrong-type bearer token
+**Errors**: `401` missing/invalid/wrong-type bearer token
 
 ## Error shape
 
 Every non-2xx response from a handled exception (not Spring Security's own
-`403` denial, which has no body) has this shape:
+`401` denial for missing/invalid credentials, which has no body) has this
+shape:
 
 ```json
 {

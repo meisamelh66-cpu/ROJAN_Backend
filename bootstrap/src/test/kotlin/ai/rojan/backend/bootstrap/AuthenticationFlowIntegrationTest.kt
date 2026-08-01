@@ -145,7 +145,7 @@ class AuthenticationFlowIntegrationTest {
             bearer(refreshToken),
             String::class.java,
         )
-        assertEquals(HttpStatus.FORBIDDEN, response.statusCode)
+        assertEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
     }
 
     @Test
@@ -174,6 +174,6 @@ class AuthenticationFlowIntegrationTest {
     @Test
     fun `rejects unauthenticated access to a protected endpoint`() {
         val response = restTemplate.getForEntity(url("/api/v1/users/me"), String::class.java)
-        assertEquals(HttpStatus.FORBIDDEN, response.statusCode)
+        assertEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
     }
 }
