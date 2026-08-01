@@ -24,6 +24,10 @@ spring-boot-starter-security-test = { module = "org.springframework.security:spr
 spring-kafka = { module = "org.springframework.kafka:spring-kafka" }
 spring-kafka-test = { module = "org.springframework.kafka:spring-kafka-test" }
 
+# Servlet API — provided at runtime by the web starter's embedded Tomcat
+# (spring-security-web declares it `provided`, so it doesn't flow transitively)
+jakarta-servlet-api = { module = "jakarta.servlet:jakarta.servlet-api" }
+
 # Persistence
 postgresql = { module = "org.postgresql:postgresql" }
 flyway-core = { module = "org.flywaydb:flyway-core" }

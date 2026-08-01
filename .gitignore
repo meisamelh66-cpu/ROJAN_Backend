@@ -8,3 +8,7 @@ out/
 HELP.md
 .DS_Store
 *.log
+
+# Local-only scratch: self-managed Postgres binaries/data + secrets used to
+# verify the build on this machine (no Docker available here). Never commit.
+.tools/

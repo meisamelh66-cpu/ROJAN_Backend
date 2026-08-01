@@ -10,10 +10,10 @@ import ai.rojan.backend.domain.user.User
 import ai.rojan.backend.domain.user.UserId
 import ai.rojan.backend.domain.user.UserRepository
 import ai.rojan.backend.domain.user.UserRole
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.time.Instant
-import kotlin.test.assertEquals
 
 private class SingleUserRepository(private val user: User) : UserRepository {
     override fun save(user: User): User = user

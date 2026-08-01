@@ -14,10 +14,6 @@ plugins {
 allprojects {
     group = "ai.rojan.backend"
     version = "0.1.0-SNAPSHOT"
-
-    repositories {
-        mavenCentral()
-    }
 }
 
 subprojects {
@@ -45,5 +41,9 @@ subprojects {
 
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
+    }
+
+    dependencies {
+        add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
     }
 }

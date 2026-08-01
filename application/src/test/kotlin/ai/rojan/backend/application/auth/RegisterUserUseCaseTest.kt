@@ -7,10 +7,10 @@ import ai.rojan.backend.domain.user.User
 import ai.rojan.backend.domain.user.UserId
 import ai.rojan.backend.domain.user.UserRepository
 import ai.rojan.backend.domain.user.UserRole
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 private class InMemoryUserRepository : UserRepository {
     private val store = mutableMapOf<UserId, User>()

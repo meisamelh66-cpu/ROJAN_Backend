@@ -14,6 +14,7 @@ dependencies {
     implementation(libs.spring.boot.starter.data.redis)
     implementation(libs.spring.boot.starter.security)
     implementation(libs.spring.kafka)
+    compileOnly(libs.jakarta.servlet.api)
 
     implementation(libs.postgresql)
     implementation(libs.flyway.core)
