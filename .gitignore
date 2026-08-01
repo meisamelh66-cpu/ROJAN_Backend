@@ -1,0 +1,10 @@
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+.kotlin/
+out/
+*.iml
+.idea/
+HELP.md
+.DS_Store
+*.log

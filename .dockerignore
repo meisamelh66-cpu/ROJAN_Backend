@@ -1,0 +1,9 @@
+.git
+.gradle
+.idea
+.kotlin
+**/build
+*.iml
+Dockerfile
+docker-compose.yml
+README.md
