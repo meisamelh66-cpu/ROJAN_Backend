@@ -8,10 +8,16 @@ data class IssuedToken(
     val expiresAt: Instant,
 )
 
+enum class TokenType {
+    ACCESS,
+    REFRESH,
+}
+
 data class TokenSubject(
     val userId: String,
     val email: String,
     val role: String,
+    val type: TokenType,
 )
 
 /**
@@ -22,6 +28,14 @@ interface TokenProviderPort {
     fun generateAccessToken(user: User): IssuedToken
     fun generateRefreshToken(user: User): IssuedToken
 
-    /** @throws ai.rojan.backend.domain.common.InvalidTokenException if the token is malformed, expired, or unsigned by us. */
+    /**
+     * Validates signature, issuer, and expiry only — callers that care about
+     * access-vs-refresh must check [TokenSubject.type] themselves. Kept this
+     * way (rather than two separate validate methods) so both call sites —
+     * the request-authenticating filter and the refresh use case — share one
+     * signature-verification path.
+     *
+     * @throws ai.rojan.backend.domain.common.InvalidTokenException if the token is malformed, expired, or unsigned by us.
+     */
     fun validateAndExtractSubject(token: String): TokenSubject
 }

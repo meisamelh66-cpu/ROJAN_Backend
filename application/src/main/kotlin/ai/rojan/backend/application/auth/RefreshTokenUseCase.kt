@@ -1,6 +1,7 @@
 package ai.rojan.backend.application.auth
 
 import ai.rojan.backend.application.port.TokenProviderPort
+import ai.rojan.backend.application.port.TokenType
 import ai.rojan.backend.domain.common.InactiveUserException
 import ai.rojan.backend.domain.common.InvalidTokenException
 import ai.rojan.backend.domain.common.UserNotFoundException
@@ -17,6 +18,11 @@ class RefreshTokenUseCase(
 ) {
     fun execute(command: RefreshTokenCommand): AuthenticationResult {
         val subject = tokenProvider.validateAndExtractSubject(command.refreshToken)
+        if (subject.type != TokenType.REFRESH) {
+            // An access token is signed the same way — reject it here rather than
+            // letting it double as a refresh credential.
+            throw InvalidTokenException()
+        }
         val userId = runCatching { UUID.fromString(subject.userId) }
             .getOrElse { throw InvalidTokenException() }
 

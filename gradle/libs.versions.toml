@@ -6,6 +6,11 @@ springdoc = "2.6.0"
 jjwt = "0.12.6"
 junit = "5.11.3"
 mockk = "1.13.13"
+zonkyEmbeddedDatabase = "2.8.0"
+zonkyEmbeddedPostgres = "2.2.2"
+zonkyPostgresBinaries = "16.14.0"
+commonsCompress = "1.28.0"
+commonsLang3 = "3.18.0"
 
 [libraries]
 # Kotlin
@@ -44,6 +49,27 @@ springdoc-openapi = { module = "org.springdoc:springdoc-openapi-starter-webmvc-u
 # Test
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
+# TestRestTemplate auto-detects and prefers this over the JDK's default
+# HttpURLConnection-based client, which has a long-standing bug throwing
+# HttpRetryException on 401 responses to a streamed POST body.
+apache-httpclient5 = { module = "org.apache.httpcomponents.client5:httpclient5" }
+
+# Integration tests: a real (embedded, no-Docker) PostgreSQL, since this
+# environment has no Docker daemon for Testcontainers. Reuses the same
+# actual PostgreSQL binaries mechanism proven out for local manual
+# verification (see README's "Environment gotcha" note).
+zonky-embedded-database-spring-test = { module = "io.zonky.test:embedded-database-spring-test", version.ref = "zonkyEmbeddedDatabase" }
+# The Spring integration above only wires providers in; the ZONKY (native,
+# no-Docker) provider implementation itself is this separate artifact.
+zonky-embedded-postgres = { module = "io.zonky.test:embedded-postgres", version.ref = "zonkyEmbeddedPostgres" }
+zonky-postgres-binaries-windows-amd64 = { module = "io.zonky.test.postgres:embedded-postgres-binaries-windows-amd64", version.ref = "zonkyPostgresBinaries" }
+# Spring Boot's BOM pins an older commons-compress than embedded-postgres's
+# tar/xz extraction needs (NoSuchMethodError on TarArchiveEntry at runtime);
+# override it explicitly for the test classpath.
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commonsCompress" }
+# commons-compress 1.28.0 in turn needs commons-lang3 >=3.18, but springdoc
+# pulls in 3.14 which otherwise wins conflict resolution — override too.
+commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "commonsLang3" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

@@ -3,6 +3,7 @@ package ai.rojan.backend.infrastructure.security
 import ai.rojan.backend.application.port.IssuedToken
 import ai.rojan.backend.application.port.TokenProviderPort
 import ai.rojan.backend.application.port.TokenSubject
+import ai.rojan.backend.application.port.TokenType
 import ai.rojan.backend.domain.common.InvalidTokenException
 import ai.rojan.backend.domain.user.User
 import io.jsonwebtoken.ExpiredJwtException
@@ -13,13 +14,12 @@ import org.springframework.stereotype.Component
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Date
+import java.util.UUID
 import javax.crypto.SecretKey
 
 private const val CLAIM_EMAIL = "email"
 private const val CLAIM_ROLE = "role"
 private const val CLAIM_TOKEN_TYPE = "type"
-private const val TOKEN_TYPE_ACCESS = "access"
-private const val TOKEN_TYPE_REFRESH = "refresh"
 
 @Component
 class JwtTokenProvider(
@@ -29,10 +29,10 @@ class JwtTokenProvider(
     private val signingKey: SecretKey = Keys.hmacShaKeyFor(jwtProperties.secret.toByteArray())
 
     override fun generateAccessToken(user: User): IssuedToken =
-        issue(user, TOKEN_TYPE_ACCESS, jwtProperties.accessTokenTtlMinutes, ChronoUnit.MINUTES)
+        issue(user, TokenType.ACCESS, jwtProperties.accessTokenTtlMinutes, ChronoUnit.MINUTES)
 
     override fun generateRefreshToken(user: User): IssuedToken =
-        issue(user, TOKEN_TYPE_REFRESH, jwtProperties.refreshTokenTtlDays, ChronoUnit.DAYS)
+        issue(user, TokenType.REFRESH, jwtProperties.refreshTokenTtlDays, ChronoUnit.DAYS)
 
     override fun validateAndExtractSubject(token: String): TokenSubject {
         val claims = try {
@@ -50,21 +50,27 @@ class JwtTokenProvider(
             throw InvalidTokenException()
         }
 
+        val type = (claims[CLAIM_TOKEN_TYPE] as? String)?.uppercase()?.let {
+            runCatching { TokenType.valueOf(it) }.getOrNull()
+        } ?: throw InvalidTokenException()
+
         return TokenSubject(
             userId = claims.subject,
             email = claims[CLAIM_EMAIL] as? String ?: throw InvalidTokenException(),
             role = claims[CLAIM_ROLE] as? String ?: throw InvalidTokenException(),
+            type = type,
         )
     }
 
-    private fun issue(user: User, type: String, ttl: Long, unit: ChronoUnit): IssuedToken {
+    private fun issue(user: User, type: TokenType, ttl: Long, unit: ChronoUnit): IssuedToken {
         val now = Instant.now()
         val expiresAt = now.plus(ttl, unit)
         val token = Jwts.builder()
+            .id(UUID.randomUUID().toString())
             .subject(user.id.value.toString())
             .claim(CLAIM_EMAIL, user.email.value)
             .claim(CLAIM_ROLE, user.role.name)
-            .claim(CLAIM_TOKEN_TYPE, type)
+            .claim(CLAIM_TOKEN_TYPE, type.name)
             .issuer(jwtProperties.issuer)
             .issuedAt(Date.from(now))
             .expiration(Date.from(expiresAt))

@@ -34,46 +34,58 @@ This is what lets `infrastructure` implement `UserRepository`/
 `PasswordEncoderPort`/`TokenProviderPort` while `api` only ever depends on
 the interfaces.
 
-## Implemented so far (foundation milestone)
+## Implemented so far (auth vertical slice — frozen baseline)
 
 - `User` domain entity + `UserRole` (`CUSTOMER`, `MANAGER`, `SPECIALIST`)
 - Auth use cases: register, login, refresh — all pure Kotlin, unit-tested
   against in-memory fakes (no Spring context required)
-- JWT access/refresh tokens (`io.jsonwebtoken`, HS256), stateless Spring
-  Security filter chain
+- JWT access/refresh tokens (`io.jsonwebtoken`, HS256), each carrying its
+  own type — a refresh token is rejected by protected endpoints and an
+  access token is rejected by `/auth/refresh`; stateless Spring Security
+  filter chain
 - PostgreSQL persistence via Spring Data JPA + a repository-pattern adapter;
   Flyway migration `V1__init_schema.sql` owns the schema (`ddl-auto: validate`,
   Hibernate never mutates the schema itself)
 - `POST /api/v1/auth/register`, `/login`, `/refresh`, `GET /api/v1/users/me`
-- OpenAPI/Swagger UI at `/swagger-ui.html`
+  — full contract in [`API.md`](API.md)
+- OpenAPI/Swagger UI at `/swagger-ui/index.html`
+- Integration tests (`bootstrap` module) exercise the real HTTP layer end to
+  end against a real, embedded (no-Docker) PostgreSQL via
+  `io.zonky.test:embedded-database-spring-test`
 - Redis + Kafka: connection/config beans only, ready for the first real
   caching/eventing use case to consume
+
+This is a frozen baseline as of commit `<see git log>` — extend additively
+(new endpoints/use cases consuming the same primitives) rather than
+reworking the auth mechanism itself; get explicit sign-off first for
+anything architectural, same convention as `ROJAN_DesignLab`'s frozen
+baselines.
 
 ## Not yet built
 
 Booking/salon/service domain, staff/specialist accounts beyond the role enum,
-Kafka topics/consumers, Redis-backed caching, integration tests (e.g.
-Testcontainers against a real Postgres), CI pipeline, refresh-token
-revocation/rotation storage. Extend additively through the same layering —
-see `CLAUDE.md`-style conventions in `ROJAN_DesignLab` for the pattern this
-repo follows (frozen baselines, confirm before architecture changes).
+Kafka topics/consumers, Redis-backed caching, CI pipeline, refresh-token
+revocation/rotation storage (see "Known gaps" in [`API.md`](API.md)),
+Android client integration (separate milestone).
 
 ## Running locally
 
-Requires JDK 21 and Docker. **This environment did not have either
-installed when this repo was scaffolded, so the build below has not been
-executed/verified here — verify it on a machine with JDK 21 + Docker before
-relying on it.**
+Requires JDK 21. Two ways to get a database:
 
-### Full stack via Docker Compose
-
+**Docker** (if available):
 ```bash
 export JWT_SECRET=$(openssl rand -base64 48)   # >= 32 chars, HS256 requirement
 docker compose up --build
 ```
-
 App comes up on `http://localhost:8080`, Swagger UI at
-`http://localhost:8080/swagger-ui.html`.
+`http://localhost:8080/swagger-ui/index.html`.
+
+**No Docker** — this is how the build was actually verified during
+development, on a machine with no Docker daemon: extract real PostgreSQL
+binaries from the `io.zonky.test.postgres:embedded-postgres-binaries-windows-amd64`
+Maven Central artifact (same mechanism the integration tests use
+automatically) and run `initdb`/`pg_ctl` directly. See git history / ask if
+you need the exact steps reproduced.
 
 ### Local JVM run against Dockerized dependencies only
 
@@ -88,6 +100,10 @@ export JWT_SECRET=$(openssl rand -base64 48)
 ```bash
 ./gradlew build
 ```
+
+No external database needed for this — unit tests use in-memory fakes and
+the integration tests spin up their own real, embedded PostgreSQL
+automatically (downloads once via Maven Central, then cached).
 
 ## Configuration
 

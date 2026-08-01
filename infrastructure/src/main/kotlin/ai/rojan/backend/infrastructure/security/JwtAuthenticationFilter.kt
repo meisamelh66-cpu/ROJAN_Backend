@@ -1,6 +1,7 @@
 package ai.rojan.backend.infrastructure.security
 
 import ai.rojan.backend.application.port.TokenProviderPort
+import ai.rojan.backend.application.port.TokenType
 import ai.rojan.backend.domain.common.DomainException
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -33,6 +34,12 @@ class JwtAuthenticationFilter(
         if (header != null && header.startsWith(BEARER_PREFIX) && !alreadyAuthenticated) {
             try {
                 val subject = tokenProvider.validateAndExtractSubject(header.removePrefix(BEARER_PREFIX))
+                if (subject.type != TokenType.ACCESS) {
+                    // A refresh token is signed the same way — reject it here rather than
+                    // letting it double as an API credential.
+                    filterChain.doFilter(request, response)
+                    return
+                }
                 val userDetails = userDetailsService.loadUserByUsername(subject.email)
                 val authentication = UsernamePasswordAuthenticationToken(
                     userDetails,

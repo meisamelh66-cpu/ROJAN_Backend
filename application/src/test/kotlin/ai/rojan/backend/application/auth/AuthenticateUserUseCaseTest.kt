@@ -4,6 +4,7 @@ import ai.rojan.backend.application.port.IssuedToken
 import ai.rojan.backend.application.port.PasswordEncoderPort
 import ai.rojan.backend.application.port.TokenProviderPort
 import ai.rojan.backend.application.port.TokenSubject
+import ai.rojan.backend.application.port.TokenType
 import ai.rojan.backend.domain.common.InvalidCredentialsException
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.User
@@ -36,7 +37,7 @@ private class FakeTokenProvider : TokenProviderPort {
         IssuedToken("refresh-${user.id.value}", Instant.now().plusSeconds(2_592_000))
 
     override fun validateAndExtractSubject(token: String) =
-        TokenSubject(userId = token.substringAfter("-"), email = "", role = "")
+        TokenSubject(userId = token.substringAfter("-"), email = "", role = "", type = TokenType.ACCESS)
 }
 
 class AuthenticateUserUseCaseTest {
