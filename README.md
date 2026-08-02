@@ -47,7 +47,7 @@ the interfaces.
   Flyway migration `V1__init_schema.sql` owns the schema (`ddl-auto: validate`,
   Hibernate never mutates the schema itself)
 - `POST /api/v1/auth/register`, `/login`, `/refresh`, `GET /api/v1/users/me`
-  — full contract in [`API.md`](API.md)
+  — full contract in [`API_CONTRACT.md`](API_CONTRACT.md)
 - OpenAPI/Swagger UI at `/swagger-ui/index.html`
 - Integration tests (`bootstrap` module) exercise the real HTTP layer end to
   end against a real, embedded (no-Docker) PostgreSQL via
@@ -61,12 +61,23 @@ reworking the auth mechanism itself; get explicit sign-off first for
 anything architectural, same convention as `ROJAN_DesignLab`'s frozen
 baselines.
 
+## Also built since the frozen baseline above
+
+Salon management (salon/branch/service-category/service/specialist CRUD),
+a booking engine (working hours, specialist schedules, computed available
+slots, and a concurrency-safe booking lifecycle), and an API-hardening pass
+(pagination/filtering/sorting, standardized errors with a `traceId`,
+`Idempotency-Key` support on booking creation, and an OWASP-driven fix
+redacting specialist leave/override/block `reason` fields from non-owner
+viewers). Full contract in [`API_CONTRACT.md`](API_CONTRACT.md).
+
 ## Not yet built
 
-Booking/salon/service domain, staff/specialist accounts beyond the role enum,
-Kafka topics/consumers, Redis-backed caching, CI pipeline, refresh-token
-revocation/rotation storage (see "Known gaps" in [`API.md`](API.md)),
-Android client integration (separate milestone).
+Payments, CRM, notifications, reviews, staff/specialist login accounts
+beyond the role enum + optional link, Kafka topics/consumers, Redis-backed
+caching, CI pipeline, refresh-token revocation/rotation storage (see "Known
+gaps" in [`API_CONTRACT.md`](API_CONTRACT.md)), Android client integration
+(separate milestone).
 
 ## Running locally
 

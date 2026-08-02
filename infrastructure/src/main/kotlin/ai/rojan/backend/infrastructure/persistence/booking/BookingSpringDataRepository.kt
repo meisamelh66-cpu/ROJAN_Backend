@@ -1,6 +1,8 @@
 package ai.rojan.backend.infrastructure.persistence.booking
 
 import ai.rojan.backend.domain.booking.BookingStatus
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -8,8 +10,10 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 interface BookingSpringDataRepository : JpaRepository<BookingJpaEntity, UUID> {
-    fun findBySalonId(salonId: UUID): List<BookingJpaEntity>
-    fun findByCustomerId(customerId: UUID): List<BookingJpaEntity>
+    fun findBySalonId(salonId: UUID, pageable: Pageable): Page<BookingJpaEntity>
+    fun findBySalonIdAndStatus(salonId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
+    fun findByCustomerId(customerId: UUID, pageable: Pageable): Page<BookingJpaEntity>
+    fun findByCustomerIdAndStatus(customerId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
 
     @Query(
         """

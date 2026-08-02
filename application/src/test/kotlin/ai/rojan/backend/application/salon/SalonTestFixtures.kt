@@ -1,5 +1,8 @@
 package ai.rojan.backend.application.salon
 
+import ai.rojan.backend.domain.common.PageRequest
+import ai.rojan.backend.domain.common.PageResult
+import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.salon.Branch
 import ai.rojan.backend.domain.salon.BranchId
 import ai.rojan.backend.domain.salon.BranchRepository
@@ -26,7 +29,22 @@ internal class InMemorySalonRepository : SalonRepository {
     override fun save(salon: Salon): Salon = salon.also { store[it.id] = it }
     override fun findById(id: SalonId): Salon? = store[id]
     override fun findByOwnerId(ownerId: UserId): List<Salon> = store.values.filter { it.ownerId == ownerId }
-    override fun findAllActive(): List<Salon> = store.values.filter { it.active }
+
+    override fun findAllActive(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon> {
+        val filtered = store.values
+            .filter { it.active }
+            .filter { nameFilter.isNullOrBlank() || it.name.contains(nameFilter, ignoreCase = true) }
+            .sortedBy { it.name }
+            .let { if (sortDirection == SortDirection.DESC) it.reversed() else it }
+        val fromIndex = (pageRequest.page * pageRequest.size).coerceAtMost(filtered.size)
+        val toIndex = (fromIndex + pageRequest.size).coerceAtMost(filtered.size)
+        return PageResult(
+            content = filtered.subList(fromIndex, toIndex),
+            page = pageRequest.page,
+            size = pageRequest.size,
+            totalElements = filtered.size.toLong(),
+        )
+    }
 }
 
 internal class InMemoryBranchRepository : BranchRepository {

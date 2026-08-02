@@ -4,6 +4,7 @@ import ai.rojan.backend.api.auth.AuthResponse
 import ai.rojan.backend.api.auth.LoginRequest
 import ai.rojan.backend.api.auth.RegisterRequest
 import ai.rojan.backend.api.auth.UserResponse
+import ai.rojan.backend.api.common.PagedResponse
 import ai.rojan.backend.api.salon.BranchResponse
 import ai.rojan.backend.api.salon.CreateBranchRequest
 import ai.rojan.backend.api.salon.CreateSalonRequest
@@ -27,6 +28,7 @@ import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
+import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
@@ -87,10 +89,10 @@ class SalonManagementFlowIntegrationTest {
             url("/api/v1/salons"),
             HttpMethod.GET,
             HttpEntity<Void>(bearer(ownerToken)),
-            Array<SalonResponse>::class.java,
+            object : ParameterizedTypeReference<PagedResponse<SalonResponse>>() {},
         )
         assertEquals(HttpStatus.OK, listSalons.statusCode)
-        assertTrue(listSalons.body!!.any { it.id == salon.id })
+        assertTrue(listSalons.body!!.content.any { it.id == salon.id })
 
         val createBranch = restTemplate.exchange(
             url("/api/v1/salons/${salon.id}/branches"),

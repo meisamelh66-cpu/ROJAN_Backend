@@ -22,6 +22,8 @@ import ai.rojan.backend.domain.common.SpecialistBlockNotFoundException
 import ai.rojan.backend.domain.common.SpecialistLeaveNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.common.WeeklyAvailabilityNotFoundException
+import ai.rojan.backend.domain.salon.SalonRepository
+import ai.rojan.backend.domain.salon.Specialist
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.salon.SpecialistRepository
 import ai.rojan.backend.domain.schedule.BlockId
@@ -59,6 +61,7 @@ import java.util.UUID
 @Tag(name = "Specialist Schedule")
 class SpecialistScheduleController(
     private val specialistRepository: SpecialistRepository,
+    private val salonRepository: SalonRepository,
     private val weeklyAvailabilityRepository: SpecialistWeeklyAvailabilityRepository,
     private val overrideRepository: SpecialistScheduleOverrideRepository,
     private val leaveRepository: SpecialistLeaveRepository,
@@ -146,10 +149,18 @@ class SpecialistScheduleController(
     }
 
     @GetMapping("/overrides")
-    @Operation(summary = "List a specialist's schedule overrides")
-    fun listOverrides(@PathVariable salonId: UUID, @PathVariable specialistId: UUID): List<ScheduleOverrideResponse> {
+    @Operation(
+        summary = "List a specialist's schedule overrides",
+        description = "The `reason` field is only populated for the salon owner; other viewers see it redacted as null.",
+    )
+    fun listOverrides(
+        @PathVariable salonId: UUID,
+        @PathVariable specialistId: UUID,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): List<ScheduleOverrideResponse> {
         val specialist = findSpecialistOrThrow(salonId, specialistId)
-        return overrideRepository.findBySpecialistId(specialist.id).map { it.toResponse() }
+        val redact = !isOwner(specialist, principal)
+        return overrideRepository.findBySpecialistId(specialist.id).map { it.toResponse(redact) }
     }
 
     @DeleteMapping("/overrides/{overrideId}")
@@ -186,10 +197,18 @@ class SpecialistScheduleController(
     }
 
     @GetMapping("/leaves")
-    @Operation(summary = "List a specialist's vacation/leave records")
-    fun listLeaves(@PathVariable salonId: UUID, @PathVariable specialistId: UUID): List<LeaveResponse> {
+    @Operation(
+        summary = "List a specialist's vacation/leave records",
+        description = "The `reason` field is only populated for the salon owner; other viewers see it redacted as null.",
+    )
+    fun listLeaves(
+        @PathVariable salonId: UUID,
+        @PathVariable specialistId: UUID,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): List<LeaveResponse> {
         val specialist = findSpecialistOrThrow(salonId, specialistId)
-        return leaveRepository.findBySpecialistId(specialist.id).map { it.toResponse() }
+        val redact = !isOwner(specialist, principal)
+        return leaveRepository.findBySpecialistId(specialist.id).map { it.toResponse(redact) }
     }
 
     @DeleteMapping("/leaves/{leaveId}")
@@ -226,10 +245,18 @@ class SpecialistScheduleController(
     }
 
     @GetMapping("/blocks")
-    @Operation(summary = "List a specialist's ad-hoc blocked time windows")
-    fun listBlocks(@PathVariable salonId: UUID, @PathVariable specialistId: UUID): List<BlockResponse> {
+    @Operation(
+        summary = "List a specialist's ad-hoc blocked time windows",
+        description = "The `reason` field is only populated for the salon owner; other viewers see it redacted as null.",
+    )
+    fun listBlocks(
+        @PathVariable salonId: UUID,
+        @PathVariable specialistId: UUID,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): List<BlockResponse> {
         val specialist = findSpecialistOrThrow(salonId, specialistId)
-        return blockRepository.findBySpecialistId(specialist.id).map { it.toResponse() }
+        val redact = !isOwner(specialist, principal)
+        return blockRepository.findBySpecialistId(specialist.id).map { it.toResponse(redact) }
     }
 
     @DeleteMapping("/blocks/{blockId}")
@@ -274,6 +301,13 @@ class SpecialistScheduleController(
             ?: throw SpecialistBlockNotFoundException(blockId.toString())
     }
 
+    /** Only the salon owner may see why a specialist is unavailable (OWASP API3: excessive data exposure). */
+    private fun isOwner(specialist: Specialist, principal: UserDetails): Boolean {
+        val callerId = currentUserResolver.resolve(principal)
+        val salon = salonRepository.findById(specialist.salonId) ?: return false
+        return salon.ownerId == callerId
+    }
+
     private fun SpecialistWeeklyAvailability.toResponse() = WeeklyAvailabilityResponse(
         id = id.value,
         specialistId = specialistId.value,
@@ -283,32 +317,32 @@ class SpecialistScheduleController(
         updatedAt = updatedAt,
     )
 
-    private fun SpecialistScheduleOverride.toResponse() = ScheduleOverrideResponse(
+    private fun SpecialistScheduleOverride.toResponse(redactReason: Boolean = false) = ScheduleOverrideResponse(
         id = id.value,
         specialistId = specialistId.value,
         date = date,
         intervals = intervals.map { TimeIntervalDto(it.start, it.end) },
-        reason = reason,
+        reason = if (redactReason) null else reason,
         createdAt = createdAt,
         updatedAt = updatedAt,
     )
 
-    private fun SpecialistLeave.toResponse() = LeaveResponse(
+    private fun SpecialistLeave.toResponse(redactReason: Boolean = false) = LeaveResponse(
         id = id.value,
         specialistId = specialistId.value,
         startDate = startDate,
         endDate = endDate,
-        reason = reason,
+        reason = if (redactReason) null else reason,
         createdAt = createdAt,
     )
 
-    private fun SpecialistBlock.toResponse() = BlockResponse(
+    private fun SpecialistBlock.toResponse(redactReason: Boolean = false) = BlockResponse(
         id = id.value,
         specialistId = specialistId.value,
         date = date,
         start = interval.start,
         end = interval.end,
-        reason = reason,
+        reason = if (redactReason) null else reason,
         createdAt = createdAt,
     )
 }

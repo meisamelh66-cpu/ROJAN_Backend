@@ -1,11 +1,16 @@
 package ai.rojan.backend.infrastructure.persistence.salon
 
+import ai.rojan.backend.domain.common.PageRequest
+import ai.rojan.backend.domain.common.PageResult
+import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.user.UserId
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Repository
 import java.time.Instant
+import org.springframework.data.domain.PageRequest as SpringPageRequest
 
 /** Repository-pattern adapter: implements the domain [SalonRepository] port on top of Spring Data JPA. */
 @Repository
@@ -42,8 +47,21 @@ class SalonRepositoryAdapter(
     override fun findByOwnerId(ownerId: UserId): List<Salon> =
         jpaRepository.findByOwnerId(ownerId.value).map { it.toDomain() }
 
-    override fun findAllActive(): List<Salon> =
-        jpaRepository.findByActiveTrue().map { it.toDomain() }
+    override fun findAllActive(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon> {
+        val direction = if (sortDirection == SortDirection.ASC) Sort.Direction.ASC else Sort.Direction.DESC
+        val pageable = SpringPageRequest.of(pageRequest.page, pageRequest.size, Sort.by(direction, "name"))
+        val page = if (nameFilter.isNullOrBlank()) {
+            jpaRepository.findByActiveTrue(pageable)
+        } else {
+            jpaRepository.findByActiveTrueAndNameContainingIgnoreCase(nameFilter, pageable)
+        }
+        return PageResult(
+            content = page.content.map { it.toDomain() },
+            page = page.number,
+            size = page.size,
+            totalElements = page.totalElements,
+        )
+    }
 
     private fun SalonJpaEntity.toDomain(): Salon = Salon.reconstitute(
         id = SalonId(id),

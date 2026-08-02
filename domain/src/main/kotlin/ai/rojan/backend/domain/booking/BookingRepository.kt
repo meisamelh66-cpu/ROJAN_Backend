@@ -1,5 +1,8 @@
 package ai.rojan.backend.domain.booking
 
+import ai.rojan.backend.domain.common.PageRequest
+import ai.rojan.backend.domain.common.PageResult
+import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.user.UserId
@@ -20,8 +23,22 @@ interface BookingRepository {
     fun save(booking: Booking): Booking
 
     fun findById(id: BookingId): Booking?
-    fun findBySalonId(salonId: SalonId): List<Booking>
-    fun findByCustomerId(customerId: UserId): List<Booking>
+
+    /** A salon's bookings, optionally filtered by status, sorted by start time. */
+    fun findBySalonId(
+        salonId: SalonId,
+        pageRequest: PageRequest,
+        statusFilter: BookingStatus?,
+        sortDirection: SortDirection,
+    ): PageResult<Booking>
+
+    /** A customer's bookings, optionally filtered by status, sorted by start time. */
+    fun findByCustomerId(
+        customerId: UserId,
+        pageRequest: PageRequest,
+        statusFilter: BookingStatus?,
+        sortDirection: SortDirection,
+    ): PageResult<Booking>
 
     /** Active (pending/confirmed) bookings for [specialistId] overlapping [from]..[to], used by the slot engine. */
     fun findActiveBySpecialistIdAndDateRange(

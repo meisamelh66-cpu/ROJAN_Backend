@@ -5,16 +5,22 @@ import ai.rojan.backend.domain.booking.BookingId
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.booking.BookingStatus
 import ai.rojan.backend.domain.common.BookingConflictException
+import ai.rojan.backend.domain.common.PageRequest
+import ai.rojan.backend.domain.common.PageResult
+import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.ServiceId
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.user.UserId
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Sort
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDateTime
+import org.springframework.data.domain.PageRequest as SpringPageRequest
 
 private val ACTIVE_STATUSES = listOf(BookingStatus.PENDING, BookingStatus.CONFIRMED)
 
@@ -59,11 +65,47 @@ class BookingRepositoryAdapter(
     override fun findById(id: BookingId): Booking? =
         jpaRepository.findById(id.value).orElse(null)?.toDomain()
 
-    override fun findBySalonId(salonId: SalonId): List<Booking> =
-        jpaRepository.findBySalonId(salonId.value).map { it.toDomain() }
+    override fun findBySalonId(
+        salonId: SalonId,
+        pageRequest: PageRequest,
+        statusFilter: BookingStatus?,
+        sortDirection: SortDirection,
+    ): PageResult<Booking> {
+        val pageable = pageableSortedByStartTime(pageRequest, sortDirection)
+        val page = if (statusFilter == null) {
+            jpaRepository.findBySalonId(salonId.value, pageable)
+        } else {
+            jpaRepository.findBySalonIdAndStatus(salonId.value, statusFilter, pageable)
+        }
+        return page.toPageResult()
+    }
 
-    override fun findByCustomerId(customerId: UserId): List<Booking> =
-        jpaRepository.findByCustomerId(customerId.value).map { it.toDomain() }
+    override fun findByCustomerId(
+        customerId: UserId,
+        pageRequest: PageRequest,
+        statusFilter: BookingStatus?,
+        sortDirection: SortDirection,
+    ): PageResult<Booking> {
+        val pageable = pageableSortedByStartTime(pageRequest, sortDirection)
+        val page = if (statusFilter == null) {
+            jpaRepository.findByCustomerId(customerId.value, pageable)
+        } else {
+            jpaRepository.findByCustomerIdAndStatus(customerId.value, statusFilter, pageable)
+        }
+        return page.toPageResult()
+    }
+
+    private fun pageableSortedByStartTime(pageRequest: PageRequest, sortDirection: SortDirection): SpringPageRequest {
+        val direction = if (sortDirection == SortDirection.ASC) Sort.Direction.ASC else Sort.Direction.DESC
+        return SpringPageRequest.of(pageRequest.page, pageRequest.size, Sort.by(direction, "startTime"))
+    }
+
+    private fun Page<BookingJpaEntity>.toPageResult(): PageResult<Booking> = PageResult(
+        content = content.map { it.toDomain() },
+        page = number,
+        size = size,
+        totalElements = totalElements,
+    )
 
     override fun findActiveBySpecialistIdAndDateRange(
         specialistId: SpecialistId,

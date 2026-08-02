@@ -6,6 +6,7 @@ import ai.rojan.backend.api.auth.RegisterRequest
 import ai.rojan.backend.api.auth.UserResponse
 import ai.rojan.backend.api.booking.BookingResponse
 import ai.rojan.backend.api.booking.CreateBookingRequest
+import ai.rojan.backend.api.common.PagedResponse
 import ai.rojan.backend.api.salon.CreateSalonRequest
 import ai.rojan.backend.api.salon.CreateServiceCategoryRequest
 import ai.rojan.backend.api.salon.CreateServiceRequest
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.client.TestRestTemplate
 import org.springframework.boot.test.web.server.LocalServerPort
+import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
@@ -148,9 +150,9 @@ class BookingConflictConcurrencyIntegrationTest {
             url("/api/v1/salons/${salon.id}/bookings"),
             HttpMethod.GET,
             HttpEntity<Void>(bearer(managerToken)),
-            Array<BookingResponse>::class.java,
+            object : ParameterizedTypeReference<PagedResponse<BookingResponse>>() {},
         )
-        val activeBookingsForSlot = requireNotNull(salonBookings.body).count { it.startTime == startTime }
+        val activeBookingsForSlot = requireNotNull(salonBookings.body).content.count { it.startTime == startTime }
         assertEquals(1, activeBookingsForSlot, "only one booking row should exist for the contested slot")
         assertTrue(activeBookingsForSlot > 0)
     }

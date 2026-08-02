@@ -1,17 +1,26 @@
 package ai.rojan.backend.api.salon
 
+import ai.rojan.backend.api.common.ApiError
 import ai.rojan.backend.api.common.CurrentUserResolver
+import ai.rojan.backend.api.common.PagedResponse
+import ai.rojan.backend.api.common.toPagedResponse
 import ai.rojan.backend.application.salon.CreateSalonCommand
 import ai.rojan.backend.application.salon.CreateSalonUseCase
 import ai.rojan.backend.application.salon.DeactivateSalonCommand
 import ai.rojan.backend.application.salon.DeactivateSalonUseCase
 import ai.rojan.backend.application.salon.UpdateSalonCommand
 import ai.rojan.backend.application.salon.UpdateSalonUseCase
+import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -24,6 +33,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
@@ -42,6 +52,15 @@ class SalonController(
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a new salon owned by the authenticated user")
+    @ApiResponses(
+        ApiResponse(responseCode = "201", description = "Salon created"),
+        ApiResponse(
+            responseCode = "400",
+            description = "Validation failed",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+        ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
+    )
     fun create(
         @Valid @RequestBody request: CreateSalonRequest,
         @AuthenticationPrincipal principal: UserDetails,
@@ -68,11 +87,27 @@ class SalonController(
     }
 
     @GetMapping
-    @Operation(summary = "Browse active salons")
-    fun list(): List<SalonResponse> = salonRepository.findAllActive().map { it.toResponse() }
+    @Operation(summary = "Browse active salons, paginated and optionally filtered by name")
+    fun list(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(required = false) name: String?,
+        @RequestParam(defaultValue = "ASC") sortDirection: String,
+    ): PagedResponse<SalonResponse> {
+        val result = salonRepository.findAllActive(PageRequest(page, size), name, SortDirection.valueOf(sortDirection.uppercase()))
+        return result.toPagedResponse { it.toResponse() }
+    }
 
     @GetMapping("/{salonId}")
     @Operation(summary = "Get a salon by id")
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "Salon found"),
+        ApiResponse(
+            responseCode = "404",
+            description = "No salon with this id",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+    )
     fun get(@PathVariable salonId: UUID): SalonResponse =
         findSalonOrThrow(salonId).toResponse()
 

@@ -1,5 +1,6 @@
 package ai.rojan.backend.api.auth
 
+import ai.rojan.backend.api.common.ApiError
 import ai.rojan.backend.application.auth.AuthenticateUserCommand
 import ai.rojan.backend.application.auth.AuthenticateUserUseCase
 import ai.rojan.backend.application.auth.AuthenticationResult
@@ -9,6 +10,10 @@ import ai.rojan.backend.application.auth.RegisterUserCommand
 import ai.rojan.backend.application.auth.RegisterUserUseCase
 import ai.rojan.backend.domain.user.User
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -30,6 +35,19 @@ class AuthController(
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Register a new account")
+    @ApiResponses(
+        ApiResponse(responseCode = "201", description = "Account created"),
+        ApiResponse(
+            responseCode = "400",
+            description = "Validation failed (weak password, invalid email, etc.)",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+        ApiResponse(
+            responseCode = "409",
+            description = "An account with this email already exists",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+    )
     fun register(@Valid @RequestBody request: RegisterRequest): UserResponse {
         val user = registerUserUseCase.execute(
             RegisterUserCommand(
@@ -44,6 +62,14 @@ class AuthController(
 
     @PostMapping("/login")
     @Operation(summary = "Authenticate and receive an access/refresh token pair")
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "Authenticated"),
+        ApiResponse(
+            responseCode = "401",
+            description = "Invalid email or password",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+    )
     fun login(@Valid @RequestBody request: LoginRequest): AuthResponse {
         val result = authenticateUserUseCase.execute(
             AuthenticateUserCommand(email = request.email, rawPassword = request.password),
@@ -53,6 +79,14 @@ class AuthController(
 
     @PostMapping("/refresh")
     @Operation(summary = "Exchange a refresh token for a new token pair")
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "New token pair issued"),
+        ApiResponse(
+            responseCode = "401",
+            description = "Token is invalid, expired, or not a refresh token",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+    )
     fun refresh(@Valid @RequestBody request: RefreshRequest): AuthResponse {
         val result = refreshTokenUseCase.execute(RefreshTokenCommand(request.refreshToken))
         return result.toResponse()
