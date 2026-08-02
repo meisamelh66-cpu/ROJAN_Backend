@@ -27,6 +27,21 @@ management:
       # reports overall UP/DOWN either way (used by docker-compose.prod.yml's
       # and Nginx's healthchecks).
       show-details: never
+  health:
+    kafka:
+      # This deployment's docker-compose.prod.yml deliberately has no
+      # Kafka service (see that file's comment) — the app's Kafka
+      # producer bean is real but unused (README: "no topic in use yet"),
+      # connecting lazily against spring.kafka.bootstrap-servers' own
+      # default (localhost:9092, unreachable here). Without this,
+      # Spring Boot's auto-configured Kafka health indicator would ping
+      # that unreachable broker and drag the whole /actuator/health
+      # response to DOWN even though every real dependency (Postgres,
+      # Redis) is healthy — which would make docker-compose.prod.yml's
+      # and Nginx's healthchecks falsely report the app as unhealthy.
+      # Re-enable the moment Kafka is actually deployed alongside this
+      # stack.
+      enabled: false
 
 # springdoc/Swagger UI stays available in dev (the base application.yml) but
 # is switched off in prod - publicly documenting/exploring the full API
@@ -43,3 +58,15 @@ logging:
   level:
     root: WARN
     ai.rojan.backend: INFO
+  # Written in addition to the console/stdout Spring Boot already logs to
+  # (so `docker compose logs app` keeps working) — this path is
+  # bind-mounted to /opt/rojan/logs by docker-compose.prod.yml, so log
+  # history survives container recreation and is directly readable on the
+  # host without going through Docker at all.
+  file:
+    name: /app/logs/rojan-backend.log
+  logback:
+    rollingpolicy:
+      max-file-size: 50MB
+      max-history: 14
+      total-size-cap: 1GB

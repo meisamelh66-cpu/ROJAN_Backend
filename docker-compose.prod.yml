@@ -1,15 +1,31 @@
-### Production compose for the ROJAN backend on a single Ubuntu VPS.
+### Production compose for the ROJAN backend, targeting the already-prepared
+### Ubuntu VPS layout under /opt/rojan:
+###
+###   /opt/rojan/backend   <- this repo, checked out here (compose is run from here)
+###   /opt/rojan/postgres  <- Postgres data directory (bind-mounted, persistent)
+###   /opt/rojan/redis     <- Redis data directory (bind-mounted, persistent, AOF)
+###   /opt/rojan/nginx     <- Nginx: Let's Encrypt certs, ACME webroot, access/error logs
+###   /opt/rojan/logs      <- app log file (bind-mounted; see application-prod.yml's
+###                           logging.file.name)
+###   /opt/rojan/uploads   <- reserved for a future file-storage feature; nothing in
+###                           this backend reads/writes it yet (no upload endpoint
+###                           exists — see API_CONTRACT.md), so it is NOT mounted
+###                           into any container here. Documented, not wired.
+###   /opt/rojan/backups   <- not a container mount; backup.sh writes pg_dump
+###                           archives here directly on the host.
+###
+### Override the root with ROJAN_DATA_ROOT if this layout ever needs to move;
+### defaults to the real, already-provisioned /opt/rojan path.
 ###
 ### Differences from the dev-only `docker-compose.yml` at repo root:
-###   - Postgres/Redis/Kafka ports are NOT published to the host — only
-###     reachable from other containers on the internal `rojan_net` network.
-###     The app and Nginx are the only services exposed to the host.
+###   - Postgres/Redis ports are NOT published to the host — only reachable
+###     from other containers on the internal `rojan_net` network. The app
+###     and Nginx are the only services exposed to the host.
 ###   - Every service has an explicit restart policy.
-###   - Postgres, Redis, and Kafka all get persistent named volumes (the dev
-###     compose only persists Postgres; Kafka's KRaft metadata log and
-###     Redis's AOF file were both ephemeral there, which is fine for a
-###     throwaway dev stack but would silently lose data/state on every
-###     production container restart).
+###   - Postgres/Redis persist to bind-mounted host directories (see above)
+###     instead of anonymous/dev-only volumes — durable across container
+###     recreation, and directly reachable by backup.sh without going
+###     through `docker cp`/`docker exec`.
 ###   - The app has a real container healthcheck (`/actuator/health`, see
 ###     SecurityConfig's PUBLIC_ENDPOINTS — already permitAll, no code
 ###     change needed there) instead of no healthcheck at all, so
@@ -21,6 +37,19 @@
 ###     file alone is not sufficient for a from-scratch SSL bring-up
 ###     because Nginx's SSL server block needs certificate files to exist
 ###     before Nginx can even start.
+###   - No Kafka service. Kafka is real, wired infrastructure
+###     (`infrastructure/build.gradle.kts`'s spring-kafka dependency,
+###     `KafkaProducerConfig`) but is not part of this deployment's scope
+###     (not in the prepared /opt/rojan layout, not in this milestone's
+###     task list) — the producer bean stays lazily configured against
+###     `spring.kafka.bootstrap-servers`' own default (`localhost:9092`,
+###     unreachable here) and is simply never invoked (README: "no topic
+###     in use yet"). Left as-is, this would otherwise fail
+###     `/actuator/health` the moment Spring Boot's auto-configured Kafka
+###     health indicator ran against an unreachable broker — that's why
+###     `application-prod.yml` explicitly sets
+###     `management.health.kafka.enabled: false`. Re-enable both the
+###     moment Kafka is actually deployed alongside this stack.
 ###
 ### This file is deployment PREP, not a deployment: nothing in this repo
 ### has been run against the target VPS yet. See `DEPLOYMENT.md`.
@@ -34,7 +63,7 @@ services:
       POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME must be set — see .env.example}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set — see .env.example}
     volumes:
-      - rojan_postgres_data:/var/lib/postgresql/data
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/postgres:/var/lib/postgresql/data
     networks:
       - rojan_net
     healthcheck:
@@ -63,7 +92,7 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     volumes:
-      - rojan_redis_data:/data
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/redis:/data
     networks:
       - rojan_net
     healthcheck:
@@ -71,23 +100,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-  kafka:
-    image: apache/kafka:3.8.0
-    restart: unless-stopped
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-    volumes:
-      - rojan_kafka_data:/var/lib/kafka/data
-    networks:
-      - rojan_net
 
   app:
     build:
@@ -105,11 +117,12 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set to a random string of at least 32 characters — see README.md / .env.example}
       JWT_ISSUER: ${JWT_ISSUER:-rojan-ai-backend}
       JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-15}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+    volumes:
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/logs:/app/logs
     networks:
       - rojan_net
     depends_on:
@@ -117,8 +130,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 10s
@@ -135,8 +146,9 @@ services:
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
-      - certbot_webroot:/var/www/certbot:ro
-      - certbot_certs:/etc/letsencrypt:ro
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/webroot:/var/www/certbot:ro
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/letsencrypt:/etc/letsencrypt:ro
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/logs:/var/log/nginx
     networks:
       - rojan_net
     depends_on:
@@ -158,8 +170,8 @@ services:
     image: certbot/certbot:latest
     restart: unless-stopped
     volumes:
-      - certbot_webroot:/var/www/certbot
-      - certbot_certs:/etc/letsencrypt
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/webroot:/var/www/certbot
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/letsencrypt:/etc/letsencrypt
     entrypoint: >-
       sh -c 'trap exit TERM;
       while :; do
@@ -170,10 +182,3 @@ services:
 networks:
   rojan_net:
     driver: bridge
-
-volumes:
-  rojan_postgres_data:
-  rojan_redis_data:
-  rojan_kafka_data:
-  certbot_webroot:
-  certbot_certs:
