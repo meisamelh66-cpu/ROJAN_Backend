@@ -1,0 +1,45 @@
+# "prod" profile overrides, layered on top of the main application.yml
+# (activated via SPRING_PROFILES_ACTIVE=prod — see docker-compose.prod.yml
+# — same layering convention as application-test.yml: a same-named
+# application.yml here would replace the base file instead of layering
+# over it). Ops/config only, no business-logic changes — every value the
+# base file already sets correctly for production (ddl-auto: validate,
+# open-in-view: false, non_null Jackson inclusion, etc.) is left alone.
+
+server:
+  # Lets in-flight requests finish (bounded by the timeout below) instead
+  # of being cut off mid-response when Docker sends SIGTERM on
+  # `docker compose stop`/a rolling restart.
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+management:
+  endpoint:
+    health:
+      # Base application.yml uses "when-authorized" (full details only to
+      # an authenticated caller). In prod, no endpoint-specific actuator
+      # role is configured, so "authorized" reduces to "any authenticated
+      # user" — tighter default here: never leak DB/disk/component detail
+      # in the response body, regardless of auth. /actuator/health still
+      # reports overall UP/DOWN either way (used by docker-compose.prod.yml's
+      # and Nginx's healthchecks).
+      show-details: never
+
+# springdoc/Swagger UI stays available in dev (the base application.yml) but
+# is switched off in prod - publicly documenting/exploring the full API
+# surface isn't something a production deployment should expose by
+# default. Toggle back on via SPRINGDOC_ENABLED=true if a specific
+# deployment needs it reachable (e.g. behind additional auth).
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+
+logging:
+  level:
+    root: WARN
+    ai.rojan.backend: INFO

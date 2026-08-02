@@ -1,0 +1,179 @@
+### Production compose for the ROJAN backend on a single Ubuntu VPS.
+###
+### Differences from the dev-only `docker-compose.yml` at repo root:
+###   - Postgres/Redis/Kafka ports are NOT published to the host — only
+###     reachable from other containers on the internal `rojan_net` network.
+###     The app and Nginx are the only services exposed to the host.
+###   - Every service has an explicit restart policy.
+###   - Postgres, Redis, and Kafka all get persistent named volumes (the dev
+###     compose only persists Postgres; Kafka's KRaft metadata log and
+###     Redis's AOF file were both ephemeral there, which is fine for a
+###     throwaway dev stack but would silently lose data/state on every
+###     production container restart).
+###   - The app has a real container healthcheck (`/actuator/health`, see
+###     SecurityConfig's PUBLIC_ENDPOINTS — already permitAll, no code
+###     change needed there) instead of no healthcheck at all, so
+###     `depends_on: condition: service_healthy` and orchestration tooling
+###     can tell when it's actually ready, not just "started".
+###   - Nginx terminates TLS and reverse-proxies to the app; a certbot
+###     service handles Let's Encrypt issuance/renewal. See
+###     `DEPLOYMENT.md` for the full bootstrap sequence — this compose
+###     file alone is not sufficient for a from-scratch SSL bring-up
+###     because Nginx's SSL server block needs certificate files to exist
+###     before Nginx can even start.
+###
+### This file is deployment PREP, not a deployment: nothing in this repo
+### has been run against the target VPS yet. See `DEPLOYMENT.md`.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:?DB_NAME must be set — see .env.example}
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME must be set — see .env.example}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set — see .env.example}
+    volumes:
+      - rojan_postgres_data:/var/lib/postgresql/data
+    networks:
+      - rojan_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-rojan} -d ${DB_NAME:-rojan}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # --appendonly yes: Redis has no consumer yet (README: "prepared, no
+    # feature consumes it yet"), but production data shouldn't be
+    # discarded-by-default the day a caching/session feature lands. A
+    # bare `requirepass` is only applied when REDIS_PASSWORD is set —
+    # the app already supports an empty password (application.yml's
+    # `REDIS_PASSWORD:` default), so this stays optional, not a new
+    # requirement.
+    command: >-
+      sh -c '
+      if [ -n "$$REDIS_PASSWORD" ]; then
+        redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+      else
+        redis-server --appendonly yes;
+      fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    volumes:
+      - rojan_redis_data:/data
+    networks:
+      - rojan_net
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG; else redis-cli ping | grep -q PONG; fi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:3.8.0
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - rojan_kafka_data:/var/lib/kafka/data
+    networks:
+      - rojan_net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:?DB_NAME must be set — see .env.example}
+      DB_USERNAME: ${DB_USERNAME:?DB_USERNAME must be set — see .env.example}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set — see .env.example}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set to a random string of at least 32 characters — see README.md / .env.example}
+      JWT_ISSUER: ${JWT_ISSUER:-rojan-ai-backend}
+      JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-15}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+    networks:
+      - rojan_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot_webroot:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+    networks:
+      - rojan_net
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/.well-known/healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # One-shot/looping certbot renewal helper — see DEPLOYMENT.md for the
+  # first-time issuance bootstrap (this service only *renews* existing
+  # certs; it does not obtain the first one, since that needs Nginx
+  # already serving the ACME challenge path, which itself needs a
+  # placeholder cert to start with HTTPS — the classic chicken-and-egg,
+  # walked through step by step in DEPLOYMENT.md).
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - certbot_webroot:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    entrypoint: >-
+      sh -c 'trap exit TERM;
+      while :; do
+        certbot renew --webroot -w /var/www/certbot --quiet;
+        sleep 12h;
+      done'
+
+networks:
+  rojan_net:
+    driver: bridge
+
+volumes:
+  rojan_postgres_data:
+  rojan_redis_data:
+  rojan_kafka_data:
+  certbot_webroot:
+  certbot_certs:

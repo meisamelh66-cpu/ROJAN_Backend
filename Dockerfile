@@ -16,6 +16,13 @@ RUN chmod +x gradlew && ./gradlew :bootstrap:bootJar --no-daemon -x test
 FROM eclipse-temurin:21-jre AS runtime
 WORKDIR /app
 
+# curl only: needed by docker-compose.prod.yml's container healthcheck
+# (`curl -f http://localhost:8080/actuator/health`) — no other change to
+# this stage.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --uid 10001 --shell /usr/sbin/nologin --no-create-home rojan
 COPY --from=build /workspace/bootstrap/build/libs/*.jar app.jar
 RUN chown rojan:rojan app.jar

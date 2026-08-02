@@ -12,3 +12,7 @@ HELP.md
 # Local-only scratch: self-managed Postgres binaries/data + secrets used to
 # verify the build on this machine (no Docker available here). Never commit.
 .tools/
+
+# Production secrets — copy .env.example to .env and fill in real values,
+# never commit the result.
+.env
