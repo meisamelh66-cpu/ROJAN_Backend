@@ -1,16 +1,25 @@
 package ai.rojan.backend.api.common
 
+import ai.rojan.backend.domain.common.BookingAccessDeniedException
+import ai.rojan.backend.domain.common.BookingConflictException
+import ai.rojan.backend.domain.common.BookingNotFoundException
 import ai.rojan.backend.domain.common.BranchNotFoundException
 import ai.rojan.backend.domain.common.EmailAlreadyRegisteredException
 import ai.rojan.backend.domain.common.InactiveUserException
+import ai.rojan.backend.domain.common.InvalidBookingStateException
 import ai.rojan.backend.domain.common.InvalidCredentialsException
 import ai.rojan.backend.domain.common.InvalidTokenException
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.common.ScheduleOverrideNotFoundException
 import ai.rojan.backend.domain.common.ServiceCategoryNotFoundException
 import ai.rojan.backend.domain.common.ServiceNotFoundException
+import ai.rojan.backend.domain.common.SpecialistBlockNotFoundException
+import ai.rojan.backend.domain.common.SpecialistLeaveNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.common.UserNotFoundException
+import ai.rojan.backend.domain.common.WeeklyAvailabilityNotFoundException
+import ai.rojan.backend.domain.common.WorkingHoursNotFoundException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.userdetails.UsernameNotFoundException
@@ -55,13 +64,23 @@ class GlobalExceptionHandler {
         ServiceCategoryNotFoundException::class,
         ServiceNotFoundException::class,
         SpecialistNotFoundException::class,
+        WorkingHoursNotFoundException::class,
+        WeeklyAvailabilityNotFoundException::class,
+        ScheduleOverrideNotFoundException::class,
+        SpecialistLeaveNotFoundException::class,
+        SpecialistBlockNotFoundException::class,
+        BookingNotFoundException::class,
     )
     fun handleUserNotFound(ex: Exception, request: WebRequest) =
         respond(HttpStatus.NOT_FOUND, ex.message.orEmpty(), request)
 
-    @ExceptionHandler(SalonAccessDeniedException::class)
-    fun handleSalonAccessDenied(ex: SalonAccessDeniedException, request: WebRequest) =
+    @ExceptionHandler(SalonAccessDeniedException::class, BookingAccessDeniedException::class)
+    fun handleSalonAccessDenied(ex: Exception, request: WebRequest) =
         respond(HttpStatus.FORBIDDEN, ex.message.orEmpty(), request)
+
+    @ExceptionHandler(BookingConflictException::class, InvalidBookingStateException::class)
+    fun handleBookingConflict(ex: Exception, request: WebRequest) =
+        respond(HttpStatus.CONFLICT, ex.message.orEmpty(), request)
 
     @ExceptionHandler(MethodArgumentNotValidException::class)
     fun handleValidation(ex: MethodArgumentNotValidException, request: WebRequest): ResponseEntity<ApiError> {
