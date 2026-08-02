@@ -1,9 +1,15 @@
 package ai.rojan.backend.api.common
 
+import ai.rojan.backend.domain.common.BranchNotFoundException
 import ai.rojan.backend.domain.common.EmailAlreadyRegisteredException
 import ai.rojan.backend.domain.common.InactiveUserException
 import ai.rojan.backend.domain.common.InvalidCredentialsException
 import ai.rojan.backend.domain.common.InvalidTokenException
+import ai.rojan.backend.domain.common.SalonAccessDeniedException
+import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.common.ServiceCategoryNotFoundException
+import ai.rojan.backend.domain.common.ServiceNotFoundException
+import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.common.UserNotFoundException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -41,9 +47,21 @@ class GlobalExceptionHandler {
     fun handleInactiveUser(ex: InactiveUserException, request: WebRequest) =
         respond(HttpStatus.FORBIDDEN, ex.message.orEmpty(), request)
 
-    @ExceptionHandler(UserNotFoundException::class, UsernameNotFoundException::class)
+    @ExceptionHandler(
+        UserNotFoundException::class,
+        UsernameNotFoundException::class,
+        SalonNotFoundException::class,
+        BranchNotFoundException::class,
+        ServiceCategoryNotFoundException::class,
+        ServiceNotFoundException::class,
+        SpecialistNotFoundException::class,
+    )
     fun handleUserNotFound(ex: Exception, request: WebRequest) =
         respond(HttpStatus.NOT_FOUND, ex.message.orEmpty(), request)
+
+    @ExceptionHandler(SalonAccessDeniedException::class)
+    fun handleSalonAccessDenied(ex: SalonAccessDeniedException, request: WebRequest) =
+        respond(HttpStatus.FORBIDDEN, ex.message.orEmpty(), request)
 
     @ExceptionHandler(MethodArgumentNotValidException::class)
     fun handleValidation(ex: MethodArgumentNotValidException, request: WebRequest): ResponseEntity<ApiError> {
