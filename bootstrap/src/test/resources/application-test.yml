@@ -1,0 +1,12 @@
+# "test" profile overrides, layered on top of the main application.yml
+# (activated via @ActiveProfiles("test") — a same-named application.yml
+# here would replace the base file instead of layering over it, which is
+# not what we want since it also carries the kafka/redis property defaults).
+# The embedded database (io.zonky.test) replaces the datasource bean
+# regardless of the configured URL, so datasource properties don't need
+# overriding here — only the JWT secret, which main's application.yml
+# deliberately has no default for.
+rojan:
+  security:
+    jwt:
+      secret: "integration-test-only-signing-key-not-for-production-1234567890"

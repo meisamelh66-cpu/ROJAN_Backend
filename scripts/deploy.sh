@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Deploy or upgrade the ROJAN backend production stack.
+#
+# Expects to run from a checkout of this repo at /opt/rojan/backend (or
+# wherever ROJAN_DATA_ROOT's sibling "backend" checkout lives), with
+# `.env` already populated (see .env.example) and the target VPS already
+# provisioned with Docker + the Compose plugin (DEPLOYMENT.md's
+# prerequisites). Needs root (or a user in the `docker` group *and* able
+# to chown into ROJAN_DATA_ROOT) — see the chown step below.
+#
+# What this does NOT do: git pull/checkout a specific ref for you (build
+# from whatever's already checked out — the operator controls that
+# explicitly, on purpose), obtain the first Let's Encrypt certificate
+# (see docker/nginx/init-letsencrypt.sh, a separate one-time step), or
+# touch the database schema (Flyway does that automatically on app boot).
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+DATA_ROOT="${ROJAN_DATA_ROOT:-/opt/rojan}"
+ENV_FILE="$REPO_ROOT/.env"
+COMPOSE=(docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE")
+
+if [ ! -f "$ENV_FILE" ]; then
+  echo "Missing $ENV_FILE - copy .env.example to .env and fill in real values first." >&2
+  exit 1
+fi
+
+echo "==> Ensuring persistent host directories exist with correct ownership"
+mkdir -p "$DATA_ROOT"/postgres "$DATA_ROOT"/redis "$DATA_ROOT"/logs "$DATA_ROOT"/backups \
+         "$DATA_ROOT"/nginx/webroot "$DATA_ROOT"/nginx/letsencrypt "$DATA_ROOT"/nginx/logs
+# postgres:16-alpine and redis:7-alpine both run internally as uid/gid 999;
+# this repo's Dockerfile runs the app as uid/gid 10001. Bind mounts take on
+# the HOST directory's ownership as-is - the official images' own
+# chown-on-first-boot behavior only kicks in for Docker-managed named
+# volumes, not host bind mounts - so this has to be set explicitly here.
+# Verify with `docker run --rm <image> id` if either image's base UID ever
+# changes.
+chown -R 999:999 "$DATA_ROOT/postgres" "$DATA_ROOT/redis"
+chown -R 10001:10001 "$DATA_ROOT/logs"
+
+#ROLLBACK_FILE="$DATA_ROOT/backups/last-deployed-commit.txt"
+#CURRENT_COMMIT="$(git rev-parse HEAD)"
+#echo "==> Recording current commit ($CURRENT_COMMIT) for rollback.sh"
+#if [ -f "$ROLLBACK_FILE" ]; then
+ # cp "$ROLLBACK_FILE" "$ROLLBACK_FILE.previous"
+#fi
+#echo "$CURRENT_COMMIT" > "$ROLLBACK_FILE"
+
+echo "==> Building the application image"
+"${COMPOSE[@]}" build app
+
+echo "==> Starting/updating the stack"
+"${COMPOSE[@]}" up -d
+
+echo "==> Waiting for the app to report healthy (up to 2.5 min)"
+container_id="$("${COMPOSE[@]}" ps -q app)"
+for _ in $(seq 1 30); do
+  status="$(docker inspect -f '{{.State.Health.Status}}' "$container_id" 2>/dev/null || echo unknown)"
+  if [ "$status" = "healthy" ]; then
+    echo "==> App is healthy."
+    "${COMPOSE[@]}" ps
+    exit 0
+  fi
+  sleep 5
+done
+
+echo "App did not become healthy in time - check: docker compose -f docker-compose.prod.yml logs app" >&2
+exit 1

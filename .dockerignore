@@ -1,0 +1,15 @@
+
+
+.git
+.gradle
+.idea
+.kotlin
+**/build
+*.iml
+Dockerfile
+docker-compose.yml
+README.md
+
+!bootstrap/build/
+!bootstrap/build/libs/
+!bootstrap/build/libs/bootstrap-0.1.0-SNAPSHOT.jar

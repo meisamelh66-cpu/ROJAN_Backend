@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew clean *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-21.0.12.8-hotspot\"; cd D:\\\\AndroidProjects\\\\ROJAN_DesignLab; .\\\\gradlew.bat :app:compileCustomerDebugKotlin --console=plain 2>&1 | Select-Object -Last 150)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-21.0.12.8-hotspot\"; cd D:\\\\AndroidProjects\\\\ROJAN_DesignLab; .\\\\gradlew.bat :app:compileCustomerDebugKotlin --console=plain 2>&1 | Select-Object -Last 200)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-21.0.12.8-hotspot\"; cd D:\\\\AndroidProjects\\\\ROJAN_DesignLab; .\\\\gradlew.bat :app:assembleCustomerDebug --console=plain 2>&1 | Select-Object -Last 300پ)",
+      "PowerShell(Tee-Object *)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Program Files\\\\Eclipse Adoptium\\\\jdk-21.0.12.8-hotspot\"; cd D:\\\\AndroidProjects\\\\ROJAN_DesignLab; .\\\\gradlew.bat :app:assembleCustomerDebug --console=plain 2>&1 | Select-Object -Last 15)",
+      "Bash(chmod +x /d/AndroidProjects/ROJAN_Backend/docker/nginx/init-letsencrypt.sh)",
+      "Bash(docker --version)",
+      "Bash(python3 *)",
+      "Bash(bash -n /d/AndroidProjects/ROJAN_Backend/docker/nginx/init-letsencrypt.sh)",
+      "PowerShell(Get-Command *)",
+      "Bash(node *)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Eclipse Adoptium/jdk-21.0.12.8-hotspot\" ./gradlew.bat build --console=plain)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Eclipse Adoptium/jdk-21.0.12.8-hotspot\" ./gradlew.bat clean build --console=plain)",
+      "Bash(xargs -I{} sh -c 'grep -o \"tests=\\\\\"[0-9]*\\\\\"\" \"{}\" | head -1')",
+      "Bash(awk '{s+=$1} END {print \"Total tests:\", s}')",
+      "Bash(git update-index *)",
+      "Bash(git commit *)"
+    ]
+  }
+}

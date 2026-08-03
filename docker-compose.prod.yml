@@ -1,0 +1,216 @@
+### Production compose for the ROJAN backend, targeting the already-prepared
+### Ubuntu VPS layout under /opt/rojan:
+###
+###   /opt/rojan/backend   <- this repo, checked out here (compose is run from here)
+###   /opt/rojan/postgres  <- Postgres data directory (bind-mounted, persistent)
+###   /opt/rojan/redis     <- Redis data directory (bind-mounted, persistent, AOF)
+###   /opt/rojan/nginx     <- Nginx: Let's Encrypt certs, ACME webroot, access/error logs
+###   /opt/rojan/logs      <- app log file (bind-mounted; see application-prod.yml's
+###                           logging.file.name)
+###   /opt/rojan/uploads   <- reserved for a future file-storage feature; nothing in
+###                           this backend reads/writes it yet (no upload endpoint
+###                           exists — see API_CONTRACT.md), so it is NOT mounted
+###                           into any container here. Documented, not wired.
+###   /opt/rojan/backups   <- not a container mount; backup.sh writes pg_dump
+###                           archives here directly on the host.
+###
+### Override the root with ROJAN_DATA_ROOT if this layout ever needs to move;
+### defaults to the real, already-provisioned /opt/rojan path.
+###
+### Differences from the dev-only `docker-compose.yml` at repo root:
+###   - Postgres/Redis ports are NOT published to the host — only reachable
+###     from other containers on the internal `rojan_net` network. The app
+###     and Nginx are the only services exposed to the host.
+###   - Every service has an explicit restart policy.
+###   - Postgres/Redis persist to bind-mounted host directories (see above)
+###     instead of anonymous/dev-only volumes — durable across container
+###     recreation, and directly reachable by backup.sh without going
+###     through `docker cp`/`docker exec`.
+###   - The app has a real container healthcheck (`/actuator/health`, see
+###     SecurityConfig's PUBLIC_ENDPOINTS — already permitAll, no code
+###     change needed there) instead of no healthcheck at all, so
+###     `depends_on: condition: service_healthy` and orchestration tooling
+###     can tell when it's actually ready, not just "started".
+###   - Nginx terminates TLS and reverse-proxies to the app; a certbot
+###     service handles Let's Encrypt issuance/renewal. See
+###     `DEPLOYMENT.md` for the full bootstrap sequence — this compose
+###     file alone is not sufficient for a from-scratch SSL bring-up
+###     because Nginx's SSL server block needs certificate files to exist
+###     before Nginx can even start.
+###   - No Kafka service. Kafka is real, wired infrastructure
+###     (`infrastructure/build.gradle.kts`'s spring-kafka dependency,
+###     `KafkaProducerConfig`) but is not part of this deployment's scope
+###     (not in the prepared /opt/rojan layout, not in this milestone's
+###     task list) — the producer bean stays lazily configured against
+###     `spring.kafka.bootstrap-servers`' own default (`localhost:9092`,
+###     unreachable here) and is simply never invoked (README: "no topic
+###     in use yet"). Left as-is, this would otherwise fail
+###     `/actuator/health` the moment Spring Boot's auto-configured Kafka
+###     health indicator ran against an unreachable broker — that's why
+###     `application-prod.yml` explicitly sets
+###     `management.health.kafka.enabled: false`. Re-enable both the
+###     moment Kafka is actually deployed alongside this stack.
+###
+### This file is deployment PREP, not a deployment: nothing in this repo
+### has been run against the target VPS yet. See `DEPLOYMENT.md`.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:?DB_NAME must be set — see .env.example}
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME must be set — see .env.example}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set — see .env.example}
+    volumes:
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/postgres:/var/lib/postgresql/data
+    networks:
+      - rojan_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-rojan} -d ${DB_NAME:-rojan}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # --appendonly yes: Redis has no consumer yet (README: "prepared, no
+    # feature consumes it yet"), but production data shouldn't be
+    # discarded-by-default the day a caching/session feature lands. A
+    # bare `requirepass` is only applied when REDIS_PASSWORD is set —
+    # the app already supports an empty password (application.yml's
+    # `REDIS_PASSWORD:` default), so this stays optional, not a new
+    # requirement.
+    command: >-
+      sh -c '
+      if [ -n "$$REDIS_PASSWORD" ]; then
+        redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+      else
+        redis-server --appendonly yes;
+      fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    volumes:
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/redis:/data
+    networks:
+      - rojan_net
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG; else redis-cli ping | grep -q PONG; fi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:?DB_NAME must be set — see .env.example}
+      DB_USERNAME: ${DB_USERNAME:?DB_USERNAME must be set — see .env.example}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set — see .env.example}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set to a random string of at least 32 characters — see README.md / .env.example}
+      JWT_ISSUER: ${JWT_ISSUER:-rojan-ai-backend}
+      JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-15}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+    volumes:
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/logs:/app/logs
+    networks:
+      - rojan_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  # One-shot, runs before Nginx every single time the stack comes up.
+  # Guarantees *a* certificate (a throwaway self-signed one, if no real
+  # one exists yet) is on disk before Nginx is allowed to start — see
+  # `nginx`'s `depends_on` below. This is what actually closes the
+  # chicken-and-egg gap (Nginx needs a cert to start; Certbot needs Nginx
+  # running to prove domain ownership): the ordering is now enforced by
+  # Compose itself via `service_completed_successfully`, not by an
+  # operator running init-letsencrypt.sh in exactly the right sequence.
+  # Idempotent — once a real certificate exists at the same path, this
+  # detects it and exits immediately without touching it.
+  cert-init:
+    image: certbot/certbot:latest
+    entrypoint: sh
+    command:
+      - -c
+      - |
+        set -e
+        DOMAIN="${DOMAIN_NAME:?DOMAIN_NAME must be set — see .env.example}"
+        if [ -f "/etc/letsencrypt/live/$$DOMAIN/fullchain.pem" ]; then
+          echo "Certificate already present for $$DOMAIN - nothing to do."
+          exit 0
+        fi
+        echo "No certificate yet for $$DOMAIN - generating a throwaway self-signed one so Nginx can start."
+        mkdir -p "/etc/letsencrypt/live/$$DOMAIN"
+        openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+          -keyout "/etc/letsencrypt/live/$$DOMAIN/privkey.pem" \
+          -out "/etc/letsencrypt/live/$$DOMAIN/fullchain.pem" \
+          -subj "/CN=$$DOMAIN"
+    volumes:
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/letsencrypt:/etc/letsencrypt
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/webroot:/var/www/certbot:ro
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/letsencrypt:/etc/letsencrypt:ro
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/logs:/var/log/nginx
+    networks:
+      - rojan_net
+    depends_on:
+      app:
+        condition: service_healthy
+      cert-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/.well-known/healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # Long-running renewal loop only. The FIRST certificate is obtained by
+  # init-letsencrypt.sh calling `certbot certonly --webroot` directly
+  # against the now-always-running Nginx (guaranteed up by cert-init,
+  # above) — this service just renews whatever already exists, checking
+  # every 12h.
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/webroot:/var/www/certbot
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/letsencrypt:/etc/letsencrypt
+    entrypoint: >-
+      sh -c 'trap exit TERM;
+      while :; do
+        certbot renew --webroot -w /var/www/certbot --quiet;
+        sleep 12h;
+      done'
+
+networks:
+  rojan_net:
+    driver: bridge
