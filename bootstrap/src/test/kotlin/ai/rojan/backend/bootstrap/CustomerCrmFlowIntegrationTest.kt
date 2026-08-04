@@ -140,6 +140,24 @@ class CustomerCrmFlowIntegrationTest {
         )
         assertTrue(getWithTag.body!!.tags.contains("VIP"))
 
+        val listNotes = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}/notes"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            object : ParameterizedTypeReference<List<CustomerNoteResponse>>() {},
+        )
+        assertEquals(HttpStatus.OK, listNotes.statusCode)
+        assertTrue(listNotes.body!!.any { it.text == "Prefers morning appointments" })
+
+        val listTags = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}/tags"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            object : ParameterizedTypeReference<List<CustomerTagResponse>>() {},
+        )
+        assertEquals(HttpStatus.OK, listTags.statusCode)
+        assertTrue(listTags.body!!.any { it.id == tag.id && it.label == "VIP" })
+
         val timeline = restTemplate.exchange(
             url("/api/v1/salons/${salon.id}/customers/${customer.id}/timeline"),
             HttpMethod.GET,
@@ -235,8 +253,23 @@ class CustomerCrmFlowIntegrationTest {
             HttpEntity<Void>(bearer(ownerToken)),
             String::class.java,
         )
-
         assertEquals(HttpStatus.NOT_FOUND, crossTenantGet.statusCode)
+
+        val crossTenantNotes = restTemplate.exchange(
+            url("/api/v1/salons/${salonB.id}/customers/${customerOfA.id}/notes"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            String::class.java,
+        )
+        assertEquals(HttpStatus.NOT_FOUND, crossTenantNotes.statusCode)
+
+        val crossTenantTags = restTemplate.exchange(
+            url("/api/v1/salons/${salonB.id}/customers/${customerOfA.id}/tags"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            String::class.java,
+        )
+        assertEquals(HttpStatus.NOT_FOUND, crossTenantTags.statusCode)
     }
 
     @Test
@@ -259,8 +292,23 @@ class CustomerCrmFlowIntegrationTest {
             HttpEntity<Void>(bearer(strangerToken)),
             String::class.java,
         )
-
         assertEquals(HttpStatus.FORBIDDEN, strangerGet.statusCode)
+
+        val strangerNotes = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}/notes"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(strangerToken)),
+            String::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, strangerNotes.statusCode)
+
+        val strangerTags = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}/tags"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(strangerToken)),
+            String::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, strangerTags.statusCode)
     }
 
     @Test

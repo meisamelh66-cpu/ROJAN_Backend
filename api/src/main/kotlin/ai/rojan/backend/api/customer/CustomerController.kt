@@ -27,6 +27,7 @@ import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.customer.Customer
 import ai.rojan.backend.domain.customer.CustomerId
+import ai.rojan.backend.domain.customer.CustomerNoteRepository
 import ai.rojan.backend.domain.customer.CustomerRepository
 import ai.rojan.backend.domain.customer.CustomerStatus
 import ai.rojan.backend.domain.customer.CustomerTagId
@@ -67,6 +68,7 @@ import java.util.UUID
 class CustomerController(
     private val customerRepository: CustomerRepository,
     private val customerTagRepository: CustomerTagRepository,
+    private val customerNoteRepository: CustomerNoteRepository,
     private val salonRepository: SalonRepository,
     private val createCustomerUseCase: CreateCustomerUseCase,
     private val updateCustomerUseCase: UpdateCustomerUseCase,
@@ -152,6 +154,36 @@ class CustomerController(
             ),
         )
         return result.toPagedResponse { it.toBookingResponse() }
+    }
+
+    @GetMapping("/{customerId}/notes")
+    @Operation(summary = "List a customer's notes, oldest first (owner only)")
+    fun notes(
+        @PathVariable salonId: UUID,
+        @PathVariable customerId: UUID,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): List<CustomerNoteResponse> {
+        val callerId = currentUserResolver.resolve(principal)
+        val customer = findCustomerOrThrow(salonId, customerId)
+        requireOwner(customer, callerId)
+        return customerNoteRepository.findByCustomerId(customer.id)
+            .sortedBy { it.createdAt }
+            .map { CustomerNoteResponse(it.id.value, it.authorId.value, it.text, it.createdAt) }
+    }
+
+    @GetMapping("/{customerId}/tags")
+    @Operation(summary = "List a customer's tags with their real ids, oldest first (owner only)")
+    fun tags(
+        @PathVariable salonId: UUID,
+        @PathVariable customerId: UUID,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): List<CustomerTagResponse> {
+        val callerId = currentUserResolver.resolve(principal)
+        val customer = findCustomerOrThrow(salonId, customerId)
+        requireOwner(customer, callerId)
+        return customerTagRepository.findByCustomerId(customer.id)
+            .sortedBy { it.createdAt }
+            .map { CustomerTagResponse(it.id.value, it.label, it.createdAt) }
     }
 
     @PostMapping
