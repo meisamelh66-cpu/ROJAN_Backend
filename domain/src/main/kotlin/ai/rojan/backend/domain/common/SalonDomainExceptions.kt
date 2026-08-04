@@ -6,6 +6,10 @@ class SalonNotFoundException(identifier: String) :
 class SalonAccessDeniedException(salonId: String) :
     DomainException("You do not have permission to manage salon: $salonId")
 
+/** Thrown when a salon must be resolved implicitly from the caller's identity but they own more than one. */
+class AmbiguousSalonContextException(ownerId: String) :
+    DomainException("Owner $ownerId has multiple salons; salon context cannot be resolved implicitly")
+
 class BranchNotFoundException(identifier: String) :
     DomainException("Branch not found: $identifier")
 

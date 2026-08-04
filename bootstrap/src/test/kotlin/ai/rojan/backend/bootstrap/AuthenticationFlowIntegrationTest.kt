@@ -176,4 +176,23 @@ class AuthenticationFlowIntegrationTest {
         val response = restTemplate.getForEntity(url("/api/v1/users/me"), String::class.java)
         assertEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
     }
+
+    @Test
+    fun `unauthenticated access returns the standard AUTH_UNAUTHORIZED contract`() {
+        val response = restTemplate.getForEntity(url("/api/v1/users/me"), String::class.java)
+        assertEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
+        assertEquals("""{"errorCode":"AUTH_UNAUTHORIZED","message":"Authentication required"}""", response.body)
+    }
+
+    @Test
+    fun `OpenAPI docs describe the auth and dashboard endpoints`() {
+        val response = restTemplate.getForEntity(url("/v3/api-docs"), String::class.java)
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val docs = requireNotNull(response.body)
+        assertTrue(docs.contains("/api/v1/auth/register"))
+        assertTrue(docs.contains("/api/v1/auth/login"))
+        assertTrue(docs.contains("/api/v1/auth/refresh"))
+        assertTrue(docs.contains("/api/v1/dashboard/insights"))
+    }
 }

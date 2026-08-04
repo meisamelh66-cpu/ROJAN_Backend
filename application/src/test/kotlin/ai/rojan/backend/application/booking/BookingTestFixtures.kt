@@ -73,4 +73,13 @@ internal class InMemoryBookingRepository : BookingRepository {
         store.values.filter {
             it.specialistId == specialistId && it.isActive && it.startTime < to && it.endTime > from
         }
+
+    override fun findBySalonIdAndStartTimeRange(salonId: SalonId, from: LocalDateTime, to: LocalDateTime): List<Booking> =
+        store.values.filter { it.salonId == salonId && it.startTime >= from && it.startTime < to }
+
+    override fun findCustomerIdsWithBookingBefore(salonId: SalonId, customerIds: Set<UserId>, before: LocalDateTime): Set<UserId> =
+        store.values
+            .filter { it.salonId == salonId && it.customerId in customerIds && it.startTime < before }
+            .map { it.customerId }
+            .toSet()
 }

@@ -15,7 +15,8 @@ enum class TokenType {
 
 data class TokenSubject(
     val userId: String,
-    val email: String,
+    /** Mobile-First Authentication Phase 1: nullable — a phone-only account's tokens carry no email claim. [userId] is the only identity anchor any caller should rely on being present (see `CurrentUserResolver`). */
+    val email: String?,
     val role: String,
     val type: TokenType,
 )

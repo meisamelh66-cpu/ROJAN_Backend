@@ -1,5 +1,6 @@
 package ai.rojan.backend.infrastructure.persistence.user
 
+import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.User
 import ai.rojan.backend.domain.user.UserId
@@ -16,16 +17,18 @@ class UserRepositoryAdapter(
     override fun save(user: User): User {
         val entity = jpaRepository.findById(user.id.value).orElse(null)
             ?.apply {
-                email = user.email.value
+                email = user.email?.value
                 passwordHash = user.passwordHash
+                phoneNumber = user.phoneNumber?.value
                 fullName = user.fullName
                 role = user.role
                 active = user.active
             }
             ?: UserJpaEntity(
                 id = user.id.value,
-                email = user.email.value,
+                email = user.email?.value,
                 passwordHash = user.passwordHash,
+                phoneNumber = user.phoneNumber?.value,
                 fullName = user.fullName,
                 role = user.role,
                 active = user.active,
@@ -42,10 +45,17 @@ class UserRepositoryAdapter(
     override fun existsByEmail(email: Email): Boolean =
         jpaRepository.existsByEmail(email.value)
 
+    override fun findByPhoneNumber(phoneNumber: PhoneNumber): User? =
+        jpaRepository.findByPhoneNumber(phoneNumber.value)?.toDomain()
+
+    override fun existsByPhoneNumber(phoneNumber: PhoneNumber): Boolean =
+        jpaRepository.existsByPhoneNumber(phoneNumber.value)
+
     private fun UserJpaEntity.toDomain(): User = User.reconstitute(
         id = UserId(id),
-        email = Email(email),
+        email = email?.let { Email(it) },
         passwordHash = passwordHash,
+        phoneNumber = phoneNumber?.let { PhoneNumber(it) },
         fullName = fullName,
         role = role,
         active = active,

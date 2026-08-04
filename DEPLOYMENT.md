@@ -94,7 +94,7 @@ the host.
 | `docker-compose.prod.yml` | Production service topology: restart policies, `/opt/rojan`-bind-mounted persistence, internal-only Postgres/Redis, app healthcheck, Nginx + Certbot |
 | `docker/nginx/nginx.conf` | Nginx process-wide defaults (gzip, logging, body-size limit) |
 | `docker/nginx/conf.d/rojan.conf` | HTTP→HTTPS redirect, ACME challenge location, HTTPS reverse proxy to the app, security headers |
-| `docker/nginx/init-letsencrypt.sh` | One-time bootstrap script that solves the "Nginx needs a cert to start, Certbot needs Nginx running to issue one" ordering problem (see §7) |
+| `docker/nginx/init-letsencrypt.sh` | One-time bootstrap script that swaps the throwaway certificate (see `cert-init` below) for a real Let's Encrypt one (see §7) |
 | `.env.example` | Every environment variable production needs, documented, no real values |
 | `bootstrap/src/main/resources/application-prod.yml` | `prod` Spring profile: graceful shutdown, tightened actuator detail exposure, Kafka health indicator off, Swagger UI off by default, rolling file logging |
 | `Dockerfile` (modified) | Added `curl` + an image-level `HEALTHCHECK`; creates `/app/logs` owned by the runtime user |
@@ -114,7 +114,7 @@ See `.env.example` for the authoritative, commented list. Summary:
 | `DB_POOL_SIZE` | No | Hikari pool size, defaults to 10 |
 | `REDIS_PASSWORD` | No | Optional — Redis isn't host-exposed either way |
 | `ROJAN_DATA_ROOT` | No | Defaults to `/opt/rojan`, the already-provisioned path |
-| `DOMAIN_NAME` / `LETSENCRYPT_EMAIL` | Yes, for SSL bootstrap | Consumed only by `docker/nginx/init-letsencrypt.sh` |
+| `DOMAIN_NAME` / `LETSENCRYPT_EMAIL` | Yes, for SSL bootstrap | `DOMAIN_NAME` is read by `docker-compose.prod.yml`'s `cert-init` service directly (and by `docker/nginx/init-letsencrypt.sh`, which additionally uses both vars for the real Certbot request) |
 
 ## 5. PostgreSQL & Redis persistence
 
@@ -145,16 +145,29 @@ and error logs are bind-mounted to `${ROJAN_DATA_ROOT}/nginx/logs`.
 Nginx's HTTPS server block requires certificate files to exist before
 Nginx will even start — but Let's Encrypt's HTTP-01 challenge requires
 Nginx (or something) already serving plain HTTP on the target domain.
-`docker/nginx/init-letsencrypt.sh` resolves that ordering with the
-standard community pattern:
+
+This ordering is enforced at the **Compose level**, not by script
+sequencing: `docker-compose.prod.yml`'s `cert-init` service runs before
+Nginx on every `docker compose up` and generates a throwaway 1-day
+self-signed certificate at the exact path Let's Encrypt would use *if*
+no real certificate is present yet (a no-op once a real one exists).
+Nginx's `depends_on: cert-init: condition: service_completed_successfully`
+means Compose will not even attempt to start Nginx until that placeholder
+(or a real cert, on later runs) is on disk — so Nginx starting no longer
+depends on `init-letsencrypt.sh`, `scripts/deploy.sh`, a restart, or a
+reboot happening in any particular order.
+
+`docker/nginx/init-letsencrypt.sh` then swaps the throwaway certificate
+for a real one:
 
 1. Substitute the real domain into `docker/nginx/conf.d/rojan.conf`
    (replaces the `CHANGE_ME_DOMAIN` placeholder).
-2. Generate a throwaway 1-day self-signed certificate at the exact path
-   Let's Encrypt would use, purely so Nginx has *something* to load.
-3. Start Nginx — it now serves HTTP (including the ACME challenge path)
-   and HTTPS (with the untrusted placeholder cert).
-4. Delete the placeholder certificate.
+2. `docker compose up -d` — `cert-init` provisions the throwaway
+   certificate, then Nginx starts and serves HTTP (including the ACME
+   challenge path) and HTTPS (with the untrusted placeholder cert).
+3. Wait for Nginx's healthcheck to go healthy.
+4. Delete the placeholder certificate (Certbot needs a clean lineage,
+   not a plain file it doesn't manage, at `live/$DOMAIN`).
 5. Run `certbot certonly --webroot` against the now-running Nginx to
    obtain the real certificate for the domain.
 6. `nginx -s reload` to pick up the real certificate — zero downtime, no
@@ -188,7 +201,8 @@ the matching `backup.sh` archive (§10 below) *in addition to* running
 |---|---|---|
 | `app` | Postgres reachable + migrated, Redis reachable | `depends_on: condition: service_healthy` on both; app itself won't complete startup without a working datasource (JPA/Flyway) |
 | `app` | Kafka | **Not required** — see §1's audit finding; health indicator explicitly disabled so this is a verified non-dependency for this deployment, not an oversight |
-| `nginx` | `app` healthy | `depends_on: condition: service_healthy`, plus Nginx's own healthcheck hits a static `/.well-known/healthcheck` location independent of the app, so Nginx itself reports healthy even during a legitimate app restart |
+| `nginx` | `app` healthy, `cert-init` completed | `depends_on: condition: service_healthy` (app) and `condition: service_completed_successfully` (cert-init) — the latter guarantees a certificate exists before Nginx's config is even parsed, so Nginx can never crash-loop on a missing cert regardless of start order; Nginx's own healthcheck hits a static `/.well-known/healthcheck` location independent of the app, so it reports healthy even during a legitimate app restart |
+| `cert-init` | none | Runs to completion before Nginx starts; idempotent — detects an existing real certificate and exits immediately without touching it |
 | `certbot` | Nginx serving the ACME webroot path | Ordering handled by `init-letsencrypt.sh`, not by compose `depends_on` (the first-run bootstrap is inherently sequential/manual — see §7) |
 
 ## 10. Deployment checklist

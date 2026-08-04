@@ -31,7 +31,12 @@ class AuthenticateUserUseCase(
         val email = Email(command.email.trim().lowercase())
         val user = userRepository.findByEmail(email) ?: throw InvalidCredentialsException()
 
-        if (!passwordEncoder.matches(command.rawPassword, user.passwordHash)) {
+        // Mobile-First Authentication Phase 1: a phone-only account (registered via
+        // OTP) has no passwordHash at all — email/password login must reject it
+        // cleanly as "invalid credentials," not NPE, since it was never a valid
+        // credential pair for that account in the first place.
+        val passwordHash = user.passwordHash ?: throw InvalidCredentialsException()
+        if (!passwordEncoder.matches(command.rawPassword, passwordHash)) {
             throw InvalidCredentialsException()
         }
         if (!user.active) {

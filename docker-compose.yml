@@ -60,8 +60,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_started
 
 volumes:
   rojan_postgres_data:

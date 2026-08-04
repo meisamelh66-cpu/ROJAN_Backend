@@ -18,6 +18,7 @@ import java.util.UUID
 import javax.crypto.SecretKey
 
 private const val CLAIM_EMAIL = "email"
+private const val CLAIM_PHONE = "phone"
 private const val CLAIM_ROLE = "role"
 private const val CLAIM_TOKEN_TYPE = "type"
 
@@ -56,7 +57,10 @@ class JwtTokenProvider(
 
         return TokenSubject(
             userId = claims.subject,
-            email = claims[CLAIM_EMAIL] as? String ?: throw InvalidTokenException(),
+            // Mobile-First Authentication Phase 1: no longer required — a
+            // phone-only account's tokens carry no email claim at all. `sub`
+            // (userId) is the one identity anchor every token guarantees.
+            email = claims[CLAIM_EMAIL] as? String,
             role = claims[CLAIM_ROLE] as? String ?: throw InvalidTokenException(),
             type = type,
         )
@@ -65,17 +69,21 @@ class JwtTokenProvider(
     private fun issue(user: User, type: TokenType, ttl: Long, unit: ChronoUnit): IssuedToken {
         val now = Instant.now()
         val expiresAt = now.plus(ttl, unit)
-        val token = Jwts.builder()
+        val builder = Jwts.builder()
             .id(UUID.randomUUID().toString())
             .subject(user.id.value.toString())
-            .claim(CLAIM_EMAIL, user.email.value)
             .claim(CLAIM_ROLE, user.role.name)
             .claim(CLAIM_TOKEN_TYPE, type.name)
             .issuer(jwtProperties.issuer)
             .issuedAt(Date.from(now))
             .expiration(Date.from(expiresAt))
-            .signWith(signingKey)
-            .compact()
+        // Mobile-First Authentication Phase 1: each claim is only present when
+        // the account actually has that identifier — a phone-only account
+        // carries no "email" claim, an email-only account carries no "phone"
+        // claim. Neither is ever required by anything downstream; `sub` is.
+        user.email?.let { builder.claim(CLAIM_EMAIL, it.value) }
+        user.phoneNumber?.let { builder.claim(CLAIM_PHONE, it.value) }
+        val token = builder.signWith(signingKey).compact()
         return IssuedToken(token = token, expiresAt = expiresAt)
     }
 }

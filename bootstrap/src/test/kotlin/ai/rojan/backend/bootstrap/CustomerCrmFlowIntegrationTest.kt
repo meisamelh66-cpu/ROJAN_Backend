@@ -1,0 +1,286 @@
+package ai.rojan.backend.bootstrap
+
+import ai.rojan.backend.api.auth.AuthResponse
+import ai.rojan.backend.api.auth.LoginRequest
+import ai.rojan.backend.api.auth.RegisterRequest
+import ai.rojan.backend.api.auth.UserResponse
+import ai.rojan.backend.api.common.PagedResponse
+import ai.rojan.backend.api.customer.AddCustomerNoteRequest
+import ai.rojan.backend.api.customer.AddCustomerTagRequest
+import ai.rojan.backend.api.customer.CreateCustomerRequest
+import ai.rojan.backend.api.customer.CustomerNoteResponse
+import ai.rojan.backend.api.customer.CustomerResponse
+import ai.rojan.backend.api.customer.CustomerTagResponse
+import ai.rojan.backend.api.customer.CustomerTimelineEntryResponse
+import ai.rojan.backend.api.customer.UpdateCustomerRequest
+import ai.rojan.backend.api.salon.CreateSalonRequest
+import ai.rojan.backend.api.salon.SalonResponse
+import ai.rojan.backend.domain.customer.CustomerStatus
+import ai.rojan.backend.domain.user.UserRole
+import io.zonky.test.db.AutoConfigureEmbeddedDatabase
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.web.client.TestRestTemplate
+import org.springframework.boot.test.web.server.LocalServerPort
+import org.springframework.core.ParameterizedTypeReference
+import org.springframework.http.HttpEntity
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpMethod
+import org.springframework.http.HttpStatus
+import org.springframework.test.context.ActiveProfiles
+import java.math.BigDecimal
+
+/**
+ * End-to-end verification of the Customer CRM vertical (Phase 1) against a
+ * real (embedded, no-Docker) PostgreSQL and the actual HTTP layer -
+ * profile/status/notes/tags/timeline/bookings, ownership authorization, and
+ * cross-tenant isolation, mirroring `SalonManagementFlowIntegrationTest`'s
+ * own shape. Does not touch, call, or assert against any Booking write
+ * endpoint - "do not modify Booking Integration" - the one booking-related
+ * assertion here is that a customer's bookings list is correctly empty for
+ * an unlinked customer (see `GetCustomerBookingsUseCase`'s own doc comment).
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles("test")
+@AutoConfigureEmbeddedDatabase(provider = AutoConfigureEmbeddedDatabase.DatabaseProvider.ZONKY)
+class CustomerCrmFlowIntegrationTest {
+
+    @LocalServerPort
+    private var port: Int = 0
+
+    private val restTemplate = TestRestTemplate()
+
+    private fun url(path: String) = "http://localhost:$port$path"
+
+    private fun bearer(token: String) = HttpHeaders().apply { setBearerAuth(token) }
+
+    private fun registerAndLogin(): String {
+        val email = "crm.${System.nanoTime()}@example.com"
+        restTemplate.postForEntity(
+            url("/api/v1/auth/register"),
+            RegisterRequest(email = email, password = "supersecret123", fullName = "Owner", role = UserRole.MANAGER),
+            UserResponse::class.java,
+        )
+        val login = restTemplate.postForEntity(
+            url("/api/v1/auth/login"),
+            LoginRequest(email = email, password = "supersecret123"),
+            AuthResponse::class.java,
+        )
+        return requireNotNull(login.body).accessToken
+    }
+
+    private fun createSalon(token: String, name: String): SalonResponse = requireNotNull(
+        restTemplate.exchange(
+            url("/api/v1/salons"),
+            HttpMethod.POST,
+            HttpEntity(CreateSalonRequest(name, null, "+1 555 0100", null, "1 Main St"), bearer(token)),
+            SalonResponse::class.java,
+        ).body,
+    )
+
+    @Test
+    fun `full customer lifecycle - create, profile, status change, notes, tags, timeline`() {
+        val ownerToken = registerAndLogin()
+        val salon = createSalon(ownerToken, "Glow Salon")
+
+        val createCustomer = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers"),
+            HttpMethod.POST,
+            HttpEntity(CreateCustomerRequest("Jane Doe", "+989123456789", null, null), bearer(ownerToken)),
+            CustomerResponse::class.java,
+        )
+        assertEquals(HttpStatus.CREATED, createCustomer.statusCode)
+        val customer = requireNotNull(createCustomer.body)
+        assertEquals(CustomerStatus.LEAD, customer.status)
+        assertEquals(0, BigDecimal.ZERO.compareTo(customer.lifetimeValue))
+        assertTrue(customer.userId == null)
+
+        val listCustomers = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            object : ParameterizedTypeReference<PagedResponse<CustomerResponse>>() {},
+        )
+        assertEquals(HttpStatus.OK, listCustomers.statusCode)
+        assertTrue(listCustomers.body!!.content.any { it.id == customer.id })
+
+        val statusChange = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}"),
+            HttpMethod.PATCH,
+            HttpEntity(UpdateCustomerRequest(null, null, null, null, CustomerStatus.PROSPECT), bearer(ownerToken)),
+            CustomerResponse::class.java,
+        )
+        assertEquals(HttpStatus.OK, statusChange.statusCode)
+        assertEquals(CustomerStatus.PROSPECT, statusChange.body?.status)
+
+        val addNote = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}/notes"),
+            HttpMethod.POST,
+            HttpEntity(AddCustomerNoteRequest("Prefers morning appointments"), bearer(ownerToken)),
+            CustomerNoteResponse::class.java,
+        )
+        assertEquals(HttpStatus.CREATED, addNote.statusCode)
+
+        val addTag = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}/tags"),
+            HttpMethod.POST,
+            HttpEntity(AddCustomerTagRequest("VIP"), bearer(ownerToken)),
+            CustomerTagResponse::class.java,
+        )
+        assertEquals(HttpStatus.CREATED, addTag.statusCode)
+        val tag = requireNotNull(addTag.body)
+
+        val getWithTag = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            CustomerResponse::class.java,
+        )
+        assertTrue(getWithTag.body!!.tags.contains("VIP"))
+
+        val timeline = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}/timeline"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            object : ParameterizedTypeReference<PagedResponse<CustomerTimelineEntryResponse>>() {},
+        )
+        assertEquals(HttpStatus.OK, timeline.statusCode)
+        assertTrue(timeline.body!!.content.any { it.type == "NOTE" })
+        assertTrue(timeline.body!!.content.any { it.type == "TAG_ADDED" })
+        assertTrue(timeline.body!!.content.any { it.type == "STATUS_CHANGED" })
+
+        val removeTag = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}/tags/${tag.id}"),
+            HttpMethod.DELETE,
+            HttpEntity<Void>(bearer(ownerToken)),
+            Void::class.java,
+        )
+        assertEquals(HttpStatus.NO_CONTENT, removeTag.statusCode)
+
+        val bookings = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}/bookings"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            object : ParameterizedTypeReference<PagedResponse<Any>>() {},
+        )
+        assertEquals(HttpStatus.OK, bookings.statusCode)
+        assertTrue(bookings.body!!.content.isEmpty()) // unlinked customer - see GetCustomerBookingsUseCase's own doc comment
+    }
+
+    @Test
+    fun `rejects a duplicate phone number within the same salon`() {
+        val ownerToken = registerAndLogin()
+        val salon = createSalon(ownerToken, "Duplicate Test Salon")
+        restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers"),
+            HttpMethod.POST,
+            HttpEntity(CreateCustomerRequest("Jane Doe", "+989111111111", null, null), bearer(ownerToken)),
+            CustomerResponse::class.java,
+        )
+
+        val duplicate = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers"),
+            HttpMethod.POST,
+            HttpEntity(CreateCustomerRequest("Impersonator", "+989111111111", null, null), bearer(ownerToken)),
+            String::class.java,
+        )
+
+        assertEquals(HttpStatus.CONFLICT, duplicate.statusCode)
+        assertTrue(duplicate.body!!.contains("CUSTOMER_ALREADY_EXISTS"))
+    }
+
+    @Test
+    fun `rejects an illegal status transition`() {
+        val ownerToken = registerAndLogin()
+        val salon = createSalon(ownerToken, "Status Test Salon")
+        val customer = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/salons/${salon.id}/customers"),
+                HttpMethod.POST,
+                HttpEntity(CreateCustomerRequest("Jane Doe", "+989222222222", null, null), bearer(ownerToken)),
+                CustomerResponse::class.java,
+            ).body,
+        )
+
+        val illegalJump = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}"),
+            HttpMethod.PATCH,
+            HttpEntity(UpdateCustomerRequest(null, null, null, null, CustomerStatus.VIP), bearer(ownerToken)), // Lead -> Vip is illegal
+            String::class.java,
+        )
+
+        assertEquals(HttpStatus.CONFLICT, illegalJump.statusCode)
+        assertTrue(illegalJump.body!!.contains("INVALID_CUSTOMER_STATE"))
+    }
+
+    @Test
+    fun `customer data never leaks between salons - cross-tenant get returns 404`() {
+        val ownerToken = registerAndLogin()
+        val salonA = createSalon(ownerToken, "Salon A")
+        val salonB = createSalon(ownerToken, "Salon B")
+        val customerOfA = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/salons/${salonA.id}/customers"),
+                HttpMethod.POST,
+                HttpEntity(CreateCustomerRequest("Jane Doe", "+989333333333", null, null), bearer(ownerToken)),
+                CustomerResponse::class.java,
+            ).body,
+        )
+
+        val crossTenantGet = restTemplate.exchange(
+            url("/api/v1/salons/${salonB.id}/customers/${customerOfA.id}"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            String::class.java,
+        )
+
+        assertEquals(HttpStatus.NOT_FOUND, crossTenantGet.statusCode)
+    }
+
+    @Test
+    fun `rejects a caller who does not own the salon`() {
+        val ownerToken = registerAndLogin()
+        val strangerToken = registerAndLogin()
+        val salon = createSalon(ownerToken, "Private Salon")
+        val customer = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/salons/${salon.id}/customers"),
+                HttpMethod.POST,
+                HttpEntity(CreateCustomerRequest("Jane Doe", "+989444444444", null, null), bearer(ownerToken)),
+                CustomerResponse::class.java,
+            ).body,
+        )
+
+        val strangerGet = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id}"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(strangerToken)),
+            String::class.java,
+        )
+
+        assertEquals(HttpStatus.FORBIDDEN, strangerGet.statusCode)
+    }
+
+    @Test
+    fun `rejects unauthenticated access`() {
+        val response = restTemplate.postForEntity(
+            url("/api/v1/salons/${java.util.UUID.randomUUID()}/customers"),
+            CreateCustomerRequest("No Auth", "+989555555555", null, null),
+            String::class.java,
+        )
+        assertEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
+    }
+
+    @Test
+    fun `OpenAPI docs describe the customer CRM endpoints`() {
+        val response = restTemplate.getForEntity(url("/v3/api-docs"), String::class.java)
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val docs = requireNotNull(response.body)
+        assertTrue(docs.contains("/api/v1/salons/{salonId}/customers"))
+        assertTrue(docs.contains("/api/v1/salons/{salonId}/customers/{customerId}/timeline"))
+        assertTrue(docs.contains("/api/v1/salons/{salonId}/customers/{customerId}/bookings"))
+    }
+}

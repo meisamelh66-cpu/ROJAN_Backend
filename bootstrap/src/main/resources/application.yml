@@ -51,6 +51,27 @@ rojan:
       issuer: ${JWT_ISSUER:rojan-ai-backend}
       access-token-ttl-minutes: ${JWT_ACCESS_TTL_MINUTES:15}
       refresh-token-ttl-days: ${JWT_REFRESH_TTL_DAYS:30}
+    otp:
+      ttl-seconds: ${OTP_TTL_SECONDS:120}
+      max-attempts: ${OTP_MAX_ATTEMPTS:5}
+      resend-cooldown-seconds: ${OTP_RESEND_COOLDOWN_SECONDS:60}
+      request-limit-per-phone-short-window: ${OTP_REQUEST_LIMIT_PER_PHONE_SHORT_WINDOW:3}
+      request-short-window-seconds: ${OTP_REQUEST_SHORT_WINDOW_SECONDS:600}
+      request-limit-per-phone-long-window: ${OTP_REQUEST_LIMIT_PER_PHONE_LONG_WINDOW:5}
+      request-long-window-seconds: ${OTP_REQUEST_LONG_WINDOW_SECONDS:3600}
+      request-limit-per-ip-long-window: ${OTP_REQUEST_LIMIT_PER_IP_LONG_WINDOW:10}
+      verify-limit-per-phone-window: ${OTP_VERIFY_LIMIT_PER_PHONE_WINDOW:10}
+      verify-window-seconds: ${OTP_VERIFY_WINDOW_SECONDS:600}
+
+# SMS Provider Integration: no defaults on purpose, same as JWT_SECRET above
+# - startup must fail loudly if these are unset, rather than silently
+# booting with an SMS integration that can never actually deliver a code.
+# Only bound outside the "test" profile (see SmsPropertiesConfig), so the
+# test suite never needs real values here.
+  sms:
+    api-url: ${SMS_API_URL}
+    api-key: ${SMS_API_KEY}
+    sender: ${SMS_SENDER}
 
 management:
   endpoints:

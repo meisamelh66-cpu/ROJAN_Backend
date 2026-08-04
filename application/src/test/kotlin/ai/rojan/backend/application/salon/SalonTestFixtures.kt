@@ -18,6 +18,7 @@ import ai.rojan.backend.domain.salon.ServiceRepository
 import ai.rojan.backend.domain.salon.Specialist
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.salon.SpecialistRepository
+import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.User
 import ai.rojan.backend.domain.user.UserId
@@ -87,4 +88,6 @@ internal class InMemorySalonUserRepository : UserRepository {
     override fun findById(id: UserId): User? = store[id]
     override fun findByEmail(email: Email): User? = store.values.find { it.email == email }
     override fun existsByEmail(email: Email): Boolean = store.values.any { it.email == email }
+    override fun findByPhoneNumber(phoneNumber: PhoneNumber): User? = store.values.find { it.phoneNumber == phoneNumber }
+    override fun existsByPhoneNumber(phoneNumber: PhoneNumber): Boolean = store.values.any { it.phoneNumber == phoneNumber }
 }

@@ -1,5 +1,6 @@
 package ai.rojan.backend.domain.user
 
+import ai.rojan.backend.domain.auth.PhoneNumber
 import java.time.Instant
 import java.util.UUID
 
@@ -28,20 +29,35 @@ data class Email(val value: String) {
 
 /**
  * Aggregate root for a ROJAN account. Construction is only possible through
- * [register] (new accounts) or [reconstitute] (rehydration from storage) so
+ * [register] (email/password), [registerWithPhone] (OTP-based, Mobile-First
+ * Authentication Phase 1), or [reconstitute] (rehydration from storage) so
  * invariants can never be bypassed.
+ *
+ * [email]/[passwordHash] and [phoneNumber] are each independently optional -
+ * [register] always sets the former, [registerWithPhone] always sets the
+ * latter, and either factory leaves the other null. The invariant "at least
+ * one identity anchor exists" is enforced in both factories (and mirrored as
+ * a DB-level CHECK constraint - see `V5__mobile_authentication.sql`), never
+ * relaxed to "both may be null."
  */
 class User private constructor(
     val id: UserId,
-    val email: Email,
-    passwordHash: String,
+    email: Email?,
+    passwordHash: String?,
+    phoneNumber: PhoneNumber?,
     fullName: String,
     val role: UserRole,
     active: Boolean,
     val createdAt: Instant,
     updatedAt: Instant,
 ) {
-    var passwordHash: String = passwordHash
+    var email: Email? = email
+        private set
+
+    var passwordHash: String? = passwordHash
+        private set
+
+    var phoneNumber: PhoneNumber? = phoneNumber
         private set
 
     var fullName: String = fullName
@@ -85,6 +101,28 @@ class User private constructor(
                 id = UserId.new(),
                 email = email,
                 passwordHash = passwordHash,
+                phoneNumber = null,
+                fullName = fullName.trim(),
+                role = role,
+                active = true,
+                createdAt = now,
+                updatedAt = now,
+            )
+        }
+
+        /** Mobile-First Authentication Phase 1: creates a phone-only account with no password - only reachable after a real OTP has already been verified (see `application/auth/VerifyOtpUseCase`), so there is no separate credential to validate here. */
+        fun registerWithPhone(
+            phoneNumber: PhoneNumber,
+            fullName: String,
+            role: UserRole,
+        ): User {
+            require(fullName.isNotBlank()) { "Full name must not be blank" }
+            val now = Instant.now()
+            return User(
+                id = UserId.new(),
+                email = null,
+                passwordHash = null,
+                phoneNumber = phoneNumber,
                 fullName = fullName.trim(),
                 role = role,
                 active = true,
@@ -95,13 +133,14 @@ class User private constructor(
 
         fun reconstitute(
             id: UserId,
-            email: Email,
-            passwordHash: String,
+            email: Email?,
+            passwordHash: String?,
+            phoneNumber: PhoneNumber? = null,
             fullName: String,
             role: UserRole,
             active: Boolean,
             createdAt: Instant,
             updatedAt: Instant,
-        ): User = User(id, email, passwordHash, fullName, role, active, createdAt, updatedAt)
+        ): User = User(id, email, passwordHash, phoneNumber, fullName, role, active, createdAt, updatedAt)
     }
 }

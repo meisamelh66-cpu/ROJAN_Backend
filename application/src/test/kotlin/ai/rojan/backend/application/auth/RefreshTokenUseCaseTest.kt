@@ -4,6 +4,7 @@ import ai.rojan.backend.application.port.IssuedToken
 import ai.rojan.backend.application.port.TokenProviderPort
 import ai.rojan.backend.application.port.TokenSubject
 import ai.rojan.backend.application.port.TokenType
+import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.common.InactiveUserException
 import ai.rojan.backend.domain.common.InvalidTokenException
 import ai.rojan.backend.domain.common.UserNotFoundException
@@ -24,6 +25,8 @@ private class SoleUserRepository(private val user: User) : UserRepository {
     override fun findById(id: UserId): User? = user.takeIf { it.id == id }
     override fun findByEmail(email: Email): User? = user.takeIf { it.email == email }
     override fun existsByEmail(email: Email): Boolean = user.email == email
+    override fun findByPhoneNumber(phoneNumber: PhoneNumber): User? = user.takeIf { it.phoneNumber == phoneNumber }
+    override fun existsByPhoneNumber(phoneNumber: PhoneNumber): Boolean = user.phoneNumber == phoneNumber
 }
 
 /**

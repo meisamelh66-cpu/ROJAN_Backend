@@ -114,6 +114,15 @@ class BookingRepositoryAdapter(
     ): List<Booking> = jpaRepository.findActiveBySpecialistIdAndDateRange(specialistId.value, from, to, ACTIVE_STATUSES)
         .map { it.toDomain() }
 
+    override fun findBySalonIdAndStartTimeRange(salonId: SalonId, from: LocalDateTime, to: LocalDateTime): List<Booking> =
+        jpaRepository.findBySalonIdAndStartTimeGreaterThanEqualAndStartTimeLessThan(salonId.value, from, to)
+            .map { it.toDomain() }
+
+    override fun findCustomerIdsWithBookingBefore(salonId: SalonId, customerIds: Set<UserId>, before: LocalDateTime): Set<UserId> =
+        jpaRepository.findCustomerIdsWithBookingBefore(salonId.value, customerIds.map { it.value }, before)
+            .map { UserId(it) }
+            .toSet()
+
     private fun persist(booking: Booking): Booking {
         val entity = jpaRepository.findById(booking.id.value).orElse(null)
             ?.apply {

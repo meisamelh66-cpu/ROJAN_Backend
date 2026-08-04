@@ -137,6 +137,37 @@ services:
       retries: 12
       start_period: 40s
 
+  # One-shot, runs before Nginx every single time the stack comes up.
+  # Guarantees *a* certificate (a throwaway self-signed one, if no real
+  # one exists yet) is on disk before Nginx is allowed to start — see
+  # `nginx`'s `depends_on` below. This is what actually closes the
+  # chicken-and-egg gap (Nginx needs a cert to start; Certbot needs Nginx
+  # running to prove domain ownership): the ordering is now enforced by
+  # Compose itself via `service_completed_successfully`, not by an
+  # operator running init-letsencrypt.sh in exactly the right sequence.
+  # Idempotent — once a real certificate exists at the same path, this
+  # detects it and exits immediately without touching it.
+  cert-init:
+    image: certbot/certbot:latest
+    entrypoint: sh
+    command:
+      - -c
+      - |
+        set -e
+        DOMAIN="${DOMAIN_NAME:?DOMAIN_NAME must be set — see .env.example}"
+        if [ -f "/etc/letsencrypt/live/$$DOMAIN/fullchain.pem" ]; then
+          echo "Certificate already present for $$DOMAIN - nothing to do."
+          exit 0
+        fi
+        echo "No certificate yet for $$DOMAIN - generating a throwaway self-signed one so Nginx can start."
+        mkdir -p "/etc/letsencrypt/live/$$DOMAIN"
+        openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+          -keyout "/etc/letsencrypt/live/$$DOMAIN/privkey.pem" \
+          -out "/etc/letsencrypt/live/$$DOMAIN/fullchain.pem" \
+          -subj "/CN=$$DOMAIN"
+    volumes:
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/letsencrypt:/etc/letsencrypt
+
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
@@ -154,18 +185,19 @@ services:
     depends_on:
       app:
         condition: service_healthy
+      cert-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/.well-known/healthcheck"]
       interval: 15s
       timeout: 5s
       retries: 5
 
-  # One-shot/looping certbot renewal helper — see DEPLOYMENT.md for the
-  # first-time issuance bootstrap (this service only *renews* existing
-  # certs; it does not obtain the first one, since that needs Nginx
-  # already serving the ACME challenge path, which itself needs a
-  # placeholder cert to start with HTTPS — the classic chicken-and-egg,
-  # walked through step by step in DEPLOYMENT.md).
+  # Long-running renewal loop only. The FIRST certificate is obtained by
+  # init-letsencrypt.sh calling `certbot certonly --webroot` directly
+  # against the now-always-running Nginx (guaranteed up by cert-init,
+  # above) — this service just renews whatever already exists, checking
+  # every 12h.
   certbot:
     image: certbot/certbot:latest
     restart: unless-stopped

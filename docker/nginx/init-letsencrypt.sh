@@ -5,15 +5,19 @@
 # Certbot needs Nginx running (to serve the HTTP-01 challenge) before it
 # can issue that certificate.
 #
-# Adapted from the well-known certbot/nginx docker-compose bootstrap
-# pattern (docker-compose-letsencrypt-nginx-proxy-companion and certbot's
-# own docs use the same shape): stand up Nginx with a temporary
-# self-signed placeholder certificate first, then swap it for the real
-# one once Certbot succeeds.
+# Nginx's own startup no longer depends on this script's ordering: the
+# `cert-init` service in docker-compose.prod.yml guarantees *some*
+# certificate (a throwaway self-signed one, if no real one exists yet) is
+# on disk before Compose will even start Nginx, via `depends_on: cert-init:
+# condition: service_completed_successfully`. That's enforced by Compose
+# itself for every way Nginx could start (this script, scripts/deploy.sh,
+# a restart, a reboot) — not just this one script's happy path. This
+# script's job is now just to swap that throwaway certificate for a real
+# one from Let's Encrypt.
 #
-# NOT executed as part of this milestone — see DEPLOYMENT.md. Run this
-# manually, once, on the target VPS after DNS for the real domain already
-# points at it (Let's Encrypt's HTTP-01 challenge will fail otherwise).
+# Run this manually, once, on the target VPS after DNS for the real
+# domain already points at it (Let's Encrypt's HTTP-01 challenge will
+# fail otherwise).
 #
 # Usage: DOMAIN=your.domain.com EMAIL=you@example.com ./init-letsencrypt.sh
 set -euo pipefail
@@ -29,19 +33,25 @@ COMPOSE="docker compose -f $REPO_ROOT/docker-compose.prod.yml"
 echo "==> Substituting CHANGE_ME_DOMAIN -> $DOMAIN in $CONF_FILE"
 sed -i "s/CHANGE_ME_DOMAIN/$DOMAIN/g" "$CONF_FILE"
 
-echo "==> Creating a temporary self-signed certificate so Nginx can start"
-$COMPOSE run --rm --entrypoint sh certbot -c "
-  mkdir -p /etc/letsencrypt/live/$DOMAIN &&
-  openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
-    -keyout /etc/letsencrypt/live/$DOMAIN/privkey.pem \
-    -out /etc/letsencrypt/live/$DOMAIN/fullchain.pem \
-    -subj '/CN=localhost'
-"
+echo "==> Bringing up the full stack (cert-init guarantees Nginx has a certificate to boot with)"
+$COMPOSE up -d
 
-echo "==> Starting Nginx (and its dependencies) with the placeholder cert"
-$COMPOSE up -d nginx
+echo "==> Waiting for Nginx to report healthy (up to 2.5 min)"
+container_id="$($COMPOSE ps -q nginx)"
+status=unknown
+for _ in $(seq 1 30); do
+  status="$(docker inspect -f '{{.State.Health.Status}}' "$container_id" 2>/dev/null || echo unknown)"
+  if [ "$status" = "healthy" ]; then
+    break
+  fi
+  sleep 5
+done
+if [ "$status" != "healthy" ]; then
+  echo "Nginx did not become healthy - check: docker compose -f docker-compose.prod.yml logs nginx" >&2
+  exit 1
+fi
 
-echo "==> Deleting the placeholder certificate"
+echo "==> Removing the throwaway certificate so Certbot issues a clean lineage"
 $COMPOSE run --rm --entrypoint rm certbot -rf \
   "/etc/letsencrypt/live/$DOMAIN" \
   "/etc/letsencrypt/archive/$DOMAIN" \

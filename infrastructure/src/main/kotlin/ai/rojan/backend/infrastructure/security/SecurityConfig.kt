@@ -6,7 +6,6 @@ import org.springframework.http.HttpStatus
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.web.SecurityFilterChain
-import org.springframework.security.web.authentication.HttpStatusEntryPoint
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 
 @Configuration
@@ -18,26 +17,43 @@ class SecurityConfig(
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             .csrf { it.disable() }
-            .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
-            // Without this, Spring Security's default AnonymousAuthenticationFilter +
-            // AccessDeniedHandler combination returns 403 for a missing/invalid bearer
-            // token, not 401 — REST-incorrect (401 = not authenticated, 403 = authenticated
-            // but not authorized), and it silently breaks any client-side "refresh on 401"
-            // mechanism, since that class of client only ever triggers on a real 401.
-            .exceptionHandling { it.authenticationEntryPoint(HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)) }
+            .sessionManagement { 
+                it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) 
+            }
+            .exceptionHandling {
+                // A minimal, fixed body (not the full ApiError shape GlobalExceptionHandler
+                // uses elsewhere) — this fires at the security-filter level, before a
+                // request ever reaches a controller/GlobalExceptionHandler, for every
+                // missing/invalid/expired bearer token across the whole API.
+                it.authenticationEntryPoint { _, response, _ ->
+                    response.status = HttpStatus.UNAUTHORIZED.value()
+                    response.contentType = "application/json"
+                    response.writer.write(
+                        """{"errorCode":"AUTH_UNAUTHORIZED","message":"Authentication required"}""",
+                    )
+                }
+            }
             .authorizeHttpRequests { authorize ->
                 authorize
                     .requestMatchers(*PUBLIC_ENDPOINTS).permitAll()
                     .anyRequest().authenticated()
             }
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
+            .addFilterBefore(
+                jwtAuthenticationFilter,
+                UsernamePasswordAuthenticationFilter::class.java
+            )
 
         return http.build()
     }
 
     private companion object {
+
         val PUBLIC_ENDPOINTS = arrayOf(
             "/api/v1/auth/**",
+
+            // Public website API (ROJAN Web)
+            "/api/v1/public/**",
+
             "/actuator/health",
             "/actuator/health/**",
             "/v3/api-docs/**",

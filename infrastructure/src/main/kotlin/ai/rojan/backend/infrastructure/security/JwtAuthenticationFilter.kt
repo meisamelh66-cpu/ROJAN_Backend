@@ -40,7 +40,10 @@ class JwtAuthenticationFilter(
                     filterChain.doFilter(request, response)
                     return
                 }
-                val userDetails = userDetailsService.loadUserByUsername(subject.email)
+                // Mobile-First Authentication Phase 1: resolve by userId (sub), not
+                // email — a phone-only account has no email claim at all. See
+                // RojanUserDetailsService's own doc comment for the full picture.
+                val userDetails = userDetailsService.loadUserByUsername(subject.userId)
                 val authentication = UsernamePasswordAuthenticationToken(
                     userDetails,
                     null,

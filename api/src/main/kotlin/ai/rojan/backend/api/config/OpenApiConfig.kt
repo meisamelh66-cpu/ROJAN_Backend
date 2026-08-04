@@ -21,9 +21,15 @@ private val API_DESCRIPTION = """
 
     ### Errors
     Every error response — validation failures, not-found, access-denied, conflicts, and unexpected server
-    errors alike — uses the same `ApiError` shape: `timestamp`, `status`, `error`, `message`, `path`, and
-    `traceId`. Quote the `traceId` when reporting an issue; it is also written to the server log next to the
-    full exception.
+    errors alike — uses the same `ApiError` shape: `timestamp`, `status`, `error`, `errorCode`, `message`,
+    `path`, and `traceId`. `errorCode` is a stable, machine-readable identifier (e.g. `SALON_NOT_FOUND`,
+    `SALON_CONTEXT_REQUIRED`) safe to branch on, unlike `message` (free text) or `status` alone (several error
+    types can share one HTTP status). Quote the `traceId` when reporting an issue; it is also written to the
+    server log next to the full exception.
+
+    The one exception: a `401` caused by a missing/invalid/expired bearer token is produced by the security
+    layer before any controller runs, and always returns exactly `{"errorCode":"AUTH_UNAUTHORIZED","message":
+    "Authentication required"}` — not the full `ApiError` shape above.
 
     ### Pagination
     Endpoints that return a list which can grow unbounded (browsing salons, a salon's bookings, a customer's

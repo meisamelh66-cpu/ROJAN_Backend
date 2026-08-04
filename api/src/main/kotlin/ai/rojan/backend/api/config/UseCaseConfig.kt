@@ -1,10 +1,16 @@
 package ai.rojan.backend.api.config
 
 import ai.rojan.backend.application.auth.AuthenticateUserUseCase
+import ai.rojan.backend.application.auth.OtpPolicy
 import ai.rojan.backend.application.auth.RefreshTokenUseCase
 import ai.rojan.backend.application.auth.RegisterUserUseCase
+import ai.rojan.backend.application.auth.RequestOtpUseCase
+import ai.rojan.backend.application.auth.VerifyOtpUseCase
 import ai.rojan.backend.application.port.PasswordEncoderPort
+import ai.rojan.backend.application.port.RateLimiterPort
+import ai.rojan.backend.application.port.SmsProviderPort
 import ai.rojan.backend.application.port.TokenProviderPort
+import ai.rojan.backend.domain.auth.OtpRepository
 import ai.rojan.backend.domain.user.UserRepository
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -35,4 +41,21 @@ class UseCaseConfig {
         userRepository: UserRepository,
         tokenProvider: TokenProviderPort,
     ) = RefreshTokenUseCase(userRepository, tokenProvider)
+
+    @Bean
+    fun requestOtpUseCase(
+        otpRepository: OtpRepository,
+        smsProvider: SmsProviderPort,
+        rateLimiter: RateLimiterPort,
+        otpPolicy: OtpPolicy,
+    ) = RequestOtpUseCase(otpRepository, smsProvider, rateLimiter, otpPolicy)
+
+    @Bean
+    fun verifyOtpUseCase(
+        otpRepository: OtpRepository,
+        userRepository: UserRepository,
+        tokenProvider: TokenProviderPort,
+        rateLimiter: RateLimiterPort,
+        otpPolicy: OtpPolicy,
+    ) = VerifyOtpUseCase(otpRepository, userRepository, tokenProvider, rateLimiter, otpPolicy)
 }

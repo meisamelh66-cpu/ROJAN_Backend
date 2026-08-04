@@ -1,6 +1,7 @@
 package ai.rojan.backend.application.auth
 
 import ai.rojan.backend.application.port.PasswordEncoderPort
+import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.common.EmailAlreadyRegisteredException
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.User
@@ -25,6 +26,10 @@ private class InMemoryUserRepository : UserRepository {
     override fun findByEmail(email: Email): User? = store.values.find { it.email == email }
 
     override fun existsByEmail(email: Email): Boolean = store.values.any { it.email == email }
+
+    override fun findByPhoneNumber(phoneNumber: PhoneNumber): User? = store.values.find { it.phoneNumber == phoneNumber }
+
+    override fun existsByPhoneNumber(phoneNumber: PhoneNumber): Boolean = store.values.any { it.phoneNumber == phoneNumber }
 }
 
 private class PlainTextPasswordEncoder : PasswordEncoderPort {
@@ -50,7 +55,7 @@ class RegisterUserUseCaseTest {
             ),
         )
 
-        assertEquals("new.user@example.com", user.email.value)
+        assertEquals("new.user@example.com", user.email?.value)
         assertEquals("hashed:supersecret", user.passwordHash)
         assertTrue(userRepository.existsByEmail(Email("new.user@example.com")))
     }

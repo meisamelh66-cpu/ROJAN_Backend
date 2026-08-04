@@ -8,6 +8,11 @@ import ai.rojan.backend.application.auth.RefreshTokenCommand
 import ai.rojan.backend.application.auth.RefreshTokenUseCase
 import ai.rojan.backend.application.auth.RegisterUserCommand
 import ai.rojan.backend.application.auth.RegisterUserUseCase
+import ai.rojan.backend.application.auth.OtpIssuedResult
+import ai.rojan.backend.application.auth.RequestOtpCommand
+import ai.rojan.backend.application.auth.RequestOtpUseCase
+import ai.rojan.backend.application.auth.VerifyOtpCommand
+import ai.rojan.backend.application.auth.VerifyOtpUseCase
 import ai.rojan.backend.domain.user.User
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
@@ -15,6 +20,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.PostMapping
@@ -30,6 +36,8 @@ class AuthController(
     private val registerUserUseCase: RegisterUserUseCase,
     private val authenticateUserUseCase: AuthenticateUserUseCase,
     private val refreshTokenUseCase: RefreshTokenUseCase,
+    private val requestOtpUseCase: RequestOtpUseCase,
+    private val verifyOtpUseCase: VerifyOtpUseCase,
 ) {
 
     @PostMapping("/register")
@@ -92,11 +100,80 @@ class AuthController(
         return result.toResponse()
     }
 
+    @PostMapping("/otp/request")
+    @Operation(summary = "Request an OTP code for a mobile number")
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "Code issued (sent via SMS)"),
+        ApiResponse(
+            responseCode = "400",
+            description = "phoneNumber is not valid E.164",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+        ApiResponse(
+            responseCode = "429",
+            description = "Too many OTP requests for this phone number or caller IP",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+    )
+    fun requestOtp(@Valid @RequestBody request: OtpRequestRequest, httpRequest: HttpServletRequest): OtpIssuedResponse {
+        val result = requestOtpUseCase.execute(RequestOtpCommand(phoneNumber = request.phoneNumber, callerIp = httpRequest.remoteAddr))
+        return result.toResponse()
+    }
+
+    @PostMapping("/otp/resend")
+    @Operation(summary = "Resend an OTP code for a mobile number, subject to the same rate limits as /otp/request")
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "Code re-issued (sent via SMS)"),
+        ApiResponse(
+            responseCode = "400",
+            description = "phoneNumber is not valid E.164",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+        ApiResponse(
+            responseCode = "429",
+            description = "Too many OTP requests for this phone number or caller IP",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+    )
+    fun resendOtp(@Valid @RequestBody request: OtpResendRequest, httpRequest: HttpServletRequest): OtpIssuedResponse {
+        val result = requestOtpUseCase.execute(RequestOtpCommand(phoneNumber = request.phoneNumber, callerIp = httpRequest.remoteAddr))
+        return result.toResponse()
+    }
+
+    @PostMapping("/otp/verify")
+    @Operation(summary = "Verify an OTP code and receive an access/refresh token pair; creates the account on first successful verification")
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "Authenticated"),
+        ApiResponse(
+            responseCode = "401",
+            description = "Code is invalid, expired, or has no matching request",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+        ApiResponse(
+            responseCode = "429",
+            description = "Too many verification attempts for this phone number",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+    )
+    fun verifyOtp(@Valid @RequestBody request: OtpVerifyRequest): AuthResponse {
+        val result = verifyOtpUseCase.execute(
+            VerifyOtpCommand(phoneNumber = request.phoneNumber, code = request.code, fullName = request.fullName),
+        )
+        return result.toResponse()
+    }
+
     private fun User.toResponse() = UserResponse(
         id = id.value,
-        email = email.value,
+        email = email?.value,
+        phoneNumber = phoneNumber?.value,
         fullName = fullName,
         role = role,
+    )
+
+    private fun OtpIssuedResult.toResponse() = OtpIssuedResponse(
+        phoneNumber = phoneNumber,
+        expiresInSeconds = expiresInSeconds,
+        canResendAfterSeconds = canResendAfterSeconds,
     )
 
     private fun AuthenticationResult.toResponse() = AuthResponse(

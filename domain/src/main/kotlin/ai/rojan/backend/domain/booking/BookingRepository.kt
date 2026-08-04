@@ -46,4 +46,10 @@ interface BookingRepository {
         from: LocalDateTime,
         to: LocalDateTime,
     ): List<Booking>
+
+    /** A salon's bookings (any status) starting in [from] (inclusive)..[to] (exclusive), used for dashboard analytics. */
+    fun findBySalonIdAndStartTimeRange(salonId: SalonId, from: LocalDateTime, to: LocalDateTime): List<Booking>
+
+    /** Which of [customerIds] have a booking with [salonId] starting before [before] — used to classify new vs. returning customers. */
+    fun findCustomerIdsWithBookingBefore(salonId: SalonId, customerIds: Set<UserId>, before: LocalDateTime): Set<UserId>
 }

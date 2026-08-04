@@ -1,18 +1,5 @@
 # syntax=docker/dockerfile:1
 
-FROM eclipse-temurin:21-jdk AS build
-WORKDIR /workspace
-
-COPY gradlew gradlew.bat settings.gradle.kts build.gradle.kts ./
-COPY gradle gradle
-COPY domain domain
-COPY application application
-COPY infrastructure infrastructure
-COPY api api
-COPY bootstrap bootstrap
-
-RUN chmod +x gradlew && ./gradlew :bootstrap:bootJar --no-daemon -x test
-
 FROM eclipse-temurin:21-jre AS runtime
 WORKDIR /app
 
@@ -25,7 +12,11 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --uid 10001 --shell /usr/sbin/nologin --no-create-home rojan
-COPY --from=build /workspace/bootstrap/build/libs/*.jar app.jar
+
+# JAR is built on the host (gradlew.bat :bootstrap:bootJar) and copied in
+# as-is — Gradle no longer runs inside Docker. See .dockerignore for the
+# matching exception that lets this path through the build context.
+COPY bootstrap/build/libs/bootstrap-0.1.0-SNAPSHOT.jar app.jar
 RUN chown rojan:rojan app.jar
 
 # Bind-mounted to /opt/rojan/logs by docker-compose.prod.yml — created and

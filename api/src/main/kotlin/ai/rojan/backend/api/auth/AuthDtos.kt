@@ -51,8 +51,11 @@ data class UserResponse(
     @field:Schema(example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
     val id: UUID,
 
-    @field:Schema(example = "jane.doe@example.com")
-    val email: String,
+    @field:Schema(example = "jane.doe@example.com", nullable = true, description = "Null for phone-only (OTP-registered) accounts")
+    val email: String?,
+
+    @field:Schema(example = "+989123456789", nullable = true, description = "Null for email/password accounts that never verified a phone number")
+    val phoneNumber: String?,
 
     @field:Schema(example = "Jane Doe")
     val fullName: String,

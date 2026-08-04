@@ -46,4 +46,24 @@ interface BookingSpringDataRepository : JpaRepository<BookingJpaEntity, UUID> {
         @Param("excludeId") excludeId: UUID?,
         @Param("statuses") statuses: List<BookingStatus>,
     ): List<BookingJpaEntity>
+
+    fun findBySalonIdAndStartTimeGreaterThanEqualAndStartTimeLessThan(
+        salonId: UUID,
+        from: LocalDateTime,
+        to: LocalDateTime,
+    ): List<BookingJpaEntity>
+
+    @Query(
+        """
+        SELECT DISTINCT b.customerId FROM BookingJpaEntity b
+        WHERE b.salonId = :salonId
+        AND b.customerId IN :customerIds
+        AND b.startTime < :before
+        """,
+    )
+    fun findCustomerIdsWithBookingBefore(
+        @Param("salonId") salonId: UUID,
+        @Param("customerIds") customerIds: Collection<UUID>,
+        @Param("before") before: LocalDateTime,
+    ): List<UUID>
 }
