@@ -3,6 +3,7 @@ package ai.rojan.backend.application.auth
 import ai.rojan.backend.application.port.PasswordEncoderPort
 import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.common.EmailAlreadyRegisteredException
+import ai.rojan.backend.domain.common.RegisterRateLimitExceededException
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.User
 import ai.rojan.backend.domain.user.UserId
@@ -42,7 +43,7 @@ private class PlainTextPasswordEncoder : PasswordEncoderPort {
 class RegisterUserUseCaseTest {
 
     private val userRepository = InMemoryUserRepository()
-    private val useCase = RegisterUserUseCase(userRepository, PlainTextPasswordEncoder())
+    private val useCase = RegisterUserUseCase(userRepository, PlainTextPasswordEncoder(), RecordingRateLimiter(), testAuthRateLimitPolicy)
 
     @Test
     fun `registers a new user with normalized email and hashed password`() {
@@ -74,5 +75,36 @@ class RegisterUserUseCaseTest {
         assertThrows<IllegalArgumentException> {
             useCase.execute(RegisterUserCommand("short@example.com", "short", "Name", UserRole.CUSTOMER))
         }
+    }
+
+    @Test
+    fun `exceeding the per-IP rate limit throws before touching the repository`() {
+        val limitedUseCase = RegisterUserUseCase(
+            InMemoryUserRepository(),
+            PlainTextPasswordEncoder(),
+            RecordingRateLimiter(deniedKeyPrefixes = setOf("auth:register:ip:")),
+            testAuthRateLimitPolicy,
+        )
+
+        assertThrows<RegisterRateLimitExceededException> {
+            limitedUseCase.execute(RegisterUserCommand("new@example.com", "supersecret", "New", UserRole.CUSTOMER, callerIp = "203.0.113.5"))
+        }
+    }
+
+    @Test
+    fun `a null caller IP skips the rate limit check rather than throwing`() {
+        val user = useCase.execute(RegisterUserCommand("nolimit@example.com", "supersecret", "No Limit", UserRole.CUSTOMER, callerIp = null))
+
+        assertEquals("nolimit@example.com", user.email?.value)
+    }
+
+    @Test
+    fun `rate limit is keyed by caller IP, not by email`() {
+        val rateLimiter = RecordingRateLimiter()
+        val trackedUseCase = RegisterUserUseCase(InMemoryUserRepository(), PlainTextPasswordEncoder(), rateLimiter, testAuthRateLimitPolicy)
+
+        trackedUseCase.execute(RegisterUserCommand("tracked@example.com", "supersecret", "Tracked", UserRole.CUSTOMER, callerIp = "203.0.113.5"))
+
+        assertTrue(rateLimiter.consumedKeys.contains("auth:register:ip:203.0.113.5"))
     }
 }

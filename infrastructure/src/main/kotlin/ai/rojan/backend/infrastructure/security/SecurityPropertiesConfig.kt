@@ -1,12 +1,13 @@
 package ai.rojan.backend.infrastructure.security
 
+import ai.rojan.backend.application.auth.AuthRateLimitPolicy
 import ai.rojan.backend.application.auth.OtpPolicy
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
 @Configuration
-@EnableConfigurationProperties(JwtProperties::class, OtpProperties::class)
+@EnableConfigurationProperties(JwtProperties::class, OtpProperties::class, AuthRateLimitProperties::class)
 class SecurityPropertiesConfig {
 
     /**
@@ -29,5 +30,17 @@ class SecurityPropertiesConfig {
         requestLimitPerIpLongWindow = properties.requestLimitPerIpLongWindow,
         verifyLimitPerPhoneWindow = properties.verifyLimitPerPhoneWindow,
         verifyWindowSeconds = properties.verifyWindowSeconds,
+    )
+
+    /** Bridges [AuthRateLimitProperties] into [AuthRateLimitPolicy] - same reasoning as [otpPolicy] above. */
+    @Bean
+    fun authRateLimitPolicy(properties: AuthRateLimitProperties) = AuthRateLimitPolicy(
+        loginLimitPerEmailWindow = properties.loginLimitPerEmailWindow,
+        loginLimitPerIpWindow = properties.loginLimitPerIpWindow,
+        loginWindowSeconds = properties.loginWindowSeconds,
+        registerLimitPerIpWindow = properties.registerLimitPerIpWindow,
+        registerWindowSeconds = properties.registerWindowSeconds,
+        refreshLimitPerIpWindow = properties.refreshLimitPerIpWindow,
+        refreshWindowSeconds = properties.refreshWindowSeconds,
     )
 }

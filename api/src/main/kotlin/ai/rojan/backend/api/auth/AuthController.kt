@@ -55,14 +55,20 @@ class AuthController(
             description = "An account with this email already exists",
             content = [Content(schema = Schema(implementation = ApiError::class))],
         ),
+        ApiResponse(
+            responseCode = "429",
+            description = "Too many registration attempts from this caller IP",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
     )
-    fun register(@Valid @RequestBody request: RegisterRequest): UserResponse {
+    fun register(@Valid @RequestBody request: RegisterRequest, httpRequest: HttpServletRequest): UserResponse {
         val user = registerUserUseCase.execute(
             RegisterUserCommand(
                 email = request.email,
                 rawPassword = request.password,
                 fullName = request.fullName,
                 role = request.role,
+                callerIp = httpRequest.remoteAddr,
             ),
         )
         return user.toResponse()
@@ -77,10 +83,15 @@ class AuthController(
             description = "Invalid email or password",
             content = [Content(schema = Schema(implementation = ApiError::class))],
         ),
+        ApiResponse(
+            responseCode = "429",
+            description = "Too many login attempts for this email or caller IP",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
     )
-    fun login(@Valid @RequestBody request: LoginRequest): AuthResponse {
+    fun login(@Valid @RequestBody request: LoginRequest, httpRequest: HttpServletRequest): AuthResponse {
         val result = authenticateUserUseCase.execute(
-            AuthenticateUserCommand(email = request.email, rawPassword = request.password),
+            AuthenticateUserCommand(email = request.email, rawPassword = request.password, callerIp = httpRequest.remoteAddr),
         )
         return result.toResponse()
     }
@@ -94,9 +105,14 @@ class AuthController(
             description = "Token is invalid, expired, or not a refresh token",
             content = [Content(schema = Schema(implementation = ApiError::class))],
         ),
+        ApiResponse(
+            responseCode = "429",
+            description = "Too many token refresh attempts from this caller IP",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
     )
-    fun refresh(@Valid @RequestBody request: RefreshRequest): AuthResponse {
-        val result = refreshTokenUseCase.execute(RefreshTokenCommand(request.refreshToken))
+    fun refresh(@Valid @RequestBody request: RefreshRequest, httpRequest: HttpServletRequest): AuthResponse {
+        val result = refreshTokenUseCase.execute(RefreshTokenCommand(request.refreshToken, callerIp = httpRequest.remoteAddr))
         return result.toResponse()
     }
 

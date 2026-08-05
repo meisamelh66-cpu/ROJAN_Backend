@@ -7,6 +7,7 @@ import ai.rojan.backend.application.port.TokenType
 import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.common.InactiveUserException
 import ai.rojan.backend.domain.common.InvalidTokenException
+import ai.rojan.backend.domain.common.RefreshRateLimitExceededException
 import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.User
@@ -63,6 +64,8 @@ class RefreshTokenUseCaseTest {
     private val useCase = RefreshTokenUseCase(
         userRepository = SoleUserRepository(user),
         tokenProvider = tokenProvider,
+        rateLimiter = RecordingRateLimiter(),
+        policy = testAuthRateLimitPolicy,
     )
 
     @Test
@@ -103,5 +106,39 @@ class RefreshTokenUseCaseTest {
         assertThrows<InactiveUserException> {
             useCase.execute(RefreshTokenCommand(refreshToken))
         }
+    }
+
+    @Test
+    fun `exceeding the per-IP rate limit throws before the token is even validated`() {
+        val limitedUseCase = RefreshTokenUseCase(
+            userRepository = SoleUserRepository(user),
+            tokenProvider = tokenProvider,
+            rateLimiter = RecordingRateLimiter(deniedKeyPrefixes = setOf("auth:refresh:ip:")),
+            policy = testAuthRateLimitPolicy,
+        )
+
+        assertThrows<RefreshRateLimitExceededException> {
+            limitedUseCase.execute(RefreshTokenCommand("not-even-a-real-token", callerIp = "203.0.113.5"))
+        }
+    }
+
+    @Test
+    fun `a null caller IP skips the rate limit check rather than throwing`() {
+        val refreshToken = tokenProvider.generateRefreshToken(user).token
+
+        val result = useCase.execute(RefreshTokenCommand(refreshToken, callerIp = null))
+
+        assertEquals(user.id.value, result.user.id.value)
+    }
+
+    @Test
+    fun `rate limit is keyed by caller IP`() {
+        val rateLimiter = RecordingRateLimiter()
+        val trackedUseCase = RefreshTokenUseCase(SoleUserRepository(user), tokenProvider, rateLimiter, testAuthRateLimitPolicy)
+        val refreshToken = tokenProvider.generateRefreshToken(user).token
+
+        trackedUseCase.execute(RefreshTokenCommand(refreshToken, callerIp = "203.0.113.5"))
+
+        assertTrue(rateLimiter.consumedKeys.contains("auth:refresh:ip:203.0.113.5"))
     }
 }

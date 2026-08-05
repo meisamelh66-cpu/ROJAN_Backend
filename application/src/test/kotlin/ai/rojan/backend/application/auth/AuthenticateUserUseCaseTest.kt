@@ -7,12 +7,14 @@ import ai.rojan.backend.application.port.TokenSubject
 import ai.rojan.backend.application.port.TokenType
 import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.common.InvalidCredentialsException
+import ai.rojan.backend.domain.common.LoginRateLimitExceededException
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.User
 import ai.rojan.backend.domain.user.UserId
 import ai.rojan.backend.domain.user.UserRepository
 import ai.rojan.backend.domain.user.UserRole
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.time.Instant
@@ -56,6 +58,8 @@ class AuthenticateUserUseCaseTest {
         userRepository = SingleUserRepository(user),
         passwordEncoder = MatchingPasswordEncoder(correctRawPassword = "correct-password"),
         tokenProvider = FakeTokenProvider(),
+        rateLimiter = RecordingRateLimiter(),
+        policy = testAuthRateLimitPolicy,
     )
 
     @Test
@@ -80,5 +84,68 @@ class AuthenticateUserUseCaseTest {
         assertThrows<InvalidCredentialsException> {
             useCase.execute(AuthenticateUserCommand(email = "nobody@example.com", rawPassword = "correct-password"))
         }
+    }
+
+    @Test
+    fun `exceeding the per-email rate limit throws even with correct credentials`() {
+        val limitedUseCase = AuthenticateUserUseCase(
+            userRepository = SingleUserRepository(user),
+            passwordEncoder = MatchingPasswordEncoder(correctRawPassword = "correct-password"),
+            tokenProvider = FakeTokenProvider(),
+            rateLimiter = RecordingRateLimiter(deniedKeyPrefixes = setOf("auth:login:email:")),
+            policy = testAuthRateLimitPolicy,
+        )
+
+        assertThrows<LoginRateLimitExceededException> {
+            limitedUseCase.execute(AuthenticateUserCommand(email = "member@example.com", rawPassword = "correct-password"))
+        }
+    }
+
+    @Test
+    fun `exceeding the per-IP rate limit throws even with correct credentials`() {
+        val limitedUseCase = AuthenticateUserUseCase(
+            userRepository = SingleUserRepository(user),
+            passwordEncoder = MatchingPasswordEncoder(correctRawPassword = "correct-password"),
+            tokenProvider = FakeTokenProvider(),
+            rateLimiter = RecordingRateLimiter(deniedKeyPrefixes = setOf("auth:login:ip:")),
+            policy = testAuthRateLimitPolicy,
+        )
+
+        assertThrows<LoginRateLimitExceededException> {
+            limitedUseCase.execute(AuthenticateUserCommand(email = "member@example.com", rawPassword = "correct-password", callerIp = "203.0.113.5"))
+        }
+    }
+
+    @Test
+    fun `a null caller IP does not skip the per-email rate limit check`() {
+        val limitedUseCase = AuthenticateUserUseCase(
+            userRepository = SingleUserRepository(user),
+            passwordEncoder = MatchingPasswordEncoder(correctRawPassword = "correct-password"),
+            tokenProvider = FakeTokenProvider(),
+            rateLimiter = RecordingRateLimiter(deniedKeyPrefixes = setOf("auth:login:email:")),
+            policy = testAuthRateLimitPolicy,
+        )
+
+        assertThrows<LoginRateLimitExceededException> {
+            limitedUseCase.execute(AuthenticateUserCommand(email = "member@example.com", rawPassword = "correct-password", callerIp = null))
+        }
+    }
+
+    @Test
+    fun `rate limit is keyed by the submitted email even for an unknown account`() {
+        val rateLimiter = RecordingRateLimiter()
+        val trackedUseCase = AuthenticateUserUseCase(
+            userRepository = SingleUserRepository(user),
+            passwordEncoder = MatchingPasswordEncoder(correctRawPassword = "correct-password"),
+            tokenProvider = FakeTokenProvider(),
+            rateLimiter = rateLimiter,
+            policy = testAuthRateLimitPolicy,
+        )
+
+        assertThrows<InvalidCredentialsException> {
+            trackedUseCase.execute(AuthenticateUserCommand(email = "Nobody@Example.com", rawPassword = "correct-password"))
+        }
+
+        assertTrue(rateLimiter.consumedKeys.contains("auth:login:email:nobody@example.com"))
     }
 }

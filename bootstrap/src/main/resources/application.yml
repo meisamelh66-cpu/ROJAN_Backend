@@ -51,6 +51,17 @@ rojan:
       issuer: ${JWT_ISSUER:rojan-ai-backend}
       access-token-ttl-minutes: ${JWT_ACCESS_TTL_MINUTES:15}
       refresh-token-ttl-days: ${JWT_REFRESH_TTL_DAYS:30}
+    # Phase 1.1 Auth API Rate Limiting: /auth/login, /auth/register,
+    # /auth/refresh - same env-var-overridable, config-not-code convention
+    # as the otp block below.
+    auth:
+      login-limit-per-email-window: ${AUTH_LOGIN_LIMIT_PER_EMAIL_WINDOW:5}
+      login-limit-per-ip-window: ${AUTH_LOGIN_LIMIT_PER_IP_WINDOW:20}
+      login-window-seconds: ${AUTH_LOGIN_WINDOW_SECONDS:300}
+      register-limit-per-ip-window: ${AUTH_REGISTER_LIMIT_PER_IP_WINDOW:5}
+      register-window-seconds: ${AUTH_REGISTER_WINDOW_SECONDS:3600}
+      refresh-limit-per-ip-window: ${AUTH_REFRESH_LIMIT_PER_IP_WINDOW:30}
+      refresh-window-seconds: ${AUTH_REFRESH_WINDOW_SECONDS:300}
     otp:
       ttl-seconds: ${OTP_TTL_SECONDS:120}
       max-attempts: ${OTP_MAX_ATTEMPTS:5}
