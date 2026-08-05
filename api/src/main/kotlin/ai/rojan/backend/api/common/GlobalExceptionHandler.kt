@@ -8,6 +8,7 @@ import ai.rojan.backend.domain.common.BranchNotFoundException
 import ai.rojan.backend.domain.common.CustomerAccessDeniedException
 import ai.rojan.backend.domain.common.CustomerAlreadyExistsException
 import ai.rojan.backend.domain.common.CustomerNotFoundException
+import ai.rojan.backend.domain.common.CustomerNotLinkedToAccountException
 import ai.rojan.backend.domain.common.CustomerTagNotFoundException
 import ai.rojan.backend.domain.common.EmailAlreadyRegisteredException
 import ai.rojan.backend.domain.common.InactiveUserException
@@ -126,6 +127,7 @@ class GlobalExceptionHandler {
         AmbiguousSalonContextException::class,
         InvalidCustomerStateException::class,
         CustomerAlreadyExistsException::class,
+        CustomerNotLinkedToAccountException::class,
     )
     fun handleConflict(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -199,6 +201,7 @@ class GlobalExceptionHandler {
         is InvalidBookingStateException -> "INVALID_BOOKING_STATE"
         is InvalidCustomerStateException -> "INVALID_CUSTOMER_STATE"
         is CustomerAlreadyExistsException -> "CUSTOMER_ALREADY_EXISTS"
+        is CustomerNotLinkedToAccountException -> "CUSTOMER_NOT_LINKED_TO_ACCOUNT"
         is IdempotencyKeyConflictException -> "IDEMPOTENCY_KEY_CONFLICT"
         is AmbiguousSalonContextException -> "SALON_CONTEXT_REQUIRED"
         is MethodArgumentNotValidException -> "VALIDATION_FAILED"

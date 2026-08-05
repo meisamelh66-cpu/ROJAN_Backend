@@ -29,6 +29,27 @@ data class CreateBookingRequest(
     val notes: String?,
 )
 
+/** ROJAN Reception Booking Flow (Phase 0): request body for `POST /api/v1/salons/{salonId}/bookings` - the owner-authorized counterpart to [CreateBookingRequest], which has no `customerId` field at all (it always books the caller). [customerId] is a CRM `Customer` id, not a `User` id - the target customer must already be linked to an account (see `CustomerNotLinkedToAccountException`). */
+data class CreateBookingForCustomerRequest(
+    @field:NotNull
+    val customerId: UUID,
+
+    @field:NotNull
+    val serviceId: UUID,
+
+    @field:NotNull
+    val specialistId: UUID,
+
+    @field:NotNull
+    @field:Future
+    @field:Schema(example = "2026-09-01T10:00:00", description = "Must be one of the windows returned by GET .../available-slots")
+    val startTime: LocalDateTime,
+
+    @field:Size(max = 1000)
+    @field:Schema(example = "Walk-in, booked at the front desk")
+    val notes: String?,
+)
+
 data class RescheduleBookingRequest(
     @field:NotNull
     @field:Future

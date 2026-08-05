@@ -1,8 +1,10 @@
 package ai.rojan.backend.api.config
 
+import ai.rojan.backend.application.booking.CreateBookingUseCase
 import ai.rojan.backend.application.customer.AddCustomerNoteUseCase
 import ai.rojan.backend.application.customer.AddCustomerTagUseCase
 import ai.rojan.backend.application.customer.CalculateCustomerLifetimeValueUseCase
+import ai.rojan.backend.application.customer.CreateBookingForCustomerUseCase
 import ai.rojan.backend.application.customer.CreateCustomerUseCase
 import ai.rojan.backend.application.customer.GetCustomerBookingsUseCase
 import ai.rojan.backend.application.customer.GetCustomerTimelineUseCase
@@ -75,4 +77,11 @@ class CustomerUseCaseConfig {
     @Bean
     fun calculateCustomerLifetimeValueUseCase(bookingRepository: BookingRepository, serviceRepository: ServiceRepository) =
         CalculateCustomerLifetimeValueUseCase(bookingRepository, serviceRepository)
+
+    @Bean
+    fun createBookingForCustomerUseCase(
+        salonRepository: SalonRepository,
+        customerRepository: CustomerRepository,
+        createBookingUseCase: CreateBookingUseCase,
+    ) = CreateBookingForCustomerUseCase(salonRepository, customerRepository, createBookingUseCase)
 }
