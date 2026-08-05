@@ -10,3 +10,16 @@ rojan:
   security:
     jwt:
       secret: "integration-test-only-signing-key-not-for-production-1234567890"
+    # Phase 1.1 Auth API Rate Limiting: the integration test suite runs
+    # dozens of /auth/register + /auth/login calls from one caller IP
+    # (localhost) across many unrelated test classes (each registering its
+    # own fixture user as setup) within a single test run - the production
+    # defaults in application.yml would otherwise trip against normal test
+    # volume, not abuse. Loosened here the same way jwt.secret above is
+    # test-specific; window lengths are left at the production defaults
+    # since only the *volume* differs in tests, not the time semantics.
+    auth:
+      login-limit-per-email-window: 10000
+      login-limit-per-ip-window: 10000
+      register-limit-per-ip-window: 10000
+      refresh-limit-per-ip-window: 10000

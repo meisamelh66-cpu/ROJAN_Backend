@@ -1,5 +1,6 @@
 package ai.rojan.backend.api.config
 
+import ai.rojan.backend.application.auth.AuthRateLimitPolicy
 import ai.rojan.backend.application.auth.AuthenticateUserUseCase
 import ai.rojan.backend.application.auth.OtpPolicy
 import ai.rojan.backend.application.auth.RefreshTokenUseCase
@@ -27,20 +28,26 @@ class UseCaseConfig {
     fun registerUserUseCase(
         userRepository: UserRepository,
         passwordEncoder: PasswordEncoderPort,
-    ) = RegisterUserUseCase(userRepository, passwordEncoder)
+        rateLimiter: RateLimiterPort,
+        authRateLimitPolicy: AuthRateLimitPolicy,
+    ) = RegisterUserUseCase(userRepository, passwordEncoder, rateLimiter, authRateLimitPolicy)
 
     @Bean
     fun authenticateUserUseCase(
         userRepository: UserRepository,
         passwordEncoder: PasswordEncoderPort,
         tokenProvider: TokenProviderPort,
-    ) = AuthenticateUserUseCase(userRepository, passwordEncoder, tokenProvider)
+        rateLimiter: RateLimiterPort,
+        authRateLimitPolicy: AuthRateLimitPolicy,
+    ) = AuthenticateUserUseCase(userRepository, passwordEncoder, tokenProvider, rateLimiter, authRateLimitPolicy)
 
     @Bean
     fun refreshTokenUseCase(
         userRepository: UserRepository,
         tokenProvider: TokenProviderPort,
-    ) = RefreshTokenUseCase(userRepository, tokenProvider)
+        rateLimiter: RateLimiterPort,
+        authRateLimitPolicy: AuthRateLimitPolicy,
+    ) = RefreshTokenUseCase(userRepository, tokenProvider, rateLimiter, authRateLimitPolicy)
 
     @Bean
     fun requestOtpUseCase(

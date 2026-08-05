@@ -68,3 +68,14 @@ internal class RecordingRateLimiter(private val deniedKeyPrefixes: Set<String> =
         return deniedKeyPrefixes.none { key.startsWith(it) }
     }
 }
+
+/** Shared [AuthRateLimitPolicy] fixture for `AuthenticateUserUseCase`/`RegisterUserUseCase`/`RefreshTokenUseCase` tests (Phase 1.1) - arbitrary-but-realistic values, never asserted on directly, only exercised via [RecordingRateLimiter]. */
+internal val testAuthRateLimitPolicy = AuthRateLimitPolicy(
+    loginLimitPerEmailWindow = 5,
+    loginLimitPerIpWindow = 20,
+    loginWindowSeconds = 300,
+    registerLimitPerIpWindow = 5,
+    registerWindowSeconds = 3600,
+    refreshLimitPerIpWindow = 30,
+    refreshWindowSeconds = 300,
+)

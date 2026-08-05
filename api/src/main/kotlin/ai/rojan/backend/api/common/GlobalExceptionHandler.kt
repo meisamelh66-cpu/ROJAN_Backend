@@ -17,8 +17,11 @@ import ai.rojan.backend.domain.common.InvalidCredentialsException
 import ai.rojan.backend.domain.common.InvalidCustomerStateException
 import ai.rojan.backend.domain.common.InvalidOtpException
 import ai.rojan.backend.domain.common.InvalidTokenException
+import ai.rojan.backend.domain.common.LoginRateLimitExceededException
 import ai.rojan.backend.domain.common.OtpRateLimitExceededException
 import ai.rojan.backend.domain.common.OtpVerifyRateLimitExceededException
+import ai.rojan.backend.domain.common.RefreshRateLimitExceededException
+import ai.rojan.backend.domain.common.RegisterRateLimitExceededException
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.ScheduleOverrideNotFoundException
@@ -89,6 +92,10 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(OtpRateLimitExceededException::class, OtpVerifyRateLimitExceededException::class)
     fun handleOtpRateLimitExceeded(ex: Exception, request: WebRequest) =
+        respond(HttpStatus.TOO_MANY_REQUESTS, errorCodeFor(ex), ex.message.orEmpty(), request)
+
+    @ExceptionHandler(LoginRateLimitExceededException::class, RegisterRateLimitExceededException::class, RefreshRateLimitExceededException::class)
+    fun handleAuthRateLimitExceeded(ex: Exception, request: WebRequest) =
         respond(HttpStatus.TOO_MANY_REQUESTS, errorCodeFor(ex), ex.message.orEmpty(), request)
 
     @ExceptionHandler(InactiveUserException::class)
@@ -180,6 +187,9 @@ class GlobalExceptionHandler {
         is InvalidOtpException -> "INVALID_OTP"
         is OtpRateLimitExceededException -> "OTP_REQUEST_RATE_LIMITED"
         is OtpVerifyRateLimitExceededException -> "OTP_VERIFY_RATE_LIMITED"
+        is LoginRateLimitExceededException -> "LOGIN_RATE_LIMITED"
+        is RegisterRateLimitExceededException -> "REGISTER_RATE_LIMITED"
+        is RefreshRateLimitExceededException -> "REFRESH_RATE_LIMITED"
         is InactiveUserException -> "INACTIVE_USER"
         is UserNotFoundException, is UsernameNotFoundException -> "USER_NOT_FOUND"
         is SalonNotFoundException -> "SALON_NOT_FOUND"
