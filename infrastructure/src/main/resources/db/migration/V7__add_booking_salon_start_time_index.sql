@@ -1,0 +1,11 @@
+-- Production Hardening Phase 1: bookings already had single-column indexes on salon_id,
+-- (specialist_id, start_time, end_time), and status, but no composite (salon_id, start_time)
+-- index - exactly the shape Dashboard Insights' monthly-range query
+-- (findBySalonIdAndStartTimeRange) and any future per-salon reporting query need.
+--
+-- Plain CREATE INDEX (not CONCURRENTLY) is deliberate here: at today's near-zero data volume
+-- this is a near-instant, briefly-locking operation, and Flyway runs migrations inside a
+-- transaction by default, which CREATE INDEX CONCURRENTLY cannot run inside. If this same kind
+-- of index is ever added later at real multi-thousand-row scale, CONCURRENTLY (run outside a
+-- transaction) would be the right choice instead - not a concern for this migration today.
+CREATE INDEX idx_bookings_salon_id_start_time ON bookings (salon_id, start_time);
