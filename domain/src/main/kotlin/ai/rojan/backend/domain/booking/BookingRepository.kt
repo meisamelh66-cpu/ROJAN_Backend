@@ -74,4 +74,13 @@ interface BookingRepository {
 
     /** Which of [customerIds] have a booking with [salonId] starting before [before] — used to classify new vs. returning customers. */
     fun findCustomerIdsWithBookingBefore(salonId: SalonId, customerIds: Set<UserId>, before: LocalDateTime): Set<UserId>
+
+    /**
+     * Production Hardening Phase 1: batched sibling of [findByCustomerIdAndSalonId],
+     * completed bookings only, for every [customerIds] on a paginated customer-list
+     * page in one query - powers [ai.rojan.backend.application.customer.CalculateCustomerLifetimeValueUseCase]'s
+     * per-customer computation without querying per row. Same salon-scoping
+     * requirement as [findByCustomerIdAndSalonId] - never platform-wide.
+     */
+    fun findCompletedBySalonIdAndCustomerIdIn(salonId: SalonId, customerIds: Collection<UserId>): List<Booking>
 }

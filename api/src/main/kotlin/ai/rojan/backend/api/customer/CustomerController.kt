@@ -20,6 +20,7 @@ import ai.rojan.backend.application.customer.RemoveCustomerTagUseCase
 import ai.rojan.backend.application.customer.UpdateCustomerCommand
 import ai.rojan.backend.application.customer.UpdateCustomerUseCase
 import ai.rojan.backend.domain.booking.Booking
+import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.booking.BookingStatus
 import ai.rojan.backend.domain.common.CustomerAccessDeniedException
 import ai.rojan.backend.domain.common.CustomerNotFoundException
@@ -36,6 +37,7 @@ import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
+import ai.rojan.backend.domain.salon.ServiceRepository
 import ai.rojan.backend.domain.user.UserId
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -53,6 +55,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import java.math.BigDecimal
 import java.util.UUID
 
 /**
@@ -70,6 +73,8 @@ class CustomerController(
     private val customerTagRepository: CustomerTagRepository,
     private val customerNoteRepository: CustomerNoteRepository,
     private val salonRepository: SalonRepository,
+    private val bookingRepository: BookingRepository,
+    private val serviceRepository: ServiceRepository,
     private val createCustomerUseCase: CreateCustomerUseCase,
     private val updateCustomerUseCase: UpdateCustomerUseCase,
     private val addCustomerNoteUseCase: AddCustomerNoteUseCase,
@@ -104,7 +109,26 @@ class CustomerController(
             search,
             SortDirection.valueOf(sortDirection.uppercase()),
         )
-        return result.toPagedResponse { it.toResponse() }
+
+        // Production Hardening Phase 1: batched, not per-row - one tags query, one completed-bookings
+        // query, and one services-for-the-salon query (reusing the same "load once, associateBy,
+        // look up locally" pattern GetDashboardInsightsUseCase already established), instead of the
+        // ~20 x (2 + N bookings) queries this page used to issue.
+        val pageCustomerIds = result.content.map { it.id }
+        val tagsByCustomerId = customerTagRepository.findByCustomerIdIn(pageCustomerIds).groupBy { it.customerId }
+        val linkedUserIds = result.content.mapNotNull { it.userId }
+        val servicesById = serviceRepository.findBySalonId(salon.id).associateBy { it.id }
+        val lifetimeValueByUserId = bookingRepository
+            .findCompletedBySalonIdAndCustomerIdIn(salon.id, linkedUserIds)
+            .groupBy { it.customerId }
+            .mapValues { (_, bookings) -> bookings.sumOf { booking -> servicesById[booking.serviceId]?.price ?: BigDecimal.ZERO } }
+
+        return result.toPagedResponse { customer ->
+            customer.toResponse(
+                lifetimeValue = customer.userId?.let { lifetimeValueByUserId[it] } ?: BigDecimal.ZERO,
+                tags = tagsByCustomerId[customer.id].orEmpty().map { it.label },
+            )
+        }
     }
 
     @GetMapping("/{customerId}")
@@ -297,25 +321,28 @@ class CustomerController(
         }
     }
 
-    private fun Customer.toResponse(): CustomerResponse {
-        val lifetimeValue = calculateCustomerLifetimeValueUseCase.execute(this)
-        val tags = customerTagRepository.findByCustomerId(id).map { it.label }
-        return CustomerResponse(
-            id = id.value,
-            salonId = salonId.value,
-            userId = userId?.value,
-            fullName = fullName,
-            phoneNumber = phoneNumber?.value,
-            email = email?.value,
-            company = company,
-            status = status,
-            lifetimeValue = lifetimeValue,
-            tags = tags,
-            active = active,
-            createdAt = createdAt,
-            updatedAt = updatedAt,
+    /** Single-customer path (get/create/update/etc.) - O(1) queries already, untouched by the list()-only batching below. */
+    private fun Customer.toResponse(): CustomerResponse =
+        toResponse(
+            lifetimeValue = calculateCustomerLifetimeValueUseCase.execute(this),
+            tags = customerTagRepository.findByCustomerId(id).map { it.label },
         )
-    }
+
+    private fun Customer.toResponse(lifetimeValue: BigDecimal, tags: List<String>): CustomerResponse = CustomerResponse(
+        id = id.value,
+        salonId = salonId.value,
+        userId = userId?.value,
+        fullName = fullName,
+        phoneNumber = phoneNumber?.value,
+        email = email?.value,
+        company = company,
+        status = status,
+        lifetimeValue = lifetimeValue,
+        tags = tags,
+        active = active,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+    )
 
     private fun Booking.toBookingResponse() = BookingResponse(
         id = id.value,
