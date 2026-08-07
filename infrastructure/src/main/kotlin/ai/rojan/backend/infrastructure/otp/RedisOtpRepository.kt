@@ -3,6 +3,7 @@ package ai.rojan.backend.infrastructure.otp
 import ai.rojan.backend.domain.auth.OneTimePassword
 import ai.rojan.backend.domain.auth.OtpRepository
 import ai.rojan.backend.domain.auth.PhoneNumber
+import org.springframework.context.annotation.Profile
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.stereotype.Repository
 import java.time.Duration
@@ -12,13 +13,13 @@ import java.time.Instant
  * Redis-backed [OtpRepository] — Redis's native TTL support means an
  * expired code is simply gone (no cleanup job needed), and this is the
  * first real consumer of the `RedisTemplate` bean this stack has wired
- * since its initial scope. Not integration-tested against a live Redis in
- * this pass — none exists in the test environment (confirmed by direct
- * inspection before this phase started); covered instead by an in-memory
- * fake at the application-layer use-case tests, matching this codebase's
- * own established testing convention for every other repository port.
+ * since its initial scope. `@Profile("!test")`, mirroring
+ * [ai.rojan.backend.infrastructure.ratelimit.RedisRateLimiter]/
+ * [ai.rojan.backend.infrastructure.sms.RealSmsProviderAdapter] — see
+ * [InMemoryOtpRepository] for the test-profile substitute.
  */
 @Repository
+@Profile("!test")
 class RedisOtpRepository(
     private val redisTemplate: RedisTemplate<String, Any>,
 ) : OtpRepository {

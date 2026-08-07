@@ -23,3 +23,12 @@ rojan:
       login-limit-per-ip-window: 10000
       register-limit-per-ip-window: 10000
       refresh-limit-per-ip-window: 10000
+    # Same reasoning as auth above, for the OTP vertical slice's own
+    # integration test (OtpAuthenticationFlowIntegrationTest) — production
+    # defaults (3 requests / 10 phone-min, 10 requests / ip-hour) would
+    # otherwise trip against normal test volume, not abuse.
+    otp:
+      request-limit-per-phone-short-window: 10000
+      request-limit-per-phone-long-window: 10000
+      request-limit-per-ip-long-window: 10000
+      verify-limit-per-phone-window: 10000

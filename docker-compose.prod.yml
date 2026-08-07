@@ -121,6 +121,12 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-rojan-ai-backend}
       JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-15}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+      # Optional Shared Pattern adapter — blank SMS_PROVIDER keeps the default
+      # Simple-endpoint adapter active; the two vars below are only required
+      # if SMS_PROVIDER=melipayamak-shared.
+      SMS_PROVIDER: ${SMS_PROVIDER:-}
+      MELIPAYAMAK_API_KEY: ${MELIPAYAMAK_API_KEY:-}
+      MELIPAYAMAK_BODY_ID: ${MELIPAYAMAK_BODY_ID:-}
     volumes:
       - ${ROJAN_DATA_ROOT:-/opt/rojan}/logs:/app/logs
     networks:
