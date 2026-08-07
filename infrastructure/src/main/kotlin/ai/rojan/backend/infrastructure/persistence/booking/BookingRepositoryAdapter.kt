@@ -95,6 +95,22 @@ class BookingRepositoryAdapter(
         return page.toPageResult()
     }
 
+    override fun findByCustomerIdAndSalonId(
+        customerId: UserId,
+        salonId: SalonId,
+        pageRequest: PageRequest,
+        statusFilter: BookingStatus?,
+        sortDirection: SortDirection,
+    ): PageResult<Booking> {
+        val pageable = pageableSortedByStartTime(pageRequest, sortDirection)
+        val page = if (statusFilter == null) {
+            jpaRepository.findByCustomerIdAndSalonId(customerId.value, salonId.value, pageable)
+        } else {
+            jpaRepository.findByCustomerIdAndSalonIdAndStatus(customerId.value, salonId.value, statusFilter, pageable)
+        }
+        return page.toPageResult()
+    }
+
     private fun pageableSortedByStartTime(pageRequest: PageRequest, sortDirection: SortDirection): SpringPageRequest {
         val direction = if (sortDirection == SortDirection.ASC) Sort.Direction.ASC else Sort.Direction.DESC
         return SpringPageRequest.of(pageRequest.page, pageRequest.size, Sort.by(direction, "startTime"))

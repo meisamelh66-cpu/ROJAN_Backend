@@ -4,6 +4,8 @@ import ai.rojan.backend.api.auth.AuthResponse
 import ai.rojan.backend.api.auth.LoginRequest
 import ai.rojan.backend.api.auth.RegisterRequest
 import ai.rojan.backend.api.auth.UserResponse
+import ai.rojan.backend.api.booking.BookingResponse
+import ai.rojan.backend.api.booking.CreateBookingRequest
 import ai.rojan.backend.api.common.PagedResponse
 import ai.rojan.backend.api.customer.AddCustomerNoteRequest
 import ai.rojan.backend.api.customer.AddCustomerTagRequest
@@ -14,13 +16,25 @@ import ai.rojan.backend.api.customer.CustomerTagResponse
 import ai.rojan.backend.api.customer.CustomerTimelineEntryResponse
 import ai.rojan.backend.api.customer.UpdateCustomerRequest
 import ai.rojan.backend.api.salon.CreateSalonRequest
+import ai.rojan.backend.api.salon.CreateServiceCategoryRequest
+import ai.rojan.backend.api.salon.CreateServiceRequest
+import ai.rojan.backend.api.salon.CreateSpecialistRequest
 import ai.rojan.backend.api.salon.SalonResponse
+import ai.rojan.backend.api.salon.ServiceCategoryResponse
+import ai.rojan.backend.api.salon.ServiceResponse
+import ai.rojan.backend.api.salon.SpecialistResponse
+import ai.rojan.backend.domain.auth.PhoneNumber
+import ai.rojan.backend.domain.customer.Customer
+import ai.rojan.backend.domain.customer.CustomerRepository
 import ai.rojan.backend.domain.customer.CustomerStatus
+import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.user.UserId
 import ai.rojan.backend.domain.user.UserRole
 import io.zonky.test.db.AutoConfigureEmbeddedDatabase
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.client.TestRestTemplate
 import org.springframework.boot.test.web.server.LocalServerPort
@@ -31,6 +45,8 @@ import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
+import java.time.LocalDateTime
+import java.util.UUID
 
 /**
  * End-to-end verification of the Customer CRM vertical (Phase 1) against a
@@ -49,6 +65,9 @@ class CustomerCrmFlowIntegrationTest {
 
     @LocalServerPort
     private var port: Int = 0
+
+    @Autowired
+    private lateinit var customerRepository: CustomerRepository
 
     private val restTemplate = TestRestTemplate()
 
@@ -71,6 +90,22 @@ class CustomerCrmFlowIntegrationTest {
         return requireNotNull(login.body).accessToken
     }
 
+    /** Like [registerAndLogin], but also returns the new account's id and allows a non-MANAGER role - needed only by the tenant-isolation test below, which registers a real CUSTOMER-role account to link a walk-in [Customer] record to. */
+    private fun registerAndLoginWithId(role: UserRole): Pair<String, UUID> {
+        val email = "crm.${System.nanoTime()}@example.com"
+        val registered = restTemplate.postForEntity(
+            url("/api/v1/auth/register"),
+            RegisterRequest(email = email, password = "supersecret123", fullName = "Test $role", role = role),
+            UserResponse::class.java,
+        )
+        val login = restTemplate.postForEntity(
+            url("/api/v1/auth/login"),
+            LoginRequest(email = email, password = "supersecret123"),
+            AuthResponse::class.java,
+        )
+        return requireNotNull(login.body).accessToken to requireNotNull(registered.body).id
+    }
+
     private fun createSalon(token: String, name: String): SalonResponse = requireNotNull(
         restTemplate.exchange(
             url("/api/v1/salons"),
@@ -79,6 +114,39 @@ class CustomerCrmFlowIntegrationTest {
             SalonResponse::class.java,
         ).body,
     )
+
+    private fun createServiceAndSpecialist(ownerToken: String, salonId: UUID): Pair<ServiceResponse, SpecialistResponse> {
+        val category = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/salons/$salonId/categories"),
+                HttpMethod.POST,
+                HttpEntity(CreateServiceCategoryRequest("Hair", null), bearer(ownerToken)),
+                ServiceCategoryResponse::class.java,
+            ).body,
+        )
+        val service = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/salons/$salonId/categories/${category.id}/services"),
+                HttpMethod.POST,
+                HttpEntity(CreateServiceRequest("Haircut", null, 30, BigDecimal("25.00")), bearer(ownerToken)),
+                ServiceResponse::class.java,
+            ).body,
+        )
+        val specialist = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/salons/$salonId/specialists"),
+                HttpMethod.POST,
+                HttpEntity(CreateSpecialistRequest(null, "Jamie Stylist", null, null), bearer(ownerToken)),
+                SpecialistResponse::class.java,
+            ).body,
+        )
+        return service to specialist
+    }
+
+    private fun linkedCustomer(salonId: UUID, userId: UUID, phone: String): Customer =
+        customerRepository.save(
+            Customer.create(SalonId(salonId), UserId(userId), "Linked Walk-in", PhoneNumber(phone), null, null),
+        )
 
     @Test
     fun `full customer lifecycle - create, profile, status change, notes, tags, timeline`() {
@@ -270,6 +338,67 @@ class CustomerCrmFlowIntegrationTest {
             String::class.java,
         )
         assertEquals(HttpStatus.NOT_FOUND, crossTenantTags.statusCode)
+    }
+
+    /**
+     * P0 Security regression test for the tenant isolation fix in
+     * `ROJAN_Customer_Booking_History_Tenant_Isolation_Fix_Report_v1.md`:
+     * a customer linked to an account, who has also booked at a *different*
+     * salon, must never have that other salon's booking (or its resulting
+     * timeline event) appear in this salon's view of them. Uses the same
+     * [linkedCustomer] repository bypass [ReceptionBookingFlowIntegrationTest]
+     * already established, since linking has no public endpoint yet.
+     */
+    @Test
+    fun `does not leak a linked customer's bookings or timeline from a different salon`() {
+        val ownerToken = registerAndLogin()
+        val (customerToken, customerUserId) = registerAndLoginWithId(UserRole.CUSTOMER)
+
+        val salonA = createSalon(ownerToken, "Salon A")
+        val salonB = createSalon(ownerToken, "Salon B")
+        val (serviceA, specialistA) = createServiceAndSpecialist(ownerToken, salonA.id)
+        val (serviceB, specialistB) = createServiceAndSpecialist(ownerToken, salonB.id)
+        val customerOfA = linkedCustomer(salonA.id, customerUserId, "+989166000001")
+
+        val bookingAtA = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/bookings"),
+                HttpMethod.POST,
+                HttpEntity(
+                    CreateBookingRequest(salonA.id, serviceA.id, specialistA.id, LocalDateTime.now().plusDays(1), null),
+                    bearer(customerToken),
+                ),
+                BookingResponse::class.java,
+            ).body,
+        )
+        restTemplate.exchange(
+            url("/api/v1/bookings"),
+            HttpMethod.POST,
+            HttpEntity(
+                CreateBookingRequest(salonB.id, serviceB.id, specialistB.id, LocalDateTime.now().plusDays(2), null),
+                bearer(customerToken),
+            ),
+            BookingResponse::class.java,
+        )
+
+        val bookingsOfA = restTemplate.exchange(
+            url("/api/v1/salons/${salonA.id}/customers/${customerOfA.id.value}/bookings"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            object : ParameterizedTypeReference<PagedResponse<BookingResponse>>() {},
+        )
+        assertEquals(HttpStatus.OK, bookingsOfA.statusCode)
+        assertEquals(1, bookingsOfA.body!!.content.size)
+        assertEquals(bookingAtA.id, bookingsOfA.body!!.content[0].id)
+
+        val timelineOfA = restTemplate.exchange(
+            url("/api/v1/salons/${salonA.id}/customers/${customerOfA.id.value}/timeline"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            object : ParameterizedTypeReference<PagedResponse<CustomerTimelineEntryResponse>>() {},
+        )
+        assertEquals(HttpStatus.OK, timelineOfA.statusCode)
+        assertEquals(1, timelineOfA.body!!.content.count { it.type == "BOOKING_CREATED" })
     }
 
     @Test

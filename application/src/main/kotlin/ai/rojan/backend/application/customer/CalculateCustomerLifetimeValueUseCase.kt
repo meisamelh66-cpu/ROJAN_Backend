@@ -15,7 +15,10 @@ import java.math.BigDecimal
  * every call (acceptable at Phase 1's expected data volumes; a cached,
  * recompute-on-completion column is a contained future optimization if it
  * ever isn't). Zero for a customer with no linked account - there is no
- * booking data to sum (see [Customer.userId]'s own doc comment).
+ * booking data to sum (see [Customer.userId]'s own doc comment). Scoped to
+ * this customer's own [Customer.salonId] - a linked account's completed
+ * bookings at other salons must not inflate the lifetime value this
+ * salon's owner sees (`ROJAN_Customer_Booking_History_Tenant_Isolation_Fix_Report_v1.md`).
  *
  * Takes an already-resolved, already-authorized [Customer] directly rather
  * than a Command with raw ids - this is a pure computation reused by both
@@ -30,7 +33,7 @@ class CalculateCustomerLifetimeValueUseCase(
         val userId = customer.userId ?: return BigDecimal.ZERO
 
         val completedBookings = bookingRepository
-            .findByCustomerId(userId, PageRequest(0, PageRequest.MAX_SIZE), BookingStatus.COMPLETED, SortDirection.DESC)
+            .findByCustomerIdAndSalonId(userId, customer.salonId, PageRequest(0, PageRequest.MAX_SIZE), BookingStatus.COMPLETED, SortDirection.DESC)
             .content
 
         return completedBookings.sumOf { booking -> serviceRepository.findById(booking.serviceId)?.price ?: BigDecimal.ZERO }

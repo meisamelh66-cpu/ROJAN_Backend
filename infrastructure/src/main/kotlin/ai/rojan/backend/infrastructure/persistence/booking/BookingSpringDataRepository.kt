@@ -14,6 +14,8 @@ interface BookingSpringDataRepository : JpaRepository<BookingJpaEntity, UUID> {
     fun findBySalonIdAndStatus(salonId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
     fun findByCustomerId(customerId: UUID, pageable: Pageable): Page<BookingJpaEntity>
     fun findByCustomerIdAndStatus(customerId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
+    fun findByCustomerIdAndSalonId(customerId: UUID, salonId: UUID, pageable: Pageable): Page<BookingJpaEntity>
+    fun findByCustomerIdAndSalonIdAndStatus(customerId: UUID, salonId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
 
     @Query(
         """
