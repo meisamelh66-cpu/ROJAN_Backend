@@ -4,7 +4,10 @@ import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.booking.BookingStatus
 import ai.rojan.backend.domain.common.AmbiguousSalonContextException
+import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.salon.Salon
+import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.Service
 import ai.rojan.backend.domain.salon.ServiceId
@@ -14,7 +17,15 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
 
-data class GetDashboardInsightsCommand(val callerId: UserId)
+/**
+ * [salonId] is optional (Production Hardening Phase 1 - tenant isolation
+ * fix): when supplied, resolves and ownership-checks that exact salon,
+ * mirroring [ai.rojan.backend.api.booking.SalonBookingController]'s own
+ * pattern - the only way to disambiguate for an owner with more than one
+ * salon. When omitted, behaves exactly as before ([resolveSalonByOwner]) so
+ * every existing caller (today's single-salon owner) is unaffected.
+ */
+data class GetDashboardInsightsCommand(val callerId: UserId, val salonId: SalonId? = null)
 
 data class DashboardInsights(
     val revenue: RevenueInsights,
@@ -46,11 +57,10 @@ class GetDashboardInsightsUseCase(
     private val insightEngine: InsightEngine,
 ) {
     fun execute(command: GetDashboardInsightsCommand): DashboardInsights {
-        val ownedSalons = salonRepository.findByOwnerId(command.callerId)
-        val salon = when (ownedSalons.size) {
-            0 -> throw SalonNotFoundException(command.callerId.value.toString())
-            1 -> ownedSalons.single()
-            else -> throw AmbiguousSalonContextException(command.callerId.value.toString())
+        val salon = if (command.salonId != null) {
+            resolveSalonById(command.salonId, command.callerId)
+        } else {
+            resolveSalonByOwner(command.callerId)
         }
 
         val today = LocalDate.now()
@@ -126,6 +136,21 @@ class GetDashboardInsightsUseCase(
             services = serviceInsights,
             recommendations = recommendations,
         )
+    }
+
+    private fun resolveSalonById(salonId: SalonId, callerId: UserId): Salon {
+        val salon = salonRepository.findById(salonId) ?: throw SalonNotFoundException(salonId.value.toString())
+        if (salon.ownerId != callerId) throw SalonAccessDeniedException(salon.id.value.toString())
+        return salon
+    }
+
+    private fun resolveSalonByOwner(callerId: UserId): Salon {
+        val ownedSalons = salonRepository.findByOwnerId(callerId)
+        return when (ownedSalons.size) {
+            0 -> throw SalonNotFoundException(callerId.value.toString())
+            1 -> ownedSalons.single()
+            else -> throw AmbiguousSalonContextException(callerId.value.toString())
+        }
     }
 
     private fun List<Booking>.completedRevenue(services: Map<ServiceId, Service>): BigDecimal =
