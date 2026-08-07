@@ -83,19 +83,19 @@ rojan:
     api-url: ${SMS_API_URL}
     api-key: ${SMS_API_KEY}
     sender: ${SMS_SENDER}
-    # MeliPayamak OTP Adapter (ROJAN_MeliPayamak_OTP_Adapter_Design_v1.md):
-    # optional, second SmsProviderPort implementation, unselected by
-    # default so every existing deployment is unaffected. `provider` needs
-    # an empty-string fallback so ConditionalOnProperty can always resolve
-    # it without throwing; `otp.*` deliberately has NO fallback - it's
-    # only ever bound (see MeliPayamakOtpProviderConfig) when `provider`
-    # is actually set to `melipayamak-otp`, at which point these three
-    # must be real values, same fail-loud posture as api-key/sender above.
+    # MeliPayamak Shared Pattern provider: optional, second SmsProviderPort
+    # implementation, unselected by default so every existing deployment
+    # (Simple adapter, above) is unaffected. `provider` needs an
+    # empty-string fallback so ConditionalOnProperty can always resolve it
+    # without throwing; `melipayamak.*` deliberately has NO fallback - it's
+    # only ever bound (see MeliPayamakSharedPatternProviderConfig) when
+    # `provider` is actually set to `melipayamak-shared`, at which point
+    # both must be real values, same fail-loud posture as api-key/sender
+    # above.
     provider: ${SMS_PROVIDER:}
-    otp:
-      username: ${SMS_OTP_USERNAME}
-      password: ${SMS_OTP_PASSWORD}
-      sender: ${SMS_OTP_SENDER}
+    melipayamak:
+      api-key: ${MELIPAYAMAK_API_KEY}
+      body-id: ${MELIPAYAMAK_BODY_ID}
 
 management:
   endpoints:
