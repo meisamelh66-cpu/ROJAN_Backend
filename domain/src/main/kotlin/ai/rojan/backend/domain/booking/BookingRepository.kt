@@ -32,9 +32,31 @@ interface BookingRepository {
         sortDirection: SortDirection,
     ): PageResult<Booking>
 
-    /** A customer's bookings, optionally filtered by status, sorted by start time. */
+    /**
+     * A customer's bookings across every salon, optionally filtered by
+     * status, sorted by start time - platform-wide by design, for the
+     * customer's own self-service "my bookings" view
+     * ([ai.rojan.backend.api.booking.BookingController.mine]), where seeing
+     * every salon they've booked at is exactly correct.
+     */
     fun findByCustomerId(
         customerId: UserId,
+        pageRequest: PageRequest,
+        statusFilter: BookingStatus?,
+        sortDirection: SortDirection,
+    ): PageResult<Booking>
+
+    /**
+     * A customer's bookings at **one specific salon only**, optionally
+     * filtered by status, sorted by start time. Use this, never
+     * [findByCustomerId], for any salon-owner-facing view of a specific
+     * customer (booking history, lifetime value, timeline) - a linked
+     * customer may have bookings at other salons too, and those must never
+     * be visible to a salon that isn't theirs.
+     */
+    fun findByCustomerIdAndSalonId(
+        customerId: UserId,
+        salonId: SalonId,
         pageRequest: PageRequest,
         statusFilter: BookingStatus?,
         sortDirection: SortDirection,

@@ -75,6 +75,32 @@ class GetCustomerTimelineUseCaseTest {
     }
 
     @Test
+    fun `does not include booking events from a different salon`() {
+        val linkedUserId = UserId.new()
+        val customer = Customer.create(salon.id, linkedUserId, "Jane Doe", PhoneNumber("+989123456789"), null, null)
+            .also { customerRepository.save(it) }
+        val ownBooking = Booking.create(
+            salon.id, ServiceId.new(), SpecialistId.new(), linkedUserId,
+            LocalDateTime.of(2026, 8, 10, 9, 0), LocalDateTime.of(2026, 8, 10, 9, 30), null,
+        )
+        bookingRepository.reserve(ownBooking)
+
+        val otherSalon = Salon.create(UserId.new(), "Other Salon", null, "0913", null, "Other Address")
+            .also { salonRepository.save(it) }
+        val bookingAtOtherSalon = Booking.create(
+            otherSalon.id, ServiceId.new(), SpecialistId.new(), linkedUserId,
+            LocalDateTime.of(2026, 8, 11, 9, 0), LocalDateTime.of(2026, 8, 11, 9, 30), null,
+        )
+        bookingRepository.reserve(bookingAtOtherSalon)
+
+        val result = useCase.execute(GetCustomerTimelineCommand(customer.id, ownerId, PageRequest(0, 20)))
+
+        // only the own-salon booking's "created" event - the other salon's booking must not appear
+        assertEquals(1, result.totalElements)
+        assertEquals("BOOKING_CREATED", result.content[0].type)
+    }
+
+    @Test
     fun `an unlinked customer's timeline has no booking events, only CRM ones`() {
         val customer = Customer.create(salon.id, null, "Jane Doe", PhoneNumber("+989123456789"), null, null)
             .also { customerRepository.save(it) }

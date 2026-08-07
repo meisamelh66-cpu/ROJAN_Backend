@@ -49,6 +49,19 @@ internal class InMemoryBookingRepository : BookingRepository {
         sortDirection: SortDirection,
     ): PageResult<Booking> = paginate(store.values.filter { it.customerId == customerId }, pageRequest, statusFilter, sortDirection)
 
+    override fun findByCustomerIdAndSalonId(
+        customerId: UserId,
+        salonId: SalonId,
+        pageRequest: PageRequest,
+        statusFilter: BookingStatus?,
+        sortDirection: SortDirection,
+    ): PageResult<Booking> = paginate(
+        store.values.filter { it.customerId == customerId && it.salonId == salonId },
+        pageRequest,
+        statusFilter,
+        sortDirection,
+    )
+
     private fun paginate(
         bookings: Collection<Booking>,
         pageRequest: PageRequest,
