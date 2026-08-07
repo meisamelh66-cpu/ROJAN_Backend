@@ -17,6 +17,10 @@ dependencies {
     implementation(libs.jackson.module.kotlin)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.actuator)
+    // Production Hardening Phase 1: makes the backend's own metrics scrapeable at
+    // /actuator/prometheus - doesn't stand up a Prometheus/Grafana server itself, just
+    // the endpoint side of that pipeline for whenever one exists.
+    implementation(libs.micrometer.registry.prometheus)
     // BackendApplication references @EntityScan/@EnableJpaRepositories/@EnableJpaAuditing
     // directly; infrastructure's own data-jpa dependency is `implementation`-scoped
     // (Gradle default encapsulation) so it doesn't flow to this module's compile classpath.
