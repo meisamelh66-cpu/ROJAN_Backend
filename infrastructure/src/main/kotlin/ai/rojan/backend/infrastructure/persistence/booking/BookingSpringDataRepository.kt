@@ -68,4 +68,10 @@ interface BookingSpringDataRepository : JpaRepository<BookingJpaEntity, UUID> {
         @Param("customerIds") customerIds: Collection<UUID>,
         @Param("before") before: LocalDateTime,
     ): List<UUID>
+
+    fun findBySalonIdAndCustomerIdInAndStatus(
+        salonId: UUID,
+        customerIds: Collection<UUID>,
+        status: BookingStatus,
+    ): List<BookingJpaEntity>
 }

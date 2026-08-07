@@ -23,6 +23,9 @@ class CustomerTagRepositoryAdapter(
     override fun findByCustomerId(customerId: CustomerId): List<CustomerTag> =
         jpaRepository.findByCustomerId(customerId.value).map { it.toDomain() }
 
+    override fun findByCustomerIdIn(customerIds: Collection<CustomerId>): List<CustomerTag> =
+        jpaRepository.findByCustomerIdIn(customerIds.map { it.value }).map { it.toDomain() }
+
     override fun deleteById(id: CustomerTagId) = jpaRepository.deleteById(id.value)
 
     private fun CustomerTagJpaEntity.toDomain(): CustomerTag = CustomerTag(

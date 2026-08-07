@@ -62,6 +62,9 @@ internal class InMemoryBookingRepository : BookingRepository {
         sortDirection,
     )
 
+    override fun findCompletedBySalonIdAndCustomerIdIn(salonId: SalonId, customerIds: Collection<UserId>): List<Booking> =
+        store.values.filter { it.salonId == salonId && it.customerId in customerIds && it.status == BookingStatus.COMPLETED }
+
     private fun paginate(
         bookings: Collection<Booking>,
         pageRequest: PageRequest,

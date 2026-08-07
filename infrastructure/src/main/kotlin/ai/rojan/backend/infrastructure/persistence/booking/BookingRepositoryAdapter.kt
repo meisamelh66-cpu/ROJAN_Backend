@@ -139,6 +139,13 @@ class BookingRepositoryAdapter(
             .map { UserId(it) }
             .toSet()
 
+    override fun findCompletedBySalonIdAndCustomerIdIn(salonId: SalonId, customerIds: Collection<UserId>): List<Booking> {
+        if (customerIds.isEmpty()) return emptyList()
+        return jpaRepository
+            .findBySalonIdAndCustomerIdInAndStatus(salonId.value, customerIds.map { it.value }, BookingStatus.COMPLETED)
+            .map { it.toDomain() }
+    }
+
     private fun persist(booking: Booking): Booking {
         val entity = jpaRepository.findById(booking.id.value).orElse(null)
             ?.apply {

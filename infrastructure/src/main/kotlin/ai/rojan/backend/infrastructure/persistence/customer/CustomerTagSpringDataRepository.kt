@@ -5,4 +5,5 @@ import java.util.UUID
 
 interface CustomerTagSpringDataRepository : JpaRepository<CustomerTagJpaEntity, UUID> {
     fun findByCustomerId(customerId: UUID): List<CustomerTagJpaEntity>
+    fun findByCustomerIdIn(customerIds: Collection<UUID>): List<CustomerTagJpaEntity>
 }

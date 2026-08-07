@@ -63,6 +63,8 @@ internal class InMemoryCustomerTagRepository : CustomerTagRepository {
     override fun save(tag: CustomerTag): CustomerTag = tag.also { store[it.id] = it }
     override fun findById(id: CustomerTagId): CustomerTag? = store[id]
     override fun findByCustomerId(customerId: CustomerId): List<CustomerTag> = store.values.filter { it.customerId == customerId }
+    override fun findByCustomerIdIn(customerIds: Collection<CustomerId>): List<CustomerTag> =
+        store.values.filter { it.customerId in customerIds }
     override fun deleteById(id: CustomerTagId) {
         store.remove(id)
     }
