@@ -51,8 +51,10 @@
 ###     `management.health.kafka.enabled: false`. Re-enable both the
 ###     moment Kafka is actually deployed alongside this stack.
 ###
-### This file is deployment PREP, not a deployment: nothing in this repo
-### has been run against the target VPS yet. See `DEPLOYMENT.md`.
+### This file has since been run against the target VPS: the backend is
+### live at https://api.rojanai.ir (verified via /actuator/health). See
+### `DEPLOYMENT.md`'s Status line for what's been independently confirmed
+### vs. not re-verified.
 
 services:
   postgres:

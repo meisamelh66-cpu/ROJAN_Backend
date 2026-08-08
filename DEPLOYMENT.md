@@ -1,10 +1,20 @@
 # Production Deployment — Ubuntu VPS
 
-Status: **infrastructure prepared, not yet deployed.** Nothing in this
-document has been run against the real server. No new features or
-business logic were introduced to prepare it — every file here is
-ops/infra configuration layered on top of the existing, frozen
-application behavior.
+Status: **deployed and live** at `https://api.rojanai.ir`, verified
+reachable (`/actuator/health` returns `{"status":"UP"}`, TLS/HSTS active,
+real auth/salon/booking endpoints responding). This section previously
+read "infrastructure prepared, not yet deployed" — that was accurate when
+written but is stale; keep it updated if the deployment topology changes
+again. No new features or business logic were introduced to prepare the
+original deployment — every file here is ops/infra configuration layered
+on top of the existing, frozen application behavior.
+
+Verified as of the Phase 1 production hardening audit: DNS resolves, TLS
+certificate is live, the app is responding, and `/actuator/health`
+reports `UP`. **Not independently re-verified by that audit**: the
+backup/restore/rollback/upgrade procedures below — treat those checklist
+items on their own merits, not as implied-working just because the
+top-line deploy succeeded.
 
 ## 1. Audit — current deployment requirements
 
@@ -209,15 +219,22 @@ the matching `backup.sh` archive (§10 below) *in addition to* running
 
 ## 10. Deployment checklist
 
-Nothing below has been executed. This is the procedure for whoever runs
-the actual deployment.
+This procedure has since been executed for the real deployment now live
+at `https://api.rojanai.ir` (see the Status line at the top of this
+document). The checkboxes below were written as a forward-looking
+procedure and are being corrected only where this audit has direct
+external evidence (HTTP/DNS probes against the real domain) — this audit
+has no VPS shell access, so internal execution steps (exact
+`docker compose ps` output, Flyway log contents, etc.) are left unchecked
+as "not independently re-verified" rather than assumed just because the
+externally-observable outcome is confirmed healthy.
 
 ### One-time VPS setup (already done per the task brief, listed for completeness)
 - [x] Ubuntu 24.04 LTS, Java 21, Docker, Docker Compose plugin
 - [x] `/opt/rojan/{backend,frontend,nginx,postgres,redis,uploads,logs,backups}` created
-- [ ] Firewall (ufw or cloud provider security group): allow only 22 (SSH), 80, 443
-- [ ] Point the real domain's DNS A/AAAA record at the VPS's public IP; confirm it resolves
-- [ ] `git clone` this repository into `/opt/rojan/backend`
+- [ ] Firewall (ufw or cloud provider security group): allow only 22 (SSH), 80, 443 — not independently re-verified (no VPS shell access from this audit)
+- [x] Point the real domain's DNS A/AAAA record at the VPS's public IP; confirm it resolves — confirmed live: `api.rojanai.ir` and `rojanai.ir` both resolve to `185.8.173.194`
+- [ ] `git clone` this repository into `/opt/rojan/backend` — not independently re-verified (no VPS shell access from this audit)
 
 ### Configuration
 - [ ] `cp .env.example .env` inside `/opt/rojan/backend`
@@ -227,12 +244,12 @@ the actual deployment.
 - [ ] Confirm `.env` is not tracked by git (`git status` should not show it)
 
 ### Startup (first deploy)
-- [ ] `DOMAIN=<real domain> EMAIL=<real email> ./docker/nginx/init-letsencrypt.sh` (rehearse with `STAGING=1` first)
-- [ ] `sudo ./scripts/deploy.sh` — builds the image, brings up the full stack, waits for the app to report healthy
-- [ ] `docker compose -f docker-compose.prod.yml ps` — confirm every service is `healthy`/`running`
-- [ ] `curl https://<real domain>/actuator/health` — expect `{"status":"UP"}`
-- [ ] Confirm Flyway ran the expected migrations: `docker compose -f docker-compose.prod.yml logs app | grep -i flyway`
-- [ ] Smoke-test one real endpoint (e.g. `POST /api/v1/auth/register` per `API_CONTRACT.md`)
+- [ ] `DOMAIN=<real domain> EMAIL=<real email> ./docker/nginx/init-letsencrypt.sh` (rehearse with `STAGING=1` first) — not independently re-verified (no VPS shell access), but a live, valid TLS certificate on `api.rojanai.ir` implies this ran successfully at some point
+- [ ] `sudo ./scripts/deploy.sh` — not independently re-verified (no VPS shell access)
+- [ ] `docker compose -f docker-compose.prod.yml ps` — not independently re-verified (no VPS shell access)
+- [x] `curl https://<real domain>/actuator/health` — expect `{"status":"UP"}` — confirmed live: `https://api.rojanai.ir/actuator/health` returns `{"status":"UP"}` with valid TLS/HSTS
+- [ ] Confirm Flyway ran the expected migrations — not independently re-verified (no VPS shell access), but the live API correctly rejects malformed auth requests with real validation errors, consistent with a working schema
+- [ ] Smoke-test one real endpoint per `API_CONTRACT.md` — not independently re-verified against the documented exact case; a live probe against `/api/v1/auth/login` did receive a real, schema-aware validation error (not a 404/500), consistent with a functioning deployment
 
 ### Shutdown
 - [ ] `docker compose -f docker-compose.prod.yml stop` — graceful (server.shutdown: graceful in `application-prod.yml` lets in-flight requests finish, bounded to 20s)
@@ -264,7 +281,6 @@ the actual deployment.
 - [ ] Set up log shipping / monitoring if this VPS doesn't already have it — `/opt/rojan/logs/rojan-backend.log` and `/opt/rojan/nginx/logs/*.log` are the two sources
 
 ### Explicitly not done by this milestone
-- No actual deployment was run.
 - No CI/CD or container registry — the image is built on the VPS from source.
 - No load testing / capacity planning (Hikari pool size, JVM heap, Nginx worker tuning all use conservative defaults, not measured ones).
 - No off-site backup storage.
