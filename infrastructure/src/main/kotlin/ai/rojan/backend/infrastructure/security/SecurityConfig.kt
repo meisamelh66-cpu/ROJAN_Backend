@@ -2,6 +2,8 @@ package ai.rojan.backend.infrastructure.security
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.env.Environment
+import org.springframework.core.env.Profiles
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
@@ -14,10 +16,13 @@ import org.springframework.web.cors.CorsConfigurationSource
 class SecurityConfig(
     private val jwtAuthenticationFilter: JwtAuthenticationFilter,
     private val corsConfigurationSource: CorsConfigurationSource,
+    private val environment: Environment,
 ) {
 
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
+        val isProd = environment.acceptsProfiles(Profiles.of("prod"))
+
         http
             .csrf { it.disable() }
             .cors { it.configurationSource(corsConfigurationSource) }
@@ -39,7 +44,16 @@ class SecurityConfig(
             }
             .authorizeHttpRequests { authorize ->
                 authorize
-                    .requestMatchers(*PUBLIC_ENDPOINTS).permitAll()
+                    .requestMatchers(*ALWAYS_PUBLIC_ENDPOINTS).permitAll()
+                    // Interactive API docs stay open in dev/test for convenience, but never
+                    // under the "prod" profile - even if springdoc is ever re-enabled there
+                    // (application-prod.yml defaults it off), these paths still require a
+                    // valid bearer token rather than being unauthenticated by construction.
+                    .apply {
+                        if (!isProd) {
+                            requestMatchers(*DOCS_ENDPOINTS_NON_PROD_ONLY).permitAll()
+                        }
+                    }
                     // GET-only, single path segment: matches /api/v1/invites/{token} (the
                     // unauthenticated confirmation-screen lookup) but never
                     // /api/v1/invites/{token}/accept, which stays authenticated below.
@@ -56,7 +70,7 @@ class SecurityConfig(
 
     private companion object {
 
-        val PUBLIC_ENDPOINTS = arrayOf(
+        val ALWAYS_PUBLIC_ENDPOINTS = arrayOf(
             "/api/v1/auth/**",
 
             // Public website API (ROJAN Web)
@@ -64,7 +78,12 @@ class SecurityConfig(
 
             "/actuator/health",
             "/actuator/health/**",
+        )
+
+        // Interactive API docs - permitAll only outside the "prod" profile, see above.
+        val DOCS_ENDPOINTS_NON_PROD_ONLY = arrayOf(
             "/v3/api-docs/**",
+            "/v3/api-docs.yaml",
             "/swagger-ui/**",
             "/swagger-ui.html",
         )
