@@ -6,6 +6,15 @@
 # base file already sets correctly for production (ddl-auto: validate,
 # open-in-view: false, non_null Jackson inclusion, etc.) is left alone.
 
+rojan:
+  security:
+    # Base application.yml defaults to the local Next.js dev server; this
+    # overrides it to the real production origin. Still overridable via
+    # CORS_ALLOWED_ORIGINS if a second origin is ever needed - no code
+    # change required either way.
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:https://rojanai.ir}
+
 server:
   # Lets in-flight requests finish (bounded by the timeout below) instead
   # of being cut off mid-response when Docker sends SIGTERM on

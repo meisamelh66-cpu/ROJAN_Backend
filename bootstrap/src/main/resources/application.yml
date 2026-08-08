@@ -46,6 +46,11 @@ server:
 # unset rather than silently signing tokens with a known/weak key.
 rojan:
   security:
+    # Explicit allow-list only, never a wildcard - see CorsConfig.kt. Dev
+    # default matches the ROJAN_Web Next.js dev server; production overrides
+    # this in application-prod.yml.
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
     jwt:
       secret: ${JWT_SECRET:}
       issuer: ${JWT_ISSUER:rojan-ai-backend}

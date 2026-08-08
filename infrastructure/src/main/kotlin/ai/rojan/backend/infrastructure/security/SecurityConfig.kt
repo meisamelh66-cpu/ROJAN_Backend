@@ -2,23 +2,27 @@ package ai.rojan.backend.infrastructure.security
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import org.springframework.web.cors.CorsConfigurationSource
 
 @Configuration
 class SecurityConfig(
     private val jwtAuthenticationFilter: JwtAuthenticationFilter,
+    private val corsConfigurationSource: CorsConfigurationSource,
 ) {
 
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             .csrf { it.disable() }
-            .sessionManagement { 
-                it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) 
+            .cors { it.configurationSource(corsConfigurationSource) }
+            .sessionManagement {
+                it.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             }
             .exceptionHandling {
                 // A minimal, fixed body (not the full ApiError shape GlobalExceptionHandler
@@ -36,6 +40,10 @@ class SecurityConfig(
             .authorizeHttpRequests { authorize ->
                 authorize
                     .requestMatchers(*PUBLIC_ENDPOINTS).permitAll()
+                    // GET-only, single path segment: matches /api/v1/invites/{token} (the
+                    // unauthenticated confirmation-screen lookup) but never
+                    // /api/v1/invites/{token}/accept, which stays authenticated below.
+                    .requestMatchers(HttpMethod.GET, "/api/v1/invites/*").permitAll()
                     .anyRequest().authenticated()
             }
             .addFilterBefore(
