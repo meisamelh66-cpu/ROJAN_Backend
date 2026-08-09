@@ -2,7 +2,6 @@
 ### Ubuntu VPS layout under /opt/rojan:
 ###
 ###   /opt/rojan/backend   <- this repo, checked out here (compose is run from here)
-###   /opt/rojan/postgres  <- Postgres data directory (bind-mounted, persistent)
 ###   /opt/rojan/redis     <- Redis data directory (bind-mounted, persistent, AOF)
 ###   /opt/rojan/nginx     <- Nginx: Let's Encrypt certs, ACME webroot, access/error logs
 ###   /opt/rojan/logs      <- app log file (bind-mounted; see application-prod.yml's
@@ -22,10 +21,22 @@
 ###     from other containers on the internal `rojan_net` network. The app
 ###     and Nginx are the only services exposed to the host.
 ###   - Every service has an explicit restart policy.
-###   - Postgres/Redis persist to bind-mounted host directories (see above)
-###     instead of anonymous/dev-only volumes — durable across container
+###   - Redis persists to a bind-mounted host directory (see above) instead
+###     of an anonymous/dev-only volume — durable across container
 ###     recreation, and directly reachable by backup.sh without going
 ###     through `docker cp`/`docker exec`.
+###   - Postgres persists to the named Docker volume
+###     `backend_rojan_postgres_data` — the SAME volume the currently
+###     running production stack (compose project "backend") already
+###     writes to, referenced here via `external: true` so this file only
+###     ever attaches to it and never creates, recreates, or removes it.
+###     This intentionally does NOT use a bind mount: `/opt/rojan/postgres`
+###     is a separate, unverified path that does not contain the real,
+###     already-migrated (V1-V7) database. Bringing this compose file up
+###     as a replacement for the running "backend" project therefore
+###     requires stopping that project's Postgres first (never run two
+###     Postgres containers against the same volume concurrently) — this
+###     file makes no attempt to do that for you.
 ###   - The app has a real container healthcheck (`/actuator/health`, see
 ###     SecurityConfig's PUBLIC_ENDPOINTS — already permitAll, no code
 ###     change needed there) instead of no healthcheck at all, so
@@ -65,7 +76,7 @@ services:
       POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME must be set — see .env.example}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set — see .env.example}
     volumes:
-      - ${ROJAN_DATA_ROOT:-/opt/rojan}/postgres:/var/lib/postgresql/data
+      - rojan_postgres_data:/var/lib/postgresql/data
     networks:
       - rojan_net
     healthcheck:
@@ -123,6 +134,9 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-rojan-ai-backend}
       JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-15}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+      SMS_API_URL: ${SMS_API_URL:?SMS_API_URL must be set — see .env.example}
+      SMS_API_KEY: ${SMS_API_KEY:?SMS_API_KEY must be set — see .env.example}
+      SMS_SENDER: ${SMS_SENDER:?SMS_SENDER must be set — see .env.example}
       # Optional Shared Pattern adapter — blank SMS_PROVIDER keeps the default
       # Simple-endpoint adapter active; the two vars below are only required
       # if SMS_PROVIDER=melipayamak-shared.
@@ -222,3 +236,13 @@ services:
 networks:
   rojan_net:
     driver: bridge
+
+volumes:
+  # Not managed by this file: attaches to the already-existing volume the
+  # running production stack (compose project "backend") writes to.
+  # `external: true` guarantees Compose only ever attaches - it will
+  # refuse to start if the volume doesn't already exist, and `docker
+  # compose down -v` against this file will not remove it.
+  rojan_postgres_data:
+    external: true
+    name: backend_rojan_postgres_data
