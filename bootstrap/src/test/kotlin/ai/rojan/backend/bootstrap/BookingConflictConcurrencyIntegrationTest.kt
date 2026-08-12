@@ -15,6 +15,8 @@ import ai.rojan.backend.api.salon.SalonResponse
 import ai.rojan.backend.api.salon.ServiceCategoryResponse
 import ai.rojan.backend.api.salon.ServiceResponse
 import ai.rojan.backend.api.salon.SpecialistResponse
+import ai.rojan.backend.api.schedule.SetWorkingHoursRequest
+import ai.rojan.backend.api.schedule.TimeIntervalDto
 import ai.rojan.backend.domain.user.UserRole
 import io.zonky.test.db.AutoConfigureEmbeddedDatabase
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -31,6 +33,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -107,6 +110,12 @@ class BookingConflictConcurrencyIntegrationTest {
                 SpecialistResponse::class.java,
             ).body,
         )
+        restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/working-hours/MONDAY"), HttpMethod.PUT,
+            HttpEntity(SetWorkingHoursRequest(listOf(TimeIntervalDto(LocalTime.of(9, 0), LocalTime.of(17, 0)))), bearer(managerToken)),
+            String::class.java,
+        )
+        restTemplate.exchange(url("/api/v1/salons/${salon.id}/activate"), HttpMethod.POST, HttpEntity<Void>(bearer(managerToken)), SalonResponse::class.java)
 
         val startTime = LocalDateTime.now().plusDays(30).withHour(10).withMinute(0).withSecond(0).withNano(0)
         val threadCount = 12

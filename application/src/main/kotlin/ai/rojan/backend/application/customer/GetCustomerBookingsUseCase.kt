@@ -1,9 +1,9 @@
 package ai.rojan.backend.application.customer
 
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.booking.BookingStatus
-import ai.rojan.backend.domain.common.CustomerAccessDeniedException
 import ai.rojan.backend.domain.common.CustomerNotFoundException
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.PageResult
@@ -11,6 +11,7 @@ import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.customer.CustomerId
 import ai.rojan.backend.domain.customer.CustomerRepository
+import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.user.UserId
 
@@ -39,15 +40,14 @@ class GetCustomerBookingsUseCase(
     private val salonRepository: SalonRepository,
     private val customerRepository: CustomerRepository,
     private val bookingRepository: BookingRepository,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
     fun execute(command: GetCustomerBookingsCommand): PageResult<Booking> {
         val customer = customerRepository.findById(command.customerId)
             ?: throw CustomerNotFoundException(command.customerId.value.toString())
         val salon = salonRepository.findById(customer.salonId)
             ?: throw SalonNotFoundException(customer.salonId.value.toString())
-        if (salon.ownerId != command.callerId) {
-            throw CustomerAccessDeniedException(customer.id.value.toString())
-        }
+        salonPermissionResolver.require(salon.id, command.callerId, Permission.VIEW_CRM)
 
         val userId = customer.userId
             ?: return PageResult(content = emptyList(), page = command.pageRequest.page, size = command.pageRequest.size, totalElements = 0)

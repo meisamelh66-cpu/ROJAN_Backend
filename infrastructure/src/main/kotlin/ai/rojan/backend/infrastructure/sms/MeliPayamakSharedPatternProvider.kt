@@ -142,6 +142,9 @@ class MeliPayamakSharedPatternProvider(
 
     private companion object {
         const val PROVIDER_NAME = "melipayamak-shared"
-        val CODE_PATTERN = Regex("""verification code is (\d{6})""")
+        // Bounded to 4-8 digits rather than a fixed count — this adapter doesn't
+        // (and shouldn't) know the configured OtpPolicy.codeLength; it only needs
+        // to recover whatever numeric code RequestOtpUseCase embedded.
+        val CODE_PATTERN = Regex("""verification code is (\d{4,8})""")
     }
 }

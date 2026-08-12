@@ -1,17 +1,23 @@
 package ai.rojan.backend.api.salon
 
 import ai.rojan.backend.api.common.CurrentUserResolver
+import ai.rojan.backend.application.salon.AssignServiceToSpecialistCommand
+import ai.rojan.backend.application.salon.AssignServiceToSpecialistUseCase
 import ai.rojan.backend.application.salon.CreateSpecialistCommand
 import ai.rojan.backend.application.salon.CreateSpecialistUseCase
 import ai.rojan.backend.application.salon.DeactivateSpecialistCommand
 import ai.rojan.backend.application.salon.DeactivateSpecialistUseCase
+import ai.rojan.backend.application.salon.RemoveServiceFromSpecialistCommand
+import ai.rojan.backend.application.salon.RemoveServiceFromSpecialistUseCase
 import ai.rojan.backend.application.salon.UpdateSpecialistCommand
 import ai.rojan.backend.application.salon.UpdateSpecialistUseCase
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.salon.ServiceId
 import ai.rojan.backend.domain.salon.Specialist
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.salon.SpecialistRepository
+import ai.rojan.backend.domain.salon.SpecialistServiceRepository
 import ai.rojan.backend.domain.user.UserId
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -35,9 +41,12 @@ import java.util.UUID
 @Tag(name = "Specialists")
 class SpecialistController(
     private val specialistRepository: SpecialistRepository,
+    private val specialistServiceRepository: SpecialistServiceRepository,
     private val createSpecialistUseCase: CreateSpecialistUseCase,
     private val updateSpecialistUseCase: UpdateSpecialistUseCase,
     private val deactivateSpecialistUseCase: DeactivateSpecialistUseCase,
+    private val assignServiceToSpecialistUseCase: AssignServiceToSpecialistUseCase,
+    private val removeServiceFromSpecialistUseCase: RemoveServiceFromSpecialistUseCase,
     private val currentUserResolver: CurrentUserResolver,
 ) {
 
@@ -106,6 +115,42 @@ class SpecialistController(
         val callerId = currentUserResolver.resolve(principal)
         val specialist = findSpecialistOrThrow(salonId, specialistId)
         deactivateSpecialistUseCase.execute(DeactivateSpecialistCommand(specialist.id, callerId))
+    }
+
+    @GetMapping("/{specialistId}/services")
+    @Operation(summary = "List the service ids this specialist is eligible to perform (empty means eligible for every service in the salon)")
+    fun listEligibleServices(@PathVariable salonId: UUID, @PathVariable specialistId: UUID): List<UUID> {
+        val specialist = findSpecialistOrThrow(salonId, specialistId)
+        return specialistServiceRepository.findServiceIdsBySpecialistId(specialist.id).map { it.value }
+    }
+
+    @PutMapping("/{specialistId}/services/{serviceId}")
+    @Operation(summary = "Assign a service to a specialist, restricting them to their assigned services (owner only)")
+    fun assignService(
+        @PathVariable salonId: UUID,
+        @PathVariable specialistId: UUID,
+        @PathVariable serviceId: UUID,
+        @AuthenticationPrincipal principal: UserDetails,
+    ) {
+        val callerId = currentUserResolver.resolve(principal)
+        assignServiceToSpecialistUseCase.execute(
+            AssignServiceToSpecialistCommand(SalonId(salonId), SpecialistId(specialistId), ServiceId(serviceId), callerId),
+        )
+    }
+
+    @DeleteMapping("/{specialistId}/services/{serviceId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Remove a service assignment from a specialist (owner only)")
+    fun removeService(
+        @PathVariable salonId: UUID,
+        @PathVariable specialistId: UUID,
+        @PathVariable serviceId: UUID,
+        @AuthenticationPrincipal principal: UserDetails,
+    ) {
+        val callerId = currentUserResolver.resolve(principal)
+        removeServiceFromSpecialistUseCase.execute(
+            RemoveServiceFromSpecialistCommand(SalonId(salonId), SpecialistId(specialistId), ServiceId(serviceId), callerId),
+        )
     }
 
     private fun findSpecialistOrThrow(salonId: UUID, specialistId: UUID): Specialist =

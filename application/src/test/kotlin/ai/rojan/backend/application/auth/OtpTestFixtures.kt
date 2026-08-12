@@ -50,12 +50,12 @@ internal class RecordingSmsProvider : SmsProviderPort {
         sent += SentSms(phoneNumber, message)
     }
 
-    /** Pulls the 6-digit code back out of the last message sent to [phoneNumber] — the use case never returns the raw code, only its hash is persisted. */
+    /** Pulls the code back out of the last message sent to [phoneNumber] — the use case never returns the raw code, only its hash is persisted. Bounded 4-8 digits to match [OtpPolicy.codeLength]'s valid range, not a fixed count. */
     fun lastCodeSentTo(phoneNumber: PhoneNumber): String =
         sent.last { it.phoneNumber == phoneNumber }.message.let { CODE_REGEX.find(it)!!.value }
 
     private companion object {
-        val CODE_REGEX = Regex("\\d{6}")
+        val CODE_REGEX = Regex("\\d{4,8}")
     }
 }
 

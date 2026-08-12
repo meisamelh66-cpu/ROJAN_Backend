@@ -23,12 +23,19 @@ import ai.rojan.backend.domain.common.OtpVerifyRateLimitExceededException
 import ai.rojan.backend.domain.common.RefreshRateLimitExceededException
 import ai.rojan.backend.domain.common.RegisterRateLimitExceededException
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
+import ai.rojan.backend.domain.common.InvalidMembershipAssignmentException
+import ai.rojan.backend.domain.common.SalonInviteAcceptRateLimitExceededException
+import ai.rojan.backend.domain.common.SalonInviteNotFoundException
+import ai.rojan.backend.domain.common.SalonNotActiveException
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.common.SalonNotReadyForActivationException
+import ai.rojan.backend.domain.common.SalonSlugAlreadyTakenException
 import ai.rojan.backend.domain.common.ScheduleOverrideNotFoundException
 import ai.rojan.backend.domain.common.ServiceCategoryNotFoundException
 import ai.rojan.backend.domain.common.ServiceNotFoundException
 import ai.rojan.backend.domain.common.SpecialistBlockNotFoundException
 import ai.rojan.backend.domain.common.SpecialistLeaveNotFoundException
+import ai.rojan.backend.domain.common.SpecialistNotEligibleForServiceException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.common.WeeklyAvailabilityNotFoundException
@@ -90,7 +97,7 @@ class GlobalExceptionHandler {
     fun handleInvalidOtp(ex: InvalidOtpException, request: WebRequest) =
         respond(HttpStatus.UNAUTHORIZED, errorCodeFor(ex), ex.message.orEmpty(), request)
 
-    @ExceptionHandler(OtpRateLimitExceededException::class, OtpVerifyRateLimitExceededException::class)
+    @ExceptionHandler(OtpRateLimitExceededException::class, OtpVerifyRateLimitExceededException::class, SalonInviteAcceptRateLimitExceededException::class)
     fun handleOtpRateLimitExceeded(ex: Exception, request: WebRequest) =
         respond(HttpStatus.TOO_MANY_REQUESTS, errorCodeFor(ex), ex.message.orEmpty(), request)
 
@@ -118,6 +125,7 @@ class GlobalExceptionHandler {
         BookingNotFoundException::class,
         CustomerNotFoundException::class,
         CustomerTagNotFoundException::class,
+        SalonInviteNotFoundException::class,
         NoResourceFoundException::class,
     )
     fun handleNotFound(ex: Exception, request: WebRequest) =
@@ -135,6 +143,11 @@ class GlobalExceptionHandler {
         InvalidCustomerStateException::class,
         CustomerAlreadyExistsException::class,
         CustomerNotLinkedToAccountException::class,
+        SpecialistNotEligibleForServiceException::class,
+        SalonSlugAlreadyTakenException::class,
+        SalonNotReadyForActivationException::class,
+        InvalidMembershipAssignmentException::class,
+        SalonNotActiveException::class,
     )
     fun handleConflict(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -187,6 +200,7 @@ class GlobalExceptionHandler {
         is InvalidOtpException -> "INVALID_OTP"
         is OtpRateLimitExceededException -> "OTP_REQUEST_RATE_LIMITED"
         is OtpVerifyRateLimitExceededException -> "OTP_VERIFY_RATE_LIMITED"
+        is SalonInviteAcceptRateLimitExceededException -> "SALON_INVITE_ACCEPT_RATE_LIMITED"
         is LoginRateLimitExceededException -> "LOGIN_RATE_LIMITED"
         is RegisterRateLimitExceededException -> "REGISTER_RATE_LIMITED"
         is RefreshRateLimitExceededException -> "REFRESH_RATE_LIMITED"
@@ -205,6 +219,7 @@ class GlobalExceptionHandler {
         is BookingNotFoundException -> "BOOKING_NOT_FOUND"
         is CustomerNotFoundException -> "CUSTOMER_NOT_FOUND"
         is CustomerTagNotFoundException -> "CUSTOMER_TAG_NOT_FOUND"
+        is SalonInviteNotFoundException -> "SALON_INVITE_NOT_FOUND"
         is NoResourceFoundException -> "RESOURCE_NOT_FOUND"
         is SalonAccessDeniedException, is BookingAccessDeniedException, is CustomerAccessDeniedException -> "ACCESS_DENIED"
         is BookingConflictException -> "BOOKING_CONFLICT"
@@ -212,6 +227,11 @@ class GlobalExceptionHandler {
         is InvalidCustomerStateException -> "INVALID_CUSTOMER_STATE"
         is CustomerAlreadyExistsException -> "CUSTOMER_ALREADY_EXISTS"
         is CustomerNotLinkedToAccountException -> "CUSTOMER_NOT_LINKED_TO_ACCOUNT"
+        is SpecialistNotEligibleForServiceException -> "SPECIALIST_NOT_ELIGIBLE_FOR_SERVICE"
+        is SalonSlugAlreadyTakenException -> "SALON_SLUG_ALREADY_TAKEN"
+        is SalonNotReadyForActivationException -> "SALON_NOT_READY_FOR_ACTIVATION"
+        is InvalidMembershipAssignmentException -> "INVALID_MEMBERSHIP_ASSIGNMENT"
+        is SalonNotActiveException -> "SALON_NOT_ACTIVE"
         is IdempotencyKeyConflictException -> "IDEMPOTENCY_KEY_CONFLICT"
         is AmbiguousSalonContextException -> "SALON_CONTEXT_REQUIRED"
         is MethodArgumentNotValidException -> "VALIDATION_FAILED"

@@ -1,6 +1,9 @@
 package ai.rojan.backend.api.salon
 
+import ai.rojan.backend.domain.salon.SalonOnboardingStatus
 import io.swagger.v3.oas.annotations.media.Schema
+import jakarta.validation.constraints.DecimalMax
+import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -33,6 +36,7 @@ data class CreateSalonRequest(
     val address: String,
 )
 
+/** [logoUrl]/[latitude]/[longitude] follow "null means leave unchanged" merge semantics - see `UpdateSalonCommand`'s own doc comment. */
 data class UpdateSalonRequest(
     @field:NotBlank
     @field:Size(max = 255)
@@ -52,6 +56,18 @@ data class UpdateSalonRequest(
     @field:NotBlank
     @field:Size(max = 500)
     val address: String,
+
+    @field:Size(max = 1000)
+    @field:Schema(example = "https://cdn.rojan.ai/logos/glow-salon.png")
+    val logoUrl: String? = null,
+
+    @field:DecimalMin("-90.0")
+    @field:DecimalMax("90.0")
+    val latitude: Double? = null,
+
+    @field:DecimalMin("-180.0")
+    @field:DecimalMax("180.0")
+    val longitude: Double? = null,
 )
 
 data class SalonResponse(
@@ -62,7 +78,19 @@ data class SalonResponse(
     val phone: String,
     val email: String?,
     val address: String,
+    val slug: String,
+    val onboardingStatus: SalonOnboardingStatus,
+    val logoUrl: String?,
+    val latitude: Double?,
+    val longitude: Double?,
     val active: Boolean,
     val createdAt: Instant,
     val updatedAt: Instant,
+)
+
+data class ChangeSalonSlugRequest(
+    @field:NotBlank
+    @field:Size(max = 80)
+    @field:Schema(example = "glow-salon", description = "Normalized (lowercased, non-alphanumeric collapsed to '-') before uniqueness is checked")
+    val slug: String,
 )

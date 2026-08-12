@@ -4,10 +4,16 @@ import ai.rojan.backend.api.common.ApiError
 import ai.rojan.backend.api.common.CurrentUserResolver
 import ai.rojan.backend.api.common.PagedResponse
 import ai.rojan.backend.api.common.toPagedResponse
+import ai.rojan.backend.application.salon.ActivateSalonCommand
+import ai.rojan.backend.application.salon.ActivateSalonUseCase
+import ai.rojan.backend.application.salon.ChangeSalonSlugCommand
+import ai.rojan.backend.application.salon.ChangeSalonSlugUseCase
 import ai.rojan.backend.application.salon.CreateSalonCommand
 import ai.rojan.backend.application.salon.CreateSalonUseCase
 import ai.rojan.backend.application.salon.DeactivateSalonCommand
 import ai.rojan.backend.application.salon.DeactivateSalonUseCase
+import ai.rojan.backend.application.salon.GenerateSalonQrCodeCommand
+import ai.rojan.backend.application.salon.GenerateSalonQrCodeUseCase
 import ai.rojan.backend.application.salon.UpdateSalonCommand
 import ai.rojan.backend.application.salon.UpdateSalonUseCase
 import ai.rojan.backend.domain.common.PageRequest
@@ -24,10 +30,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
@@ -46,6 +55,9 @@ class SalonController(
     private val createSalonUseCase: CreateSalonUseCase,
     private val updateSalonUseCase: UpdateSalonUseCase,
     private val deactivateSalonUseCase: DeactivateSalonUseCase,
+    private val changeSalonSlugUseCase: ChangeSalonSlugUseCase,
+    private val activateSalonUseCase: ActivateSalonUseCase,
+    private val generateSalonQrCodeUseCase: GenerateSalonQrCodeUseCase,
     private val currentUserResolver: CurrentUserResolver,
 ) {
 
@@ -128,6 +140,9 @@ class SalonController(
                 phone = request.phone,
                 email = request.email,
                 address = request.address,
+                logoUrl = request.logoUrl,
+                latitude = request.latitude,
+                longitude = request.longitude,
             ),
         )
         return salon.toResponse()
@@ -141,6 +156,49 @@ class SalonController(
         deactivateSalonUseCase.execute(DeactivateSalonCommand(SalonId(salonId), callerId))
     }
 
+    @PatchMapping("/{salonId}/slug")
+    @Operation(summary = "Change a salon's public slug, e.g. before printing QR material (owner only)")
+    fun changeSlug(
+        @PathVariable salonId: UUID,
+        @Valid @RequestBody request: ChangeSalonSlugRequest,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): SalonResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        val salon = changeSalonSlugUseCase.execute(ChangeSalonSlugCommand(SalonId(salonId), callerId, request.slug))
+        return salon.toResponse()
+    }
+
+    @PostMapping("/{salonId}/activate")
+    @Operation(
+        summary = "Activate a salon so it becomes publicly discoverable (owner only)",
+        description = "Requires at least one active service, one active specialist, and one configured working-hours day - a Salon can be fully managed while DRAFT, it just won't appear via GET /api/v1/public/salons/{slug} until activated.",
+    )
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "Salon is now ACTIVE"),
+        ApiResponse(
+            responseCode = "409",
+            description = "The salon is missing one or more activation requirements",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+    )
+    fun activate(@PathVariable salonId: UUID, @AuthenticationPrincipal principal: UserDetails): SalonResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        val salon = activateSalonUseCase.execute(ActivateSalonCommand(SalonId(salonId), callerId))
+        return salon.toResponse()
+    }
+
+    @GetMapping("/{salonId}/qr-code", produces = [MediaType.IMAGE_PNG_VALUE])
+    @Operation(summary = "Generate a printable QR code (PNG) encoding this salon's public URL (owner only)")
+    fun qrCode(
+        @PathVariable salonId: UUID,
+        @RequestParam(defaultValue = "512") size: Int,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): ResponseEntity<ByteArray> {
+        val callerId = currentUserResolver.resolve(principal)
+        val png = generateSalonQrCodeUseCase.execute(GenerateSalonQrCodeCommand(SalonId(salonId), callerId, size))
+        return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(png)
+    }
+
     private fun findSalonOrThrow(salonId: UUID): Salon =
         salonRepository.findById(SalonId(salonId)) ?: throw SalonNotFoundException(salonId.toString())
 
@@ -152,6 +210,11 @@ class SalonController(
         phone = phone,
         email = email,
         address = address,
+        slug = slug,
+        onboardingStatus = onboardingStatus,
+        logoUrl = logoUrl,
+        latitude = latitude,
+        longitude = longitude,
         active = active,
         createdAt = createdAt,
         updatedAt = updatedAt,

@@ -98,6 +98,9 @@ internal class InMemorySpecialistRepository : SpecialistRepository {
     override fun findBySalonId(salonId: SalonId): List<Specialist> = store.values.filter { it.salonId == salonId }
     override fun findBySalonIdAndUserId(salonId: SalonId, userId: UserId): Specialist? =
         store.values.find { it.salonId == salonId && it.userId == userId }
+
+    override fun findByUserId(userId: UserId): List<Specialist> =
+        store.values.filter { it.userId == userId }
 }
 
 internal class InMemorySalonMembershipRepository : SalonMembershipRepository {
@@ -121,6 +124,8 @@ internal class InMemorySalonMembershipRepository : SalonMembershipRepository {
     override fun findBySalonIdAndUserId(salonId: SalonId, userId: UserId): SalonMembership? = store[salonId to userId]
 
     override fun findBySalonId(salonId: SalonId): List<SalonMembership> = store.values.filter { it.salonId == salonId }
+
+    override fun findByUserId(userId: UserId): List<SalonMembership> = store.values.filter { it.userId == userId }
 }
 
 internal class InMemorySpecialistServiceRepository : SpecialistServiceRepository {

@@ -5,6 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 /** Mobile-First Authentication Phase 1. Every value is the Mobile Auth Architecture proposal's stated default — reasonable starting points, not empirically tuned; override any of them per-environment via the matching env var without touching code. */
 @ConfigurationProperties(prefix = "rojan.security.otp")
 data class OtpProperties(
+    /** Customer login OTP length in digits — the single source of truth for OTP generation, API-level validation bounds, and SMS-provider argument extraction. */
+    val codeLength: Int = 4,
     val ttlSeconds: Long = 120,
     val maxAttempts: Int = 5,
     val resendCooldownSeconds: Long = 60,

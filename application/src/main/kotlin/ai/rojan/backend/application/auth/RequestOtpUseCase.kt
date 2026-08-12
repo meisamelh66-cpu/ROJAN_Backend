@@ -60,7 +60,10 @@ class RequestOtpUseCase(
         }
     }
 
-    private fun generateCode(): String = SECURE_RANDOM.nextInt(1_000_000).toString().padStart(6, '0')
+    private fun generateCode(): String {
+        val bound = Math.pow(10.0, policy.codeLength.toDouble()).toInt()
+        return SECURE_RANDOM.nextInt(bound).toString().padStart(policy.codeLength, '0')
+    }
 
     private companion object {
         val SECURE_RANDOM = SecureRandom()

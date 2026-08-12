@@ -7,6 +7,17 @@ import jakarta.validation.constraints.Size
 
 private const val E164_PATTERN = "^\\+[1-9]\\d{7,14}$"
 
+/**
+ * Structural sanity bound only (digits, 4-8 characters) — the exact expected
+ * length is [ai.rojan.backend.application.auth.OtpPolicy.codeLength], a
+ * single runtime-configurable value the API layer has no compile-time
+ * knowledge of. A code of the wrong length simply won't hash-match what's
+ * stored in Redis and is rejected as an ordinary invalid OTP by
+ * `VerifyOtpUseCase` — duplicating an exact-length check here would just be
+ * a second, harder-to-keep-in-sync source of truth.
+ */
+private const val OTP_CODE_PATTERN = "^\\d{4,8}$"
+
 data class OtpRequestRequest(
     @field:NotBlank
     @field:Pattern(regexp = E164_PATTERN, message = "phoneNumber must be in E.164 format, e.g. +989123456789")
@@ -28,8 +39,8 @@ data class OtpVerifyRequest(
     val phoneNumber: String,
 
     @field:NotBlank
-    @field:Size(min = 6, max = 6)
-    @field:Schema(example = "482913")
+    @field:Pattern(regexp = OTP_CODE_PATTERN, message = "code must be 4-8 digits")
+    @field:Schema(example = "4821")
     val code: String,
 
     @field:Size(max = 255)

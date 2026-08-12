@@ -1,6 +1,9 @@
 package ai.rojan.backend.application.customer
 
+import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
+import ai.rojan.backend.application.salon.InMemorySpecialistRepository
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.common.CustomerAlreadyExistsException
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
@@ -16,7 +19,10 @@ class CreateCustomerUseCaseTest {
 
     private val salonRepository = InMemorySalonRepository()
     private val customerRepository = InMemoryCustomerRepository()
-    private val useCase = CreateCustomerUseCase(salonRepository, customerRepository)
+    private val specialistRepository = InMemorySpecialistRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
+    private val useCase = CreateCustomerUseCase(salonRepository, customerRepository, salonPermissionResolver)
 
     private val ownerId = UserId.new()
     private val salon = Salon.create(ownerId, "Test Salon", null, "0912", null, "Address").also { salonRepository.save(it) }

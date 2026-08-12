@@ -105,6 +105,29 @@ class VerifyOtpUseCaseTest {
     }
 
     @Test
+    fun `accepts a valid 4-digit code`() {
+        issueOtp("4821")
+
+        val result = useCase().execute(VerifyOtpCommand(phoneNumber = "+989123456789", code = "4821", fullName = "Jane Doe"))
+
+        assertEquals(phone, result.user.phoneNumber)
+        assertNull(otpRepository.findByPhoneNumber(phone))
+    }
+
+    @Test
+    fun `rejects a code of the wrong length as an ordinary invalid OTP`() {
+        issueOtp("4821")
+
+        assertThrows<InvalidOtpException> {
+            useCase().execute(VerifyOtpCommand(phoneNumber = "+989123456789", code = "482199"))
+        }
+
+        val stillPending = otpRepository.findByPhoneNumber(phone)
+        assertNotNull(stillPending)
+        assertEquals(4, stillPending!!.attemptsRemaining)
+    }
+
+    @Test
     fun `enforces the per-phone verify rate limit`() {
         issueOtp("123456")
         val rateLimiter = RecordingRateLimiter(deniedKeyPrefixes = setOf("otp:verify:phone:"))
@@ -116,6 +139,7 @@ class VerifyOtpUseCaseTest {
 }
 
 private val defaultTestOtpPolicy = OtpPolicy(
+    codeLength = 4,
     ttlSeconds = 120,
     maxAttempts = 5,
     resendCooldownSeconds = 60,

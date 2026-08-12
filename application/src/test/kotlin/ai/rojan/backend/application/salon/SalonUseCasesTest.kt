@@ -12,12 +12,15 @@ import org.junit.jupiter.api.assertThrows
 class SalonUseCasesTest {
 
     private val salonRepository = InMemorySalonRepository()
+    private val specialistRepository = InMemorySpecialistRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
     private val owner = UserId.new()
     private val stranger = UserId.new()
 
     private val createUseCase = CreateSalonUseCase(salonRepository)
-    private val updateUseCase = UpdateSalonUseCase(salonRepository)
-    private val deactivateUseCase = DeactivateSalonUseCase(salonRepository)
+    private val updateUseCase = UpdateSalonUseCase(salonRepository, salonPermissionResolver)
+    private val deactivateUseCase = DeactivateSalonUseCase(salonRepository, salonPermissionResolver)
 
     private fun createSalon() = createUseCase.execute(
         CreateSalonCommand(

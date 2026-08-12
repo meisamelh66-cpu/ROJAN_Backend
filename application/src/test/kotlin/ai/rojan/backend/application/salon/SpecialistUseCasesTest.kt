@@ -19,6 +19,8 @@ class SpecialistUseCasesTest {
     private val salonRepository = InMemorySalonRepository()
     private val specialistRepository = InMemorySpecialistRepository()
     private val userRepository = InMemorySalonUserRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
     private val owner = UserId.new()
     private val stranger = UserId.new()
 
@@ -26,9 +28,9 @@ class SpecialistUseCasesTest {
         CreateSalonCommand(owner, "Glow Salon", null, "+1 555 0100", null, "1 Main St"),
     )
 
-    private val createUseCase = CreateSpecialistUseCase(salonRepository, specialistRepository, userRepository)
-    private val updateUseCase = UpdateSpecialistUseCase(salonRepository, specialistRepository)
-    private val deactivateUseCase = DeactivateSpecialistUseCase(salonRepository, specialistRepository)
+    private val createUseCase = CreateSpecialistUseCase(salonRepository, specialistRepository, userRepository, salonPermissionResolver)
+    private val updateUseCase = UpdateSpecialistUseCase(salonRepository, specialistRepository, salonPermissionResolver)
+    private val deactivateUseCase = DeactivateSpecialistUseCase(salonRepository, specialistRepository, salonPermissionResolver)
 
     private fun createSpecialist() = createUseCase.execute(
         CreateSpecialistCommand(salon.id, owner, null, "Jamie Stylist", "10 years experience", null),

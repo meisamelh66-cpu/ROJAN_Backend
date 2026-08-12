@@ -7,7 +7,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
-private fun testPolicy() = OtpPolicy(
+private fun testPolicy(codeLength: Int = 4) = OtpPolicy(
+    codeLength = codeLength,
     ttlSeconds = 120,
     maxAttempts = 5,
     resendCooldownSeconds = 60,
@@ -25,11 +26,11 @@ class RequestOtpUseCaseTest {
     private val otpRepository = InMemoryOtpRepository()
     private val smsProvider = RecordingSmsProvider()
 
-    private fun useCase(rateLimiter: RecordingRateLimiter = RecordingRateLimiter()) =
-        RequestOtpUseCase(otpRepository, smsProvider, rateLimiter, testPolicy())
+    private fun useCase(rateLimiter: RecordingRateLimiter = RecordingRateLimiter(), policy: OtpPolicy = testPolicy()) =
+        RequestOtpUseCase(otpRepository, smsProvider, rateLimiter, policy)
 
     @Test
-    fun `issues and stores a hashed 6-digit code, and sends it via the SMS provider`() {
+    fun `issues and stores a hashed 4-digit code by default, and sends it via the SMS provider`() {
         val result = useCase().execute(RequestOtpCommand(phoneNumber = "+989123456789", callerIp = "1.2.3.4"))
 
         assertEquals("+989123456789", result.phoneNumber)
@@ -39,7 +40,21 @@ class RequestOtpUseCaseTest {
         val stored = otpRepository.findByPhoneNumber(PhoneNumber("+989123456789"))
         assertTrue(stored != null)
         val sentCode = smsProvider.lastCodeSentTo(PhoneNumber("+989123456789"))
+        assertEquals(4, sentCode.length)
         assertEquals(stored!!.codeHash, OtpHashing.hash(sentCode))
+    }
+
+    @Test
+    fun `generated code length always matches the configured OtpPolicy codeLength, for any configured length`() {
+        for (configuredLength in listOf(4, 6)) {
+            repeat(10) {
+                useCase(policy = testPolicy(codeLength = configuredLength))
+                    .execute(RequestOtpCommand(phoneNumber = "+989123456780", callerIp = "1.2.3.4"))
+                val sentCode = smsProvider.lastCodeSentTo(PhoneNumber("+989123456780"))
+                assertEquals(configuredLength, sentCode.length)
+                assertTrue(sentCode.all { it.isDigit() })
+            }
+        }
     }
 
     @Test

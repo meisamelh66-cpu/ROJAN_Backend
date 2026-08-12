@@ -1,7 +1,10 @@
 package ai.rojan.backend.application.customer
 
 import ai.rojan.backend.application.booking.InMemoryBookingRepository
+import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
+import ai.rojan.backend.application.salon.InMemorySpecialistRepository
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.common.PageRequest
@@ -25,8 +28,11 @@ class GetCustomerTimelineUseCaseTest {
     private val customerActivityRepository = InMemoryCustomerActivityRepository()
     private val customerNoteRepository = InMemoryCustomerNoteRepository()
     private val bookingRepository = InMemoryBookingRepository()
+    private val specialistRepository = InMemorySpecialistRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
     private val useCase = GetCustomerTimelineUseCase(
-        salonRepository, customerRepository, customerActivityRepository, customerNoteRepository, bookingRepository,
+        salonRepository, customerRepository, customerActivityRepository, customerNoteRepository, bookingRepository, salonPermissionResolver,
     )
 
     private val ownerId = UserId.new()

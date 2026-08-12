@@ -1,12 +1,15 @@
 package ai.rojan.backend.application.booking
 
+import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
 import ai.rojan.backend.application.salon.InMemoryServiceCategoryRepository
 import ai.rojan.backend.application.salon.InMemoryServiceRepository
 import ai.rojan.backend.application.salon.InMemorySpecialistRepository
+import ai.rojan.backend.application.salon.InMemorySpecialistServiceRepository
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.BookingId
 import ai.rojan.backend.domain.booking.BookingStatus
-import ai.rojan.backend.domain.common.BookingAccessDeniedException
+import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.BookingConflictException
 import ai.rojan.backend.domain.common.InvalidBookingStateException
 import ai.rojan.backend.domain.salon.Salon
@@ -27,6 +30,9 @@ class BookingUseCasesTest {
     private val serviceRepository = InMemoryServiceRepository()
     private val specialistRepository = InMemorySpecialistRepository()
     private val bookingRepository = InMemoryBookingRepository()
+    private val specialistServiceRepository = InMemorySpecialistServiceRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
 
     private val owner = UserId.new()
     private val customer = UserId.new()
@@ -39,11 +45,11 @@ class BookingUseCasesTest {
     )
     private val specialist: Specialist = specialistRepository.save(Specialist.create(salon.id, null, "Jamie", null, null))
 
-    private val createUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository)
-    private val confirmUseCase = ConfirmBookingUseCase(bookingRepository, salonRepository)
-    private val cancelUseCase = CancelBookingUseCase(bookingRepository, salonRepository)
-    private val completeUseCase = CompleteBookingUseCase(bookingRepository, salonRepository)
-    private val rescheduleUseCase = RescheduleBookingUseCase(bookingRepository, salonRepository, serviceRepository)
+    private val createUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository)
+    private val confirmUseCase = ConfirmBookingUseCase(bookingRepository, salonPermissionResolver)
+    private val cancelUseCase = CancelBookingUseCase(bookingRepository, salonPermissionResolver)
+    private val completeUseCase = CompleteBookingUseCase(bookingRepository, salonPermissionResolver)
+    private val rescheduleUseCase = RescheduleBookingUseCase(bookingRepository, serviceRepository, salonPermissionResolver)
 
     private val start = LocalDateTime.of(2026, 8, 10, 9, 0)
 
@@ -67,6 +73,29 @@ class BookingUseCasesTest {
     }
 
     @Test
+    fun `a specialist with no service assignments is bookable for any service - backward compatible default`() {
+        val booking = createBooking()
+        assertEquals(BookingStatus.PENDING, booking.status)
+    }
+
+    @Test
+    fun `a specialist assigned to a specific service can still be booked for it`() {
+        specialistServiceRepository.assign(specialist.id, service.id)
+        val booking = createBooking()
+        assertEquals(BookingStatus.PENDING, booking.status)
+    }
+
+    @Test
+    fun `a specialist assigned to a different service is rejected for an unassigned one`() {
+        val otherService = serviceRepository.save(Service.create(salon.id, category.id, "Manicure", null, 30, BigDecimal("15.00")))
+        specialistServiceRepository.assign(specialist.id, otherService.id)
+
+        assertThrows(ai.rojan.backend.domain.common.SpecialistNotEligibleForServiceException::class.java) {
+            createBooking()
+        }
+    }
+
+    @Test
     fun `allows a back-to-back booking that does not overlap`() {
         createBooking()
         val second = createBooking(customerId = otherCustomer, startTime = start.plusMinutes(30))
@@ -83,7 +112,7 @@ class BookingUseCasesTest {
     @Test
     fun `rejects confirmation from the customer (owner only)`() {
         val booking = createBooking()
-        assertThrows(BookingAccessDeniedException::class.java) {
+        assertThrows(SalonAccessDeniedException::class.java) {
             confirmUseCase.execute(ConfirmBookingCommand(booking.id, customer))
         }
     }
@@ -114,7 +143,7 @@ class BookingUseCasesTest {
     @Test
     fun `rejects cancellation from an unrelated user`() {
         val booking = createBooking()
-        assertThrows(BookingAccessDeniedException::class.java) {
+        assertThrows(SalonAccessDeniedException::class.java) {
             cancelUseCase.execute(CancelBookingCommand(booking.id, otherCustomer))
         }
     }

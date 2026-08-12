@@ -19,10 +19,10 @@ import ai.rojan.backend.application.customer.RemoveCustomerTagCommand
 import ai.rojan.backend.application.customer.RemoveCustomerTagUseCase
 import ai.rojan.backend.application.customer.UpdateCustomerCommand
 import ai.rojan.backend.application.customer.UpdateCustomerUseCase
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.booking.BookingStatus
-import ai.rojan.backend.domain.common.CustomerAccessDeniedException
 import ai.rojan.backend.domain.common.CustomerNotFoundException
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.SortDirection
@@ -33,8 +33,8 @@ import ai.rojan.backend.domain.customer.CustomerRepository
 import ai.rojan.backend.domain.customer.CustomerStatus
 import ai.rojan.backend.domain.customer.CustomerTagId
 import ai.rojan.backend.domain.customer.CustomerTagRepository
-import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.ServiceRepository
@@ -84,6 +84,7 @@ class CustomerController(
     private val getCustomerBookingsUseCase: GetCustomerBookingsUseCase,
     private val calculateCustomerLifetimeValueUseCase: CalculateCustomerLifetimeValueUseCase,
     private val currentUserResolver: CurrentUserResolver,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
 
     @GetMapping
@@ -100,7 +101,7 @@ class CustomerController(
     ): PagedResponse<CustomerResponse> {
         val callerId = currentUserResolver.resolve(principal)
         val salon = salonRepository.findById(SalonId(salonId)) ?: throw SalonNotFoundException(salonId.toString())
-        if (salon.ownerId != callerId) throw SalonAccessDeniedException(salon.id.value.toString())
+        salonPermissionResolver.require(salon.id, callerId, Permission.VIEW_CRM)
         val result = customerRepository.findBySalonId(
             salon.id,
             PageRequest(page, size),
@@ -316,9 +317,7 @@ class CustomerController(
      */
     private fun requireOwner(customer: Customer, callerId: UserId) {
         val salon = salonRepository.findById(customer.salonId) ?: throw SalonNotFoundException(customer.salonId.value.toString())
-        if (salon.ownerId != callerId) {
-            throw CustomerAccessDeniedException(customer.id.value.toString())
-        }
+        salonPermissionResolver.require(salon.id, callerId, Permission.VIEW_CRM)
     }
 
     /** Single-customer path (get/create/update/etc.) - O(1) queries already, untouched by the list()-only batching below. */

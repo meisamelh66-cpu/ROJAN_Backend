@@ -123,6 +123,9 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-rojan-ai-backend}
       JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-15}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+      SMS_API_URL: ${SMS_API_URL:?SMS_API_URL must be set to MeliPayamak's send endpoint (without the API key appended) — see .env.example}
+      SMS_API_KEY: ${SMS_API_KEY:?SMS_API_KEY must be set to your MeliPayamak API key — see .env.example}
+      SMS_SENDER: ${SMS_SENDER:?SMS_SENDER must be set to your approved MeliPayamak sender line — see .env.example}
       # Optional Shared Pattern adapter — blank SMS_PROVIDER keeps the default
       # Simple-endpoint adapter active; the two vars below are only required
       # if SMS_PROVIDER=melipayamak-shared.

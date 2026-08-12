@@ -1,10 +1,9 @@
 package ai.rojan.backend.application.schedule
 
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.common.ScheduleOverrideNotFoundException
-import ai.rojan.backend.domain.common.SalonAccessDeniedException
-import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
-import ai.rojan.backend.domain.salon.SalonRepository
+import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.salon.SpecialistRepository
 import ai.rojan.backend.domain.schedule.ScheduleOverrideId
@@ -23,16 +22,14 @@ data class SetScheduleOverrideCommand(
 )
 
 class SetScheduleOverrideUseCase(
-    private val salonRepository: SalonRepository,
     private val specialistRepository: SpecialistRepository,
     private val overrideRepository: SpecialistScheduleOverrideRepository,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
     fun execute(command: SetScheduleOverrideCommand): SpecialistScheduleOverride {
         val specialist = specialistRepository.findById(command.specialistId)
             ?: throw SpecialistNotFoundException(command.specialistId.value.toString())
-        val salon = salonRepository.findById(specialist.salonId)
-            ?: throw SalonNotFoundException(specialist.salonId.value.toString())
-        if (salon.ownerId != command.callerId) throw SalonAccessDeniedException(salon.id.value.toString())
+        salonPermissionResolver.requireCanManageSpecialist(specialist, command.callerId, Permission.MANAGE_SCHEDULE_ALL)
 
         val existing = overrideRepository.findBySpecialistIdAndDate(specialist.id, command.date)
         val override = if (existing != null) {
@@ -51,18 +48,16 @@ data class RemoveScheduleOverrideCommand(
 )
 
 class RemoveScheduleOverrideUseCase(
-    private val salonRepository: SalonRepository,
     private val specialistRepository: SpecialistRepository,
     private val overrideRepository: SpecialistScheduleOverrideRepository,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
     fun execute(command: RemoveScheduleOverrideCommand) {
         val override = overrideRepository.findById(command.overrideId)
             ?: throw ScheduleOverrideNotFoundException(command.overrideId.value.toString())
         val specialist = specialistRepository.findById(override.specialistId)
             ?: throw SpecialistNotFoundException(override.specialistId.value.toString())
-        val salon = salonRepository.findById(specialist.salonId)
-            ?: throw SalonNotFoundException(specialist.salonId.value.toString())
-        if (salon.ownerId != command.callerId) throw SalonAccessDeniedException(salon.id.value.toString())
+        salonPermissionResolver.requireCanManageSpecialist(specialist, command.callerId, Permission.MANAGE_SCHEDULE_ALL)
         overrideRepository.deleteById(override.id)
     }
 }

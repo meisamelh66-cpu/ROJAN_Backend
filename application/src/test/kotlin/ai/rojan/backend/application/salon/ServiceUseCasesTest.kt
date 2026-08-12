@@ -17,19 +17,22 @@ class ServiceUseCasesTest {
     private val salonRepository = InMemorySalonRepository()
     private val categoryRepository = InMemoryServiceCategoryRepository()
     private val serviceRepository = InMemoryServiceRepository()
+    private val specialistRepository = InMemorySpecialistRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
     private val owner = UserId.new()
     private val stranger = UserId.new()
 
     private val salon = CreateSalonUseCase(salonRepository).execute(
         CreateSalonCommand(owner, "Glow Salon", null, "+1 555 0100", null, "1 Main St"),
     )
-    private val category = CreateServiceCategoryUseCase(salonRepository, categoryRepository).execute(
+    private val category = CreateServiceCategoryUseCase(salonRepository, categoryRepository, salonPermissionResolver).execute(
         CreateServiceCategoryCommand(salon.id, owner, "Hair", null),
     )
 
-    private val createUseCase = CreateServiceUseCase(salonRepository, categoryRepository, serviceRepository)
-    private val updateUseCase = UpdateServiceUseCase(salonRepository, serviceRepository)
-    private val deactivateUseCase = DeactivateServiceUseCase(salonRepository, serviceRepository)
+    private val createUseCase = CreateServiceUseCase(salonRepository, categoryRepository, serviceRepository, salonPermissionResolver)
+    private val updateUseCase = UpdateServiceUseCase(salonRepository, serviceRepository, salonPermissionResolver)
+    private val deactivateUseCase = DeactivateServiceUseCase(salonRepository, serviceRepository, salonPermissionResolver)
 
     private fun createService() = createUseCase.execute(
         CreateServiceCommand(

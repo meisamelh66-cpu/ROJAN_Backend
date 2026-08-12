@@ -39,6 +39,12 @@ class SpecialistRepositoryAdapter(
     override fun findBySalonId(salonId: SalonId): List<Specialist> =
         jpaRepository.findBySalonId(salonId.value).map { it.toDomain() }
 
+    override fun findBySalonIdAndUserId(salonId: SalonId, userId: UserId): Specialist? =
+        jpaRepository.findBySalonIdAndUserId(salonId.value, userId.value)?.toDomain()
+
+    override fun findByUserId(userId: UserId): List<Specialist> =
+        jpaRepository.findByUserId(userId.value).map { it.toDomain() }
+
     private fun SpecialistJpaEntity.toDomain(): Specialist = Specialist.reconstitute(
         id = SpecialistId(id),
         salonId = SalonId(salonId),

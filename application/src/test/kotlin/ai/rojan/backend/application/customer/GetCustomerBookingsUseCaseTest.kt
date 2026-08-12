@@ -1,10 +1,13 @@
 package ai.rojan.backend.application.customer
 
 import ai.rojan.backend.application.booking.InMemoryBookingRepository
+import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
+import ai.rojan.backend.application.salon.InMemorySpecialistRepository
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.booking.Booking
-import ai.rojan.backend.domain.common.CustomerAccessDeniedException
+import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.customer.Customer
@@ -23,7 +26,10 @@ class GetCustomerBookingsUseCaseTest {
     private val salonRepository = InMemorySalonRepository()
     private val customerRepository = InMemoryCustomerRepository()
     private val bookingRepository = InMemoryBookingRepository()
-    private val useCase = GetCustomerBookingsUseCase(salonRepository, customerRepository, bookingRepository)
+    private val specialistRepository = InMemorySpecialistRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
+    private val useCase = GetCustomerBookingsUseCase(salonRepository, customerRepository, bookingRepository, salonPermissionResolver)
 
     private val ownerId = UserId.new()
     private val salon = Salon.create(ownerId, "Test Salon", null, "0912", null, "Address").also { salonRepository.save(it) }
@@ -93,7 +99,7 @@ class GetCustomerBookingsUseCaseTest {
         val customer = Customer.create(salon.id, null, "Jane Doe", PhoneNumber("+989123456789"), null, null)
             .also { customerRepository.save(it) }
 
-        assertThrows<CustomerAccessDeniedException> {
+        assertThrows<SalonAccessDeniedException> {
             useCase.execute(GetCustomerBookingsCommand(customer.id, UserId.new(), PageRequest(0, 20), null, SortDirection.DESC))
         }
     }

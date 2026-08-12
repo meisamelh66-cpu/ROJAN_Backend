@@ -26,6 +26,11 @@ class SalonRepositoryAdapter(
                 phone = salon.phone
                 email = salon.email
                 address = salon.address
+                slug = salon.slug
+                onboardingStatus = salon.onboardingStatus
+                logoUrl = salon.logoUrl
+                latitude = salon.latitude
+                longitude = salon.longitude
                 active = salon.active
             }
             ?: SalonJpaEntity(
@@ -36,6 +41,11 @@ class SalonRepositoryAdapter(
                 phone = salon.phone,
                 email = salon.email,
                 address = salon.address,
+                slug = salon.slug,
+                onboardingStatus = salon.onboardingStatus,
+                logoUrl = salon.logoUrl,
+                latitude = salon.latitude,
+                longitude = salon.longitude,
                 active = salon.active,
             )
         return jpaRepository.save(entity).toDomain()
@@ -46,6 +56,12 @@ class SalonRepositoryAdapter(
 
     override fun findByOwnerId(ownerId: UserId): List<Salon> =
         jpaRepository.findByOwnerId(ownerId.value).map { it.toDomain() }
+
+    override fun findBySlug(slug: String): Salon? =
+        jpaRepository.findBySlug(slug)?.toDomain()
+
+    override fun existsBySlug(slug: String): Boolean =
+        jpaRepository.existsBySlug(slug)
 
     override fun findAllActive(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon> {
         val direction = if (sortDirection == SortDirection.ASC) Sort.Direction.ASC else Sort.Direction.DESC
@@ -71,6 +87,11 @@ class SalonRepositoryAdapter(
         phone = phone,
         email = email,
         address = address,
+        slug = slug,
+        onboardingStatus = onboardingStatus,
+        logoUrl = logoUrl,
+        latitude = latitude,
+        longitude = longitude,
         active = active,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,

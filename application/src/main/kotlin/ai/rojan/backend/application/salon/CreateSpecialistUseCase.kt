@@ -1,8 +1,8 @@
 package ai.rojan.backend.application.salon
 
-import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.UserNotFoundException
+import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.Specialist
@@ -23,13 +23,12 @@ class CreateSpecialistUseCase(
     private val salonRepository: SalonRepository,
     private val specialistRepository: SpecialistRepository,
     private val userRepository: UserRepository,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
     fun execute(command: CreateSpecialistCommand): Specialist {
         val salon = salonRepository.findById(command.salonId)
             ?: throw SalonNotFoundException(command.salonId.value.toString())
-        if (salon.ownerId != command.callerId) {
-            throw SalonAccessDeniedException(salon.id.value.toString())
-        }
+        salonPermissionResolver.require(salon.id, command.callerId, Permission.MANAGE_STAFF)
         val userId = command.userId?.also {
             userRepository.findById(it) ?: throw UserNotFoundException(it.value.toString())
         }

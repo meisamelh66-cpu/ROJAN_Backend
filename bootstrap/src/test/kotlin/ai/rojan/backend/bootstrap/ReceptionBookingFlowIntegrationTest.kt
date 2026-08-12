@@ -16,6 +16,8 @@ import ai.rojan.backend.api.salon.SalonResponse
 import ai.rojan.backend.api.salon.ServiceCategoryResponse
 import ai.rojan.backend.api.salon.ServiceResponse
 import ai.rojan.backend.api.salon.SpecialistResponse
+import ai.rojan.backend.api.schedule.SetWorkingHoursRequest
+import ai.rojan.backend.api.schedule.TimeIntervalDto
 import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.booking.BookingStatus
 import ai.rojan.backend.domain.customer.Customer
@@ -38,6 +40,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -127,6 +130,15 @@ class ReceptionBookingFlowIntegrationTest {
         return service to specialist
     }
 
+    private fun activateSalon(ownerToken: String, salonId: UUID) {
+        restTemplate.exchange(
+            url("/api/v1/salons/$salonId/working-hours/MONDAY"), HttpMethod.PUT,
+            HttpEntity(SetWorkingHoursRequest(listOf(TimeIntervalDto(LocalTime.of(9, 0), LocalTime.of(17, 0)))), bearer(ownerToken)),
+            String::class.java,
+        )
+        restTemplate.exchange(url("/api/v1/salons/$salonId/activate"), HttpMethod.POST, HttpEntity<Void>(bearer(ownerToken)), SalonResponse::class.java)
+    }
+
     private fun linkedCustomer(salonId: UUID, userId: UUID, phone: String): Customer =
         customerRepository.save(
             Customer.create(SalonId(salonId), UserId(userId), "Linked Walk-in", PhoneNumber(phone), null, null),
@@ -138,6 +150,7 @@ class ReceptionBookingFlowIntegrationTest {
         val (_, customerUserId) = registerAndLogin(UserRole.CUSTOMER)
         val salon = createSalon(ownerToken, "Glow Salon")
         val (service, specialist) = createServiceAndSpecialist(ownerToken, salon.id)
+        activateSalon(ownerToken, salon.id)
         val customer = linkedCustomer(salon.id, customerUserId, "+989100000001")
 
         val response = restTemplate.exchange(

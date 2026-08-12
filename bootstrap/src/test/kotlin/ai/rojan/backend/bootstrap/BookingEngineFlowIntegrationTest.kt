@@ -141,6 +141,8 @@ class BookingEngineFlowIntegrationTest {
         )
         assertEquals(HttpStatus.OK, weeklyAvailability.statusCode)
 
+        restTemplate.exchange(url("/api/v1/salons/${salon.id}/activate"), HttpMethod.POST, HttpEntity<Void>(bearer(managerToken)), SalonResponse::class.java)
+
         val slotsBeforeBooking = restTemplate.exchange(
             url("/api/v1/salons/${salon.id}/specialists/${specialist.id}/available-slots?serviceId=${service.id}&date=$monday&slotIntervalMinutes=30"),
             HttpMethod.GET,

@@ -5,10 +5,14 @@ import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.user.UserId
 
 interface CustomerRepository {
     fun save(customer: Customer): Customer
     fun findById(id: CustomerId): Customer?
+
+    /** Used by `EnsureCustomerAssociationUseCase` to find-or-create the CRM record behind a self-service booking. */
+    fun findBySalonIdAndUserId(salonId: SalonId, userId: UserId): Customer?
 
     /** A salon's customers, optionally filtered by status/tag/free-text search (name, phone, email), sorted by full name. */
     fun findBySalonId(

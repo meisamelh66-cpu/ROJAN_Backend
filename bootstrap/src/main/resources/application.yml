@@ -68,6 +68,7 @@ rojan:
       refresh-limit-per-ip-window: ${AUTH_REFRESH_LIMIT_PER_IP_WINDOW:30}
       refresh-window-seconds: ${AUTH_REFRESH_WINDOW_SECONDS:300}
     otp:
+      code-length: ${OTP_CODE_LENGTH:4}
       ttl-seconds: ${OTP_TTL_SECONDS:120}
       max-attempts: ${OTP_MAX_ATTEMPTS:5}
       resend-cooldown-seconds: ${OTP_RESEND_COOLDOWN_SECONDS:60}

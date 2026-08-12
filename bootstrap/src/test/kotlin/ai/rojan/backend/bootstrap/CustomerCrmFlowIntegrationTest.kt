@@ -23,6 +23,8 @@ import ai.rojan.backend.api.salon.SalonResponse
 import ai.rojan.backend.api.salon.ServiceCategoryResponse
 import ai.rojan.backend.api.salon.ServiceResponse
 import ai.rojan.backend.api.salon.SpecialistResponse
+import ai.rojan.backend.api.schedule.SetWorkingHoursRequest
+import ai.rojan.backend.api.schedule.TimeIntervalDto
 import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.customer.Customer
 import ai.rojan.backend.domain.customer.CustomerRepository
@@ -46,6 +48,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.util.UUID
 
 /**
@@ -114,6 +117,15 @@ class CustomerCrmFlowIntegrationTest {
             SalonResponse::class.java,
         ).body,
     )
+
+    private fun activateSalon(ownerToken: String, salonId: UUID) {
+        restTemplate.exchange(
+            url("/api/v1/salons/$salonId/working-hours/MONDAY"), HttpMethod.PUT,
+            HttpEntity(SetWorkingHoursRequest(listOf(TimeIntervalDto(LocalTime.of(9, 0), LocalTime.of(17, 0)))), bearer(ownerToken)),
+            String::class.java,
+        )
+        restTemplate.exchange(url("/api/v1/salons/$salonId/activate"), HttpMethod.POST, HttpEntity<Void>(bearer(ownerToken)), SalonResponse::class.java)
+    }
 
     private fun createServiceAndSpecialist(ownerToken: String, salonId: UUID): Pair<ServiceResponse, SpecialistResponse> {
         val category = requireNotNull(
@@ -358,6 +370,8 @@ class CustomerCrmFlowIntegrationTest {
         val salonB = createSalon(ownerToken, "Salon B")
         val (serviceA, specialistA) = createServiceAndSpecialist(ownerToken, salonA.id)
         val (serviceB, specialistB) = createServiceAndSpecialist(ownerToken, salonB.id)
+        activateSalon(ownerToken, salonA.id)
+        activateSalon(ownerToken, salonB.id)
         val customerOfA = linkedCustomer(salonA.id, customerUserId, "+989166000001")
 
         val bookingAtA = requireNotNull(

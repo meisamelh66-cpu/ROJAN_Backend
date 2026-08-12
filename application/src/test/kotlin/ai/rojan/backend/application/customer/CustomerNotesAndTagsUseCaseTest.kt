@@ -1,8 +1,11 @@
 package ai.rojan.backend.application.customer
 
+import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
+import ai.rojan.backend.application.salon.InMemorySpecialistRepository
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.auth.PhoneNumber
-import ai.rojan.backend.domain.common.CustomerAccessDeniedException
+import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.CustomerTagNotFoundException
 import ai.rojan.backend.domain.customer.Customer
 import ai.rojan.backend.domain.customer.CustomerActivityType
@@ -22,6 +25,9 @@ class CustomerNotesAndTagsUseCaseTest {
     private val customerNoteRepository = InMemoryCustomerNoteRepository()
     private val customerTagRepository = InMemoryCustomerTagRepository()
     private val customerActivityRepository = InMemoryCustomerActivityRepository()
+    private val specialistRepository = InMemorySpecialistRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
 
     private val ownerId = UserId.new()
     private val salon = Salon.create(ownerId, "Test Salon", null, "0912", null, "Address").also { salonRepository.save(it) }
@@ -30,7 +36,7 @@ class CustomerNotesAndTagsUseCaseTest {
 
     @Test
     fun `AddCustomerNoteUseCase saves the note authored by the caller`() {
-        val useCase = AddCustomerNoteUseCase(salonRepository, customerRepository, customerNoteRepository)
+        val useCase = AddCustomerNoteUseCase(salonRepository, customerRepository, customerNoteRepository, salonPermissionResolver)
 
         val note = useCase.execute(AddCustomerNoteCommand(customer.id, ownerId, "Prefers morning appointments"))
 
@@ -41,16 +47,16 @@ class CustomerNotesAndTagsUseCaseTest {
 
     @Test
     fun `AddCustomerNoteUseCase rejects a caller who does not own the salon`() {
-        val useCase = AddCustomerNoteUseCase(salonRepository, customerRepository, customerNoteRepository)
+        val useCase = AddCustomerNoteUseCase(salonRepository, customerRepository, customerNoteRepository, salonPermissionResolver)
 
-        assertThrows<CustomerAccessDeniedException> {
+        assertThrows<SalonAccessDeniedException> {
             useCase.execute(AddCustomerNoteCommand(customer.id, UserId.new(), "text"))
         }
     }
 
     @Test
     fun `AddCustomerTagUseCase saves the tag and records a TAG_ADDED activity`() {
-        val useCase = AddCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository)
+        val useCase = AddCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository, salonPermissionResolver)
 
         val tag = useCase.execute(AddCustomerTagCommand(customer.id, ownerId, "VIP"))
 
@@ -61,8 +67,8 @@ class CustomerNotesAndTagsUseCaseTest {
 
     @Test
     fun `RemoveCustomerTagUseCase deletes the tag and records a TAG_REMOVED activity`() {
-        val addUseCase = AddCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository)
-        val removeUseCase = RemoveCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository)
+        val addUseCase = AddCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository, salonPermissionResolver)
+        val removeUseCase = RemoveCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository, salonPermissionResolver)
         val tag = addUseCase.execute(AddCustomerTagCommand(customer.id, ownerId, "VIP"))
 
         removeUseCase.execute(RemoveCustomerTagCommand(customer.id, tag.id, ownerId))
@@ -76,8 +82,8 @@ class CustomerNotesAndTagsUseCaseTest {
     fun `RemoveCustomerTagUseCase rejects a tag that does not belong to this customer`() {
         val otherCustomer = Customer.create(salon.id, null, "Other Person", PhoneNumber("+989999999999"), null, null)
             .also { customerRepository.save(it) }
-        val addUseCase = AddCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository)
-        val removeUseCase = RemoveCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository)
+        val addUseCase = AddCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository, salonPermissionResolver)
+        val removeUseCase = RemoveCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository, salonPermissionResolver)
         val tagOnOtherCustomer = addUseCase.execute(AddCustomerTagCommand(otherCustomer.id, ownerId, "VIP"))
 
         assertThrows<CustomerTagNotFoundException> {
@@ -87,7 +93,7 @@ class CustomerNotesAndTagsUseCaseTest {
 
     @Test
     fun `RemoveCustomerTagUseCase rejects an unknown tag id`() {
-        val useCase = RemoveCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository)
+        val useCase = RemoveCustomerTagUseCase(salonRepository, customerRepository, customerTagRepository, customerActivityRepository, salonPermissionResolver)
 
         assertThrows<CustomerTagNotFoundException> {
             useCase.execute(RemoveCustomerTagCommand(customer.id, CustomerTagId.new(), ownerId))

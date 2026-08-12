@@ -1,6 +1,9 @@
 package ai.rojan.backend.application.schedule
 
+import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
+import ai.rojan.backend.application.salon.InMemorySpecialistRepository
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.salon.Salon
@@ -18,6 +21,9 @@ class WorkingHoursUseCasesTest {
 
     private val salonRepository = InMemorySalonRepository()
     private val workingHoursRepository = InMemoryWorkingHoursRepository()
+    private val specialistRepository = InMemorySpecialistRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
     private val owner = UserId.new()
     private val stranger = UserId.new()
 
@@ -25,8 +31,8 @@ class WorkingHoursUseCasesTest {
         Salon.create(owner, "Glow Salon", null, "+1 555 0100", null, "1 Main St"),
     )
 
-    private val setUseCase = SetWorkingHoursUseCase(salonRepository, workingHoursRepository)
-    private val removeUseCase = RemoveWorkingHoursUseCase(salonRepository, workingHoursRepository)
+    private val setUseCase = SetWorkingHoursUseCase(salonRepository, workingHoursRepository, salonPermissionResolver)
+    private val removeUseCase = RemoveWorkingHoursUseCase(salonRepository, workingHoursRepository, salonPermissionResolver)
 
     private val mondayIntervals = listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(17, 0)))
 

@@ -61,4 +61,6 @@ interface CustomerSpringDataRepository : JpaRepository<CustomerJpaEntity, UUID> 
     ): Page<CustomerJpaEntity>
 
     fun existsBySalonIdAndPhoneNumber(salonId: UUID, phoneNumber: String): Boolean
+
+    fun findBySalonIdAndUserId(salonId: UUID, userId: UUID): CustomerJpaEntity?
 }
