@@ -16,7 +16,7 @@ RUN useradd --uid 10001 --shell /usr/sbin/nologin --no-create-home rojan
 # JAR is built on the host (gradlew.bat :bootstrap:bootJar) and copied in
 # as-is — Gradle no longer runs inside Docker. See .dockerignore for the
 # matching exception that lets this path through the build context.
-COPY bootstrap/build/libs/bootstrap-0.1.0-SNAPSHOT.jar app.jar
+COPY bootstrap/build/libs/bootstrap-1.0.0.jar app.jar
 RUN chown rojan:rojan app.jar
 
 # Bind-mounted to /opt/rojan/logs by docker-compose.prod.yml — created and
