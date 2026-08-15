@@ -123,7 +123,7 @@ class ReceptionBookingFlowIntegrationTest {
             restTemplate.exchange(
                 url("/api/v1/salons/$salonId/specialists"),
                 HttpMethod.POST,
-                HttpEntity(CreateSpecialistRequest(null, "Jamie Stylist", null, null), bearer(ownerToken)),
+                HttpEntity(CreateSpecialistRequest(null, "Jamie Stylist", null, null, "+989120000013", "Stylist"), bearer(ownerToken)),
                 SpecialistResponse::class.java,
             ).body,
         )

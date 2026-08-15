@@ -33,6 +33,12 @@ class SpecialistJpaEntity(
     @Column(name = "photo_url", nullable = true)
     var photoUrl: String?,
 
+    @Column(name = "mobile_number", nullable = true)
+    var mobileNumber: String?,
+
+    @Column(nullable = true)
+    var specialty: String?,
+
     @Column(nullable = false)
     var active: Boolean,
 ) {

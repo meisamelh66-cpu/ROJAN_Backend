@@ -184,7 +184,7 @@ class ProductionReadinessValidationIntegrationTest {
         restTemplate.exchange(
             url("/api/v1/salons/$salonId/specialists"),
             HttpMethod.POST,
-            HttpEntity(CreateSpecialistRequest(null, displayName, null, null), bearer(ownerToken)),
+            HttpEntity(CreateSpecialistRequest(null, displayName, null, null, "+989120000012", "Stylist"), bearer(ownerToken)),
             SpecialistResponse::class.java,
         ).body,
     )

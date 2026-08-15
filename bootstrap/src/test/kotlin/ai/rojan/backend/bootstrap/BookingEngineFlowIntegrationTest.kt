@@ -118,7 +118,7 @@ class BookingEngineFlowIntegrationTest {
             restTemplate.exchange(
                 url("/api/v1/salons/${salon.id}/specialists"),
                 HttpMethod.POST,
-                HttpEntity(CreateSpecialistRequest(null, "Jamie Stylist", null, null), bearer(managerToken)),
+                HttpEntity(CreateSpecialistRequest(null, "Jamie Stylist", null, null, "+989120000006", "Stylist"), bearer(managerToken)),
                 SpecialistResponse::class.java,
             ).body,
         )
@@ -241,7 +241,7 @@ class BookingEngineFlowIntegrationTest {
             restTemplate.exchange(
                 url("/api/v1/salons/${salon.id}/specialists"),
                 HttpMethod.POST,
-                HttpEntity(CreateSpecialistRequest(null, "On Leave Stylist", null, null), bearer(managerToken)),
+                HttpEntity(CreateSpecialistRequest(null, "On Leave Stylist", null, null, "+989120000007", "Stylist"), bearer(managerToken)),
                 SpecialistResponse::class.java,
             ).body,
         )

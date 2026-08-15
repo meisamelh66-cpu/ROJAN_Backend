@@ -176,7 +176,7 @@ class ApiHardeningIntegrationTest {
             restTemplate.exchange(
                 url("/api/v1/salons/${salon.id}/specialists"),
                 HttpMethod.POST,
-                HttpEntity(CreateSpecialistRequest(null, "Filter Stylist", null, null), bearer(managerToken)),
+                HttpEntity(CreateSpecialistRequest(null, "Filter Stylist", null, null, "+989120000008", "Stylist"), bearer(managerToken)),
                 SpecialistResponse::class.java,
             ).body,
         )
@@ -284,7 +284,7 @@ class ApiHardeningIntegrationTest {
             restTemplate.exchange(
                 url("/api/v1/salons/${salon.id}/specialists"),
                 HttpMethod.POST,
-                HttpEntity(CreateSpecialistRequest(null, "Private Stylist", null, null), bearer(managerToken)),
+                HttpEntity(CreateSpecialistRequest(null, "Private Stylist", null, null, "+989120000009", "Stylist"), bearer(managerToken)),
                 SpecialistResponse::class.java,
             ).body,
         )
@@ -328,7 +328,7 @@ class ApiHardeningIntegrationTest {
             restTemplate.exchange(
                 url("/api/v1/salons/${salon.id}/specialists"),
                 HttpMethod.POST,
-                HttpEntity(CreateSpecialistRequest(null, "Stylist", null, null), bearer(ownerToken)),
+                HttpEntity(CreateSpecialistRequest(null, "Stylist", null, null, "+989120000010", "Stylist"), bearer(ownerToken)),
                 SpecialistResponse::class.java,
             ).body,
         )
@@ -374,7 +374,7 @@ class ApiHardeningIntegrationTest {
             restTemplate.exchange(
                 url("/api/v1/salons/${salon.id}/specialists"),
                 HttpMethod.POST,
-                HttpEntity(CreateSpecialistRequest(null, "Idempotent Stylist", null, null), bearer(managerToken)),
+                HttpEntity(CreateSpecialistRequest(null, "Idempotent Stylist", null, null, "+989120000011", "Stylist"), bearer(managerToken)),
                 SpecialistResponse::class.java,
             ).body,
         )

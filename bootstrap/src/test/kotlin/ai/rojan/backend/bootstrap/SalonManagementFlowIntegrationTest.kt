@@ -125,12 +125,14 @@ class SalonManagementFlowIntegrationTest {
             url("/api/v1/salons/${salon.id}/specialists"),
             HttpMethod.POST,
             HttpEntity(
-                CreateSpecialistRequest(null, "Jamie Stylist", "10 years experience", null),
+                CreateSpecialistRequest(null, "Jamie Stylist", "10 years experience", null, "+989120000004", "Hair Stylist"),
                 bearer(ownerToken),
             ),
             SpecialistResponse::class.java,
         )
         assertEquals(HttpStatus.CREATED, createSpecialist.statusCode)
+        assertEquals("+989120000004", createSpecialist.body?.mobileNumber)
+        assertEquals("Hair Stylist", createSpecialist.body?.specialty)
 
         val updateSalon = restTemplate.exchange(
             url("/api/v1/salons/${salon.id}"),

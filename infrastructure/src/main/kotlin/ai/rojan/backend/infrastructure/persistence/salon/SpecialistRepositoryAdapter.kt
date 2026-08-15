@@ -1,5 +1,6 @@
 package ai.rojan.backend.infrastructure.persistence.salon
 
+import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.Specialist
 import ai.rojan.backend.domain.salon.SpecialistId
@@ -19,6 +20,8 @@ class SpecialistRepositoryAdapter(
                 displayName = specialist.displayName
                 bio = specialist.bio
                 photoUrl = specialist.photoUrl
+                mobileNumber = specialist.mobileNumber?.value
+                specialty = specialist.specialty
                 active = specialist.active
             }
             ?: SpecialistJpaEntity(
@@ -28,6 +31,8 @@ class SpecialistRepositoryAdapter(
                 displayName = specialist.displayName,
                 bio = specialist.bio,
                 photoUrl = specialist.photoUrl,
+                mobileNumber = specialist.mobileNumber?.value,
+                specialty = specialist.specialty,
                 active = specialist.active,
             )
         return jpaRepository.save(entity).toDomain()
@@ -52,6 +57,8 @@ class SpecialistRepositoryAdapter(
         displayName = displayName,
         bio = bio,
         photoUrl = photoUrl,
+        mobileNumber = mobileNumber?.let { PhoneNumber(it) },
+        specialty = specialty,
         active = active,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,

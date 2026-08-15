@@ -1,5 +1,6 @@
 package ai.rojan.backend.application.salon
 
+import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.salon.Permission
@@ -15,6 +16,8 @@ data class UpdateSpecialistCommand(
     val displayName: String,
     val bio: String?,
     val photoUrl: String?,
+    val mobileNumber: PhoneNumber,
+    val specialty: String,
 )
 
 class UpdateSpecialistUseCase(
@@ -28,7 +31,13 @@ class UpdateSpecialistUseCase(
         val salon = salonRepository.findById(specialist.salonId)
             ?: throw SalonNotFoundException(specialist.salonId.value.toString())
         salonPermissionResolver.require(salon.id, command.callerId, Permission.MANAGE_STAFF)
-        specialist.update(displayName = command.displayName, bio = command.bio, photoUrl = command.photoUrl)
+        specialist.update(
+            displayName = command.displayName,
+            bio = command.bio,
+            photoUrl = command.photoUrl,
+            mobileNumber = command.mobileNumber,
+            specialty = command.specialty,
+        )
         return specialistRepository.save(specialist)
     }
 }

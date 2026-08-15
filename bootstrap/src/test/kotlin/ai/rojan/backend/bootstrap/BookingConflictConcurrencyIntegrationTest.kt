@@ -106,7 +106,7 @@ class BookingConflictConcurrencyIntegrationTest {
             restTemplate.exchange(
                 url("/api/v1/salons/${salon.id}/specialists"),
                 HttpMethod.POST,
-                HttpEntity(CreateSpecialistRequest(null, "Contested Stylist", null, null), bearer(managerToken)),
+                HttpEntity(CreateSpecialistRequest(null, "Contested Stylist", null, null, "+989120000003", "Stylist"), bearer(managerToken)),
                 SpecialistResponse::class.java,
             ).body,
         )

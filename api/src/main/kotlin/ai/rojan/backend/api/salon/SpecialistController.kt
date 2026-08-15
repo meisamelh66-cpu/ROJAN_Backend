@@ -11,6 +11,7 @@ import ai.rojan.backend.application.salon.RemoveServiceFromSpecialistCommand
 import ai.rojan.backend.application.salon.RemoveServiceFromSpecialistUseCase
 import ai.rojan.backend.application.salon.UpdateSpecialistCommand
 import ai.rojan.backend.application.salon.UpdateSpecialistUseCase
+import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.ServiceId
@@ -67,6 +68,8 @@ class SpecialistController(
                 displayName = request.displayName,
                 bio = request.bio,
                 photoUrl = request.photoUrl,
+                mobileNumber = PhoneNumber(request.mobileNumber),
+                specialty = request.specialty,
             ),
         )
         return specialist.toResponse()
@@ -99,6 +102,8 @@ class SpecialistController(
                 displayName = request.displayName,
                 bio = request.bio,
                 photoUrl = request.photoUrl,
+                mobileNumber = PhoneNumber(request.mobileNumber),
+                specialty = request.specialty,
             ),
         )
         return updated.toResponse()
@@ -165,6 +170,8 @@ class SpecialistController(
         displayName = displayName,
         bio = bio,
         photoUrl = photoUrl,
+        mobileNumber = mobileNumber?.value,
+        specialty = specialty,
         active = active,
         createdAt = createdAt,
         updatedAt = updatedAt,

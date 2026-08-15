@@ -1,5 +1,6 @@
 package ai.rojan.backend.application.salon
 
+import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.common.UserNotFoundException
@@ -23,6 +24,7 @@ class SpecialistUseCasesTest {
     private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
     private val owner = UserId.new()
     private val stranger = UserId.new()
+    private val testMobile = PhoneNumber("+989120000000")
 
     private val salon = CreateSalonUseCase(salonRepository).execute(
         CreateSalonCommand(owner, "Glow Salon", null, "+1 555 0100", null, "1 Main St"),
@@ -33,7 +35,7 @@ class SpecialistUseCasesTest {
     private val deactivateUseCase = DeactivateSpecialistUseCase(salonRepository, specialistRepository, salonPermissionResolver)
 
     private fun createSpecialist() = createUseCase.execute(
-        CreateSpecialistCommand(salon.id, owner, null, "Jamie Stylist", "10 years experience", null),
+        CreateSpecialistCommand(salon.id, owner, null, "Jamie Stylist", "10 years experience", null, testMobile, "Hair Stylist"),
     )
 
     @Test
@@ -51,7 +53,7 @@ class SpecialistUseCasesTest {
         userRepository.register(staffUser)
 
         val specialist = createUseCase.execute(
-            CreateSpecialistCommand(salon.id, owner, staffUser.id, "Staff Member", null, null),
+            CreateSpecialistCommand(salon.id, owner, staffUser.id, "Staff Member", null, null, testMobile, "Colorist"),
         )
 
         assertEquals(staffUser.id, specialist.userId)
@@ -60,15 +62,23 @@ class SpecialistUseCasesTest {
     @Test
     fun `rejects linking a specialist to a non-existent user`() {
         assertThrows<UserNotFoundException> {
-            createUseCase.execute(CreateSpecialistCommand(salon.id, owner, UserId.new(), "Ghost", null, null))
+            createUseCase.execute(CreateSpecialistCommand(salon.id, owner, UserId.new(), "Ghost", null, null, testMobile, "Barber"))
         }
     }
 
     @Test
     fun `rejects adding a specialist to a salon the caller does not own`() {
         assertThrows<SalonAccessDeniedException> {
-            createUseCase.execute(CreateSpecialistCommand(salon.id, stranger, null, "Intruder", null, null))
+            createUseCase.execute(CreateSpecialistCommand(salon.id, stranger, null, "Intruder", null, null, testMobile, "Barber"))
         }
+    }
+
+    @Test
+    fun `owner can add a specialist with mobile number and specialty`() {
+        val specialist = createSpecialist()
+
+        assertEquals(testMobile, specialist.mobileNumber)
+        assertEquals("Hair Stylist", specialist.specialty)
     }
 
     @Test
@@ -76,16 +86,17 @@ class SpecialistUseCasesTest {
         val specialist = createSpecialist()
 
         val updated = updateUseCase.execute(
-            UpdateSpecialistCommand(specialist.id, owner, "Jamie Senior Stylist", "15 years experience", null),
+            UpdateSpecialistCommand(specialist.id, owner, "Jamie Senior Stylist", "15 years experience", null, testMobile, "Senior Stylist"),
         )
 
         assertEquals("Jamie Senior Stylist", updated.displayName)
+        assertEquals("Senior Stylist", updated.specialty)
     }
 
     @Test
     fun `update fails for an unknown specialist`() {
         assertThrows<SpecialistNotFoundException> {
-            updateUseCase.execute(UpdateSpecialistCommand(SpecialistId.new(), owner, "Ghost", null, null))
+            updateUseCase.execute(UpdateSpecialistCommand(SpecialistId.new(), owner, "Ghost", null, null, testMobile, "Barber"))
         }
     }
 

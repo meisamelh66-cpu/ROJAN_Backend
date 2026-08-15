@@ -1,5 +1,6 @@
 package ai.rojan.backend.application.salon
 
+import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.salon.Permission
@@ -17,6 +18,8 @@ data class CreateSpecialistCommand(
     val displayName: String,
     val bio: String?,
     val photoUrl: String?,
+    val mobileNumber: PhoneNumber,
+    val specialty: String,
 )
 
 class CreateSpecialistUseCase(
@@ -39,6 +42,8 @@ class CreateSpecialistUseCase(
             displayName = command.displayName,
             bio = command.bio,
             photoUrl = command.photoUrl,
+            mobileNumber = command.mobileNumber,
+            specialty = command.specialty,
         )
         return specialistRepository.save(specialist)
     }

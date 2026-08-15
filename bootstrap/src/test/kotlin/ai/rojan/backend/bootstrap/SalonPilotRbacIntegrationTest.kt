@@ -172,7 +172,7 @@ class SalonPilotRbacIntegrationTest {
         restTemplate.exchange(
             url("/api/v1/salons/$salonId/specialists"),
             HttpMethod.POST,
-            HttpEntity(CreateSpecialistRequest(userId, displayName, null, null), bearer(ownerToken)),
+            HttpEntity(CreateSpecialistRequest(userId, displayName, null, null, "+989120000002", "Stylist"), bearer(ownerToken)),
             SpecialistResponse::class.java,
         ).body,
     )
