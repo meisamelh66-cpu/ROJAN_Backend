@@ -121,9 +121,20 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-rojan-ai-backend}
       JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-15}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
-      # Optional Shared Pattern adapter — blank SMS_PROVIDER keeps the default
-      # Simple-endpoint adapter active; the two vars below are only required
-      # if SMS_PROVIDER=melipayamak-shared.
+      # RealSmsProviderAdapter (the Simple-endpoint adapter) is always
+      # instantiated and its properties bind eagerly at Spring startup in
+      # every non-test profile, regardless of SMS_PROVIDER's value — see
+      # SmsProperties.kt's own doc comment ("no defaults on purpose...
+      # startup must fail loudly if these are unset"). These three are
+      # therefore required unconditionally, not only when SMS_PROVIDER is
+      # blank.
+      SMS_API_URL: ${SMS_API_URL:?SMS_API_URL must be set — see .env.example}
+      SMS_API_KEY: ${SMS_API_KEY:?SMS_API_KEY must be set — see .env.example}
+      SMS_SENDER: ${SMS_SENDER:?SMS_SENDER must be set — see .env.example}
+      # Optional Shared Pattern adapter — set SMS_PROVIDER=melipayamak-shared
+      # to make MeliPayamakSharedPatternProvider @Primary instead of the
+      # Simple-endpoint adapter above (both remain instantiated either way,
+      # per SmsProviderSelectionTest.kt).
       SMS_PROVIDER: ${SMS_PROVIDER:-}
       MELIPAYAMAK_API_KEY: ${MELIPAYAMAK_API_KEY:-}
       MELIPAYAMAK_BODY_ID: ${MELIPAYAMAK_BODY_ID:-}
