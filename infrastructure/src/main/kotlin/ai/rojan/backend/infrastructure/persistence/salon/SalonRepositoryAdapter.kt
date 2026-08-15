@@ -3,6 +3,7 @@ package ai.rojan.backend.infrastructure.persistence.salon
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.SortDirection
+import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
@@ -32,6 +33,8 @@ class SalonRepositoryAdapter(
                 latitude = salon.latitude
                 longitude = salon.longitude
                 active = salon.active
+                logoMediaId = salon.logoMediaId?.value
+                coverMediaId = salon.coverMediaId?.value
             }
             ?: SalonJpaEntity(
                 id = salon.id.value,
@@ -47,6 +50,8 @@ class SalonRepositoryAdapter(
                 latitude = salon.latitude,
                 longitude = salon.longitude,
                 active = salon.active,
+                logoMediaId = salon.logoMediaId?.value,
+                coverMediaId = salon.coverMediaId?.value,
             )
         return jpaRepository.save(entity).toDomain()
     }
@@ -93,6 +98,8 @@ class SalonRepositoryAdapter(
         latitude = latitude,
         longitude = longitude,
         active = active,
+        logoMediaId = logoMediaId?.let { MediaAssetId(it) },
+        coverMediaId = coverMediaId?.let { MediaAssetId(it) },
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
     )

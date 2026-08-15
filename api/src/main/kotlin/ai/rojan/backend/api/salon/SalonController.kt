@@ -4,6 +4,8 @@ import ai.rojan.backend.api.common.ApiError
 import ai.rojan.backend.api.common.CurrentUserResolver
 import ai.rojan.backend.api.common.PagedResponse
 import ai.rojan.backend.api.common.toPagedResponse
+import ai.rojan.backend.application.media.AssignSalonIdentityMediaCommand
+import ai.rojan.backend.application.media.AssignSalonIdentityMediaUseCase
 import ai.rojan.backend.application.salon.ActivateSalonCommand
 import ai.rojan.backend.application.salon.ActivateSalonUseCase
 import ai.rojan.backend.application.salon.ChangeSalonSlugCommand
@@ -19,6 +21,8 @@ import ai.rojan.backend.application.salon.UpdateSalonUseCase
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.SortDirection
+import ai.rojan.backend.domain.media.MediaAssetId
+import ai.rojan.backend.domain.media.MediaAssetRepository
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
@@ -58,6 +62,8 @@ class SalonController(
     private val changeSalonSlugUseCase: ChangeSalonSlugUseCase,
     private val activateSalonUseCase: ActivateSalonUseCase,
     private val generateSalonQrCodeUseCase: GenerateSalonQrCodeUseCase,
+    private val assignSalonIdentityMediaUseCase: AssignSalonIdentityMediaUseCase,
+    private val mediaAssetRepository: MediaAssetRepository,
     private val currentUserResolver: CurrentUserResolver,
 ) {
 
@@ -187,6 +193,28 @@ class SalonController(
         return salon.toResponse()
     }
 
+    @PutMapping("/{salonId}/identity-media")
+    @Operation(
+        summary = "Assign an already-uploaded media asset as this salon's logo/cover (owner only)",
+        description = "The referenced media id(s) must already exist and belong to this salon (POST /{salonId}/media first) - explicit null clears that slot.",
+    )
+    fun assignIdentityMedia(
+        @PathVariable salonId: UUID,
+        @RequestBody request: AssignSalonIdentityMediaRequest,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): SalonResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        val salon = assignSalonIdentityMediaUseCase.execute(
+            AssignSalonIdentityMediaCommand(
+                salonId = SalonId(salonId),
+                callerId = callerId,
+                logoMediaId = request.logoMediaId?.let { MediaAssetId(it) },
+                coverMediaId = request.coverMediaId?.let { MediaAssetId(it) },
+            ),
+        )
+        return salon.toResponse()
+    }
+
     @GetMapping("/{salonId}/qr-code", produces = [MediaType.IMAGE_PNG_VALUE])
     @Operation(summary = "Generate a printable QR code (PNG) encoding this salon's public URL (owner only)")
     fun qrCode(
@@ -202,21 +230,37 @@ class SalonController(
     private fun findSalonOrThrow(salonId: UUID): Salon =
         salonRepository.findById(SalonId(salonId)) ?: throw SalonNotFoundException(salonId.toString())
 
-    private fun Salon.toResponse() = SalonResponse(
-        id = id.value,
-        ownerId = ownerId.value,
-        name = name,
-        description = description,
-        phone = phone,
-        email = email,
-        address = address,
-        slug = slug,
-        onboardingStatus = onboardingStatus,
-        logoUrl = logoUrl,
-        latitude = latitude,
-        longitude = longitude,
-        active = active,
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-    )
+    /**
+     * [logoUrl]/[coverUrl] resolution: [Salon.logoMediaId]/[Salon.coverMediaId]
+     * win when set (real upload), falling back to the legacy raw
+     * [Salon.logoUrl] string only for [logoUrl] (there is no legacy cover
+     * field). One extra lookup per reference per response - accepted for
+     * this phase; batching would only matter once salon lists get large
+     * enough for it to show up, not yet the case for a single-pilot-salon
+     * deployment.
+     */
+    private fun Salon.toResponse(): SalonResponse {
+        val resolvedLogoUrl = logoMediaId?.let { mediaAssetRepository.findById(it)?.url } ?: logoUrl
+        val resolvedCoverUrl = coverMediaId?.let { mediaAssetRepository.findById(it)?.url }
+        return SalonResponse(
+            id = id.value,
+            ownerId = ownerId.value,
+            name = name,
+            description = description,
+            phone = phone,
+            email = email,
+            address = address,
+            slug = slug,
+            onboardingStatus = onboardingStatus,
+            logoUrl = resolvedLogoUrl,
+            coverUrl = resolvedCoverUrl,
+            logoMediaId = logoMediaId?.value,
+            coverMediaId = coverMediaId?.value,
+            latitude = latitude,
+            longitude = longitude,
+            active = active,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+        )
+    }
 }

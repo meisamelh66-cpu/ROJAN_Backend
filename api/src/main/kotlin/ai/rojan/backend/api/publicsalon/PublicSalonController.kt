@@ -4,6 +4,9 @@ import ai.rojan.backend.api.booking.TimeSlotResponse
 import ai.rojan.backend.application.booking.GetAvailableSlotsQuery
 import ai.rojan.backend.application.booking.GetAvailableSlotsUseCase
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.media.MediaAsset
+import ai.rojan.backend.domain.media.MediaAssetRepository
+import ai.rojan.backend.domain.media.MediaType
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonOnboardingStatus
 import ai.rojan.backend.domain.salon.SalonRepository
@@ -45,6 +48,7 @@ class PublicSalonController(
     private val serviceCategoryRepository: ServiceCategoryRepository,
     private val serviceRepository: ServiceRepository,
     private val specialistRepository: SpecialistRepository,
+    private val mediaAssetRepository: MediaAssetRepository,
     private val getAvailableSlotsUseCase: GetAvailableSlotsUseCase,
 ) {
 
@@ -75,6 +79,15 @@ class PublicSalonController(
         return specialistRepository.findBySalonId(salon.id).filter { it.active }.map { it.toResponse() }
     }
 
+    @GetMapping("/gallery")
+    @Operation(summary = "Browse a salon's public gallery and portfolio images - Salon Identity Foundation Phase C")
+    fun gallery(@PathVariable slug: String): List<PublicMediaAssetResponse> {
+        val salon = findSalonOrThrow(slug)
+        val gallery = mediaAssetRepository.findBySalonIdAndMediaType(salon.id, MediaType.GALLERY)
+        val portfolio = mediaAssetRepository.findBySalonIdAndMediaType(salon.id, MediaType.PORTFOLIO)
+        return (gallery + portfolio).map { it.toResponse() }
+    }
+
     @GetMapping("/specialists/{specialistId}/available-slots")
     @Operation(summary = "Compute bookable time slots for a specialist and service on a date - same engine as the authenticated endpoint")
     fun availableSlots(
@@ -103,11 +116,18 @@ class PublicSalonController(
             ?.takeIf { it.active && it.onboardingStatus == SalonOnboardingStatus.ACTIVE }
             ?: throw SalonNotFoundException(slug)
 
-    private fun Salon.toResponse() = PublicSalonResponse(id.value, name, description, phone, address, logoUrl, latitude, longitude)
+    /** Same logoMediaId/coverMediaId-wins-over-legacy-string resolution as `SalonController.toResponse` - see that one's doc comment. */
+    private fun Salon.toResponse(): PublicSalonResponse {
+        val resolvedLogoUrl = logoMediaId?.let { mediaAssetRepository.findById(it)?.url } ?: logoUrl
+        val resolvedCoverUrl = coverMediaId?.let { mediaAssetRepository.findById(it)?.url }
+        return PublicSalonResponse(id.value, name, description, phone, address, resolvedLogoUrl, resolvedCoverUrl, latitude, longitude)
+    }
 
     private fun ServiceCategory.toResponse() = PublicServiceCategoryResponse(id.value, name, description)
 
     private fun Service.toResponse() = PublicServiceResponse(id.value, categoryId.value, name, description, durationMinutes, price)
 
     private fun Specialist.toResponse() = PublicSpecialistResponse(id.value, displayName, bio, photoUrl)
+
+    private fun MediaAsset.toResponse() = PublicMediaAssetResponse(id.value, mediaType, url)
 }

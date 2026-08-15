@@ -70,6 +70,12 @@ data class UpdateSalonRequest(
     val longitude: Double? = null,
 )
 
+/**
+ * [logoUrl] is resolved from [logoMediaId] when set (Salon Identity
+ * Foundation Phase B), falling back to the legacy raw `logo_url` column
+ * otherwise - see `SalonController.toResponse`. [coverUrl] has no legacy
+ * fallback; it's new this phase.
+ */
 data class SalonResponse(
     val id: UUID,
     val ownerId: UUID,
@@ -81,11 +87,19 @@ data class SalonResponse(
     val slug: String,
     val onboardingStatus: SalonOnboardingStatus,
     val logoUrl: String?,
+    val coverUrl: String?,
+    val logoMediaId: UUID?,
+    val coverMediaId: UUID?,
     val latitude: Double?,
     val longitude: Double?,
     val active: Boolean,
     val createdAt: Instant,
     val updatedAt: Instant,
+)
+
+data class AssignSalonIdentityMediaRequest(
+    val logoMediaId: UUID?,
+    val coverMediaId: UUID?,
 )
 
 data class ChangeSalonSlugRequest(

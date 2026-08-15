@@ -36,6 +36,16 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
+  # Salon Identity Foundation Phase A: bounds multipart media uploads.
+  # Must stay >= rojan.media.max-file-size-bytes below - Spring rejects an
+  # oversized request before UploadMediaUseCase ever runs, so this is the
+  # outer bound and that property is the one that produces a clean
+  # MediaFileTooLargeException instead of a raw servlet-level error.
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
 server:
   port: ${SERVER_PORT:8080}
   error:
@@ -79,6 +89,14 @@ rojan:
       request-limit-per-ip-long-window: ${OTP_REQUEST_LIMIT_PER_IP_LONG_WINDOW:10}
       verify-limit-per-phone-window: ${OTP_VERIFY_LIMIT_PER_PHONE_WINDOW:10}
       verify-window-seconds: ${OTP_VERIFY_WINDOW_SECONDS:600}
+
+  # Salon Identity Foundation Phase A. storage-root must match wherever the
+  # deployment mounts persistent storage - see MediaProperties.kt's own doc
+  # comment and docker-compose.prod.yml's uploads volume.
+  media:
+    storage-root: ${MEDIA_STORAGE_ROOT:/app/uploads}
+    max-file-size-bytes: ${MEDIA_MAX_FILE_SIZE_BYTES:5242880}
+    allowed-mime-types: ${MEDIA_ALLOWED_MIME_TYPES:image/jpeg,image/png,image/webp}
 
 # SMS Provider Integration: no defaults on purpose, same as JWT_SECRET above
 # - startup must fail loudly if these are unset, rather than silently

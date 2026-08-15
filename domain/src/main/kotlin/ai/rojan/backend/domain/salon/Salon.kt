@@ -1,6 +1,7 @@
 package ai.rojan.backend.domain.salon
 
 import ai.rojan.backend.domain.common.SalonNotActiveException
+import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.user.UserId
 import java.time.Instant
 import java.util.UUID
@@ -31,6 +32,8 @@ class Salon private constructor(
     latitude: Double?,
     longitude: Double?,
     active: Boolean,
+    logoMediaId: MediaAssetId?,
+    coverMediaId: MediaAssetId?,
     val createdAt: Instant,
     updatedAt: Instant,
 ) {
@@ -65,6 +68,13 @@ class Salon private constructor(
         private set
 
     var active: Boolean = active
+        private set
+
+    /** References into the media subsystem (Salon Identity Foundation Phase B) - never the media's own URL/bytes, see [ai.rojan.backend.domain.media.MediaAsset]. Null means "not set," not "use [logoUrl]" - [logoUrl] stays purely legacy (see [updateProfile]) and is never written by [assignIdentityMedia]. */
+    var logoMediaId: MediaAssetId? = logoMediaId
+        private set
+
+    var coverMediaId: MediaAssetId? = coverMediaId
         private set
 
     var updatedAt: Instant = updatedAt
@@ -106,6 +116,23 @@ class Salon private constructor(
         this.logoUrl = logoUrl?.trim()?.ifBlank { null }
         this.latitude = latitude
         this.longitude = longitude
+        this.updatedAt = Instant.now()
+    }
+
+    /**
+     * Sets which already-uploaded [ai.rojan.backend.domain.media.MediaAsset]
+     * (by id) is this salon's current logo/cover - explicit `null` clears
+     * that slot (unlike [updateProfile]'s "null means leave unchanged"),
+     * since this method's whole purpose is "set the identity media,"
+     * clearing included. Verifying the referenced id actually belongs to
+     * this salon is cross-aggregate (needs
+     * [ai.rojan.backend.domain.media.MediaAssetRepository]) and
+     * deliberately lives in `AssignSalonIdentityMediaUseCase`, not here -
+     * same split as [activate]'s readiness check.
+     */
+    fun assignIdentityMedia(logoMediaId: MediaAssetId?, coverMediaId: MediaAssetId?) {
+        this.logoMediaId = logoMediaId
+        this.coverMediaId = coverMediaId
         this.updatedAt = Instant.now()
     }
 
@@ -196,6 +223,8 @@ class Salon private constructor(
                 latitude = latitude,
                 longitude = longitude,
                 active = true,
+                logoMediaId = null,
+                coverMediaId = null,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -215,11 +244,13 @@ class Salon private constructor(
             latitude: Double?,
             longitude: Double?,
             active: Boolean,
+            logoMediaId: MediaAssetId?,
+            coverMediaId: MediaAssetId?,
             createdAt: Instant,
             updatedAt: Instant,
         ): Salon = Salon(
             id, ownerId, name, description, phone, email, address, slug,
-            onboardingStatus, logoUrl, latitude, longitude, active, createdAt, updatedAt,
+            onboardingStatus, logoUrl, latitude, longitude, active, logoMediaId, coverMediaId, createdAt, updatedAt,
         )
     }
 }

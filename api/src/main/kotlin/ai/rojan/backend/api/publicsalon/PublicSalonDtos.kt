@@ -1,5 +1,6 @@
 package ai.rojan.backend.api.publicsalon
 
+import ai.rojan.backend.domain.media.MediaType
 import java.math.BigDecimal
 import java.util.UUID
 
@@ -16,8 +17,16 @@ data class PublicSalonResponse(
     val phone: String,
     val address: String,
     val logoUrl: String?,
+    val coverUrl: String?,
     val latitude: Double?,
     val longitude: Double?,
+)
+
+/** [storageKey] never exposed - same reasoning as [ai.rojan.backend.api.media.MediaAssetResponse]. */
+data class PublicMediaAssetResponse(
+    val id: UUID,
+    val mediaType: MediaType,
+    val url: String,
 )
 
 data class PublicServiceCategoryResponse(

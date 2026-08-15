@@ -18,6 +18,9 @@ import ai.rojan.backend.domain.common.InvalidCustomerStateException
 import ai.rojan.backend.domain.common.InvalidOtpException
 import ai.rojan.backend.domain.common.InvalidTokenException
 import ai.rojan.backend.domain.common.LoginRateLimitExceededException
+import ai.rojan.backend.domain.common.MediaAssetNotFoundException
+import ai.rojan.backend.domain.common.MediaAssetTenantMismatchException
+import ai.rojan.backend.domain.common.MediaFileTooLargeException
 import ai.rojan.backend.domain.common.OtpRateLimitExceededException
 import ai.rojan.backend.domain.common.OtpVerifyRateLimitExceededException
 import ai.rojan.backend.domain.common.RefreshRateLimitExceededException
@@ -37,6 +40,7 @@ import ai.rojan.backend.domain.common.SpecialistBlockNotFoundException
 import ai.rojan.backend.domain.common.SpecialistLeaveNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotEligibleForServiceException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
+import ai.rojan.backend.domain.common.UnsupportedMediaTypeException
 import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.common.WeeklyAvailabilityNotFoundException
 import ai.rojan.backend.domain.common.WorkingHoursNotFoundException
@@ -126,14 +130,24 @@ class GlobalExceptionHandler {
         CustomerNotFoundException::class,
         CustomerTagNotFoundException::class,
         SalonInviteNotFoundException::class,
+        MediaAssetNotFoundException::class,
         NoResourceFoundException::class,
     )
     fun handleNotFound(ex: Exception, request: WebRequest) =
         respond(HttpStatus.NOT_FOUND, errorCodeFor(ex), ex.message.orEmpty(), request)
 
-    @ExceptionHandler(SalonAccessDeniedException::class, BookingAccessDeniedException::class, CustomerAccessDeniedException::class)
+    @ExceptionHandler(
+        SalonAccessDeniedException::class,
+        BookingAccessDeniedException::class,
+        CustomerAccessDeniedException::class,
+        MediaAssetTenantMismatchException::class,
+    )
     fun handleAccessDenied(ex: Exception, request: WebRequest) =
         respond(HttpStatus.FORBIDDEN, errorCodeFor(ex), ex.message.orEmpty(), request)
+
+    @ExceptionHandler(UnsupportedMediaTypeException::class, MediaFileTooLargeException::class)
+    fun handleInvalidMediaInput(ex: Exception, request: WebRequest) =
+        respond(HttpStatus.BAD_REQUEST, errorCodeFor(ex), ex.message.orEmpty(), request)
 
     @ExceptionHandler(
         BookingConflictException::class,
@@ -220,8 +234,12 @@ class GlobalExceptionHandler {
         is CustomerNotFoundException -> "CUSTOMER_NOT_FOUND"
         is CustomerTagNotFoundException -> "CUSTOMER_TAG_NOT_FOUND"
         is SalonInviteNotFoundException -> "SALON_INVITE_NOT_FOUND"
+        is MediaAssetNotFoundException -> "MEDIA_ASSET_NOT_FOUND"
         is NoResourceFoundException -> "RESOURCE_NOT_FOUND"
         is SalonAccessDeniedException, is BookingAccessDeniedException, is CustomerAccessDeniedException -> "ACCESS_DENIED"
+        is MediaAssetTenantMismatchException -> "MEDIA_TENANT_MISMATCH"
+        is UnsupportedMediaTypeException -> "UNSUPPORTED_MEDIA_TYPE"
+        is MediaFileTooLargeException -> "MEDIA_FILE_TOO_LARGE"
         is BookingConflictException -> "BOOKING_CONFLICT"
         is InvalidBookingStateException -> "INVALID_BOOKING_STATE"
         is InvalidCustomerStateException -> "INVALID_CUSTOMER_STATE"

@@ -7,10 +7,12 @@
 ###   /opt/rojan/nginx     <- Nginx: Let's Encrypt certs, ACME webroot, access/error logs
 ###   /opt/rojan/logs      <- app log file (bind-mounted; see application-prod.yml's
 ###                           logging.file.name)
-###   /opt/rojan/uploads   <- reserved for a future file-storage feature; nothing in
-###                           this backend reads/writes it yet (no upload endpoint
-###                           exists — see API_CONTRACT.md), so it is NOT mounted
-###                           into any container here. Documented, not wired.
+###   /opt/rojan/uploads   <- Salon Identity Foundation Phase A: salon media
+###                           (logo/cover/gallery/portfolio), written by `app`
+###                           (LocalDiskMediaStorageAdapter) and served back out
+###                           statically by `nginx` under /media/** — never
+###                           proxied through the JVM. Was reserved-but-unmounted
+###                           before this phase; now wired below.
 ###   /opt/rojan/backups   <- not a container mount; backup.sh writes pg_dump
 ###                           archives here directly on the host.
 ###
@@ -147,8 +149,12 @@ services:
       # domain (app.rojan.ai) that is not owned/live — see
       # ROJAN_Phase0_Merge_PreApproval_Report_v1.md.
       ROJAN_PUBLIC_BASE_URL: ${ROJAN_PUBLIC_BASE_URL:-https://rojanai.ir}
+      # Salon Identity Foundation Phase A - must match the volume mount
+      # below (LocalDiskMediaStorageAdapter writes here directly).
+      MEDIA_STORAGE_ROOT: /app/uploads
     volumes:
       - ${ROJAN_DATA_ROOT:-/opt/rojan}/logs:/app/logs
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/uploads:/app/uploads
     networks:
       - rojan_net
     depends_on:
@@ -206,6 +212,7 @@ services:
       - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/webroot:/var/www/certbot:ro
       - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/letsencrypt:/etc/letsencrypt:ro
       - ${ROJAN_DATA_ROOT:-/opt/rojan}/nginx/logs:/var/log/nginx
+      - ${ROJAN_DATA_ROOT:-/opt/rojan}/uploads:/var/www/uploads:ro
     networks:
       - rojan_net
     depends_on:
