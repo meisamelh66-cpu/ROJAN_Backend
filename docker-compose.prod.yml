@@ -152,6 +152,14 @@ services:
       # Salon Identity Foundation Phase A - must match the volume mount
       # below (LocalDiskMediaStorageAdapter writes here directly).
       MEDIA_STORAGE_ROOT: /app/uploads
+      # Pre-merge hardening fix: these two were documented in .env.example
+      # as operator-configurable but were never actually passed through to
+      # the container, so setting them in .env silently had no effect and
+      # the app always fell back to application.yml's hardcoded defaults
+      # (5MB / image/jpeg,png,webp). Wired through the same way every other
+      # optional var in this block already is.
+      MEDIA_MAX_FILE_SIZE_BYTES: ${MEDIA_MAX_FILE_SIZE_BYTES:-5242880}
+      MEDIA_ALLOWED_MIME_TYPES: ${MEDIA_ALLOWED_MIME_TYPES:-image/jpeg,image/png,image/webp}
     volumes:
       - ${ROJAN_DATA_ROOT:-/opt/rojan}/logs:/app/logs
       - ${ROJAN_DATA_ROOT:-/opt/rojan}/uploads:/app/uploads

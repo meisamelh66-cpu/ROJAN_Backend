@@ -49,11 +49,15 @@ fail even though Postgres/Redis/the API itself are fine.
 finding. Re-enable it, and add a `kafka` service back to
 `docker-compose.prod.yml`, the day a real feature needs Kafka.
 
-**`/opt/rojan/uploads` and `/opt/rojan/frontend` — provisioned, not used
-by this deployment.** No endpoint in `API_CONTRACT.md` accepts file
-uploads, so nothing is mounted into `uploads/`. `frontend/` belongs to a
-separate deployment (this repository is backend-only) and this milestone
-does not touch it.
+**`/opt/rojan/uploads` — now wired (Salon Identity Foundation Phase A).**
+Superseded by the media feature landing on this branch: `uploads/` is
+mounted read-write into `app` and read-only into `nginx` (serving
+`/media/**` statically), holding salon logo/cover/gallery/portfolio
+files. See §10's Backup section for its own backup coverage.
+
+**`/opt/rojan/frontend` — still provisioned, not used by this
+deployment.** Belongs to a separate deployment (this repository is
+backend-only) and this milestone does not touch it.
 
 **Gaps found and closed by this milestone:**
 - No production compose file → `docker-compose.prod.yml`.
@@ -260,13 +264,14 @@ externally-observable outcome is confirmed healthy.
 - [ ] `docker compose -f docker-compose.prod.yml down` — stop and remove containers (data survives, it's all bind-mounted to `/opt/rojan`)
 
 ### Backup
-- [ ] `./scripts/backup.sh` — manual, or:
-- [ ] Add it to cron for unattended daily backups (example command is inside the script's header comment)
-- [ ] Periodically copy `/opt/rojan/backups` off-VPS — this milestone prepares local persistence and backup tooling, not off-site/disaster-recovery storage; that's a real follow-up gap, not silently solved here
+- [ ] `./scripts/backup.sh` (Postgres) and `./scripts/backup-media.sh` (salon media, Salon Identity Foundation Phase A — skips quietly if `/opt/rojan/uploads` is empty) — manual, or:
+- [ ] Add both to cron for unattended daily backups (example commands are inside each script's header comment; run `backup-media.sh` a few minutes after `backup.sh` so cron entries don't collide)
+- [ ] `./scripts/backup-offsite.sh` — encrypts and uploads the latest of each to the configured `rclone` remote (`BACKUP_ENCRYPTION_PASSPHRASE`/`RCLONE_REMOTE` in `.env`); run after both of the above. Media upload is best-effort and skips if `backup-media.sh` hasn't produced an archive yet.
 
 ### Restore
 - [ ] Stop the app so nothing writes during restore: `docker compose -f docker-compose.prod.yml stop app`
 - [ ] `gunzip -c /opt/rojan/backups/rojan-postgres-<timestamp>.sql.gz | docker compose -f docker-compose.prod.yml exec -T postgres psql -U <DB_USERNAME> <DB_NAME>`
+- [ ] If restoring salon media too: `tar -xzf /opt/rojan/backups/rojan-media-<timestamp>.tar.gz -C /opt/rojan` (extracts back into `/opt/rojan/uploads`)
 - [ ] `docker compose -f docker-compose.prod.yml start app`
 - [ ] Verify via `/actuator/health` and a real read endpoint
 
@@ -287,4 +292,4 @@ externally-observable outcome is confirmed healthy.
 ### Explicitly not done by this milestone
 - No CI/CD or container registry — the image is built on the VPS from source.
 - No load testing / capacity planning (Hikari pool size, JVM heap, Nginx worker tuning all use conservative defaults, not measured ones).
-- No off-site backup storage.
+- Off-site backup storage exists (`scripts/backup-offsite.sh`, covering both Postgres and salon media as of the pre-merge hardening pass) but requires `BACKUP_ENCRYPTION_PASSPHRASE`/`RCLONE_REMOTE` to be configured and a cron entry added — not automatically scheduled by this milestone.
