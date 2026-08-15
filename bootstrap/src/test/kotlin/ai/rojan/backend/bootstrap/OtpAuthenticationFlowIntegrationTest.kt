@@ -197,6 +197,8 @@ class OtpAuthenticationFlowIntegrationTest {
     }
 
     private companion object {
-        val CODE_REGEX = Regex("code is (\\d{6})")
+        // 4-8 digits, not a fixed count — matches OtpPolicy.codeLength's
+        // valid range (application.yml's own default is 4, not 6).
+        val CODE_REGEX = Regex("code is (\\d{4,8})")
     }
 }

@@ -109,7 +109,9 @@ class SalonPilotRbacIntegrationTest {
         logAppender.list
             .last { it.formattedMessage.contains(phoneNumber) }
             .formattedMessage
-            .let { Regex("""code is (\d{6})""").find(it)!!.groupValues[1] }
+            // 4-8 digits, not a fixed count — matches OtpPolicy.codeLength's
+            // valid range (application.yml's own default is 4, not 6).
+            .let { Regex("""code is (\d{4,8})""").find(it)!!.groupValues[1] }
 
     private fun registerAndLogin(fullName: String): Pair<String, UUID> {
         val email = "rbac.${System.nanoTime()}@example.com"

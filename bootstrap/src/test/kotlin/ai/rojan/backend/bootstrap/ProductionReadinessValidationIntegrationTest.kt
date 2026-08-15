@@ -107,7 +107,10 @@ class ProductionReadinessValidationIntegrationTest {
 
     private fun testPhoneNumber() = "+9891${(1_000_000..9_999_999).random()}"
 
-    private val CODE_REGEX = Regex("""code is (\d{6})""")
+    // 4-8 digits, not a fixed count — matches OtpPolicy.codeLength's valid
+    // range (application.yml's own default is 4, not 6) and the same
+    // pattern OtpTestFixtures.kt already uses elsewhere.
+    private val CODE_REGEX = Regex("""code is (\d{4,8})""")
 
     private fun lastCodeSentTo(phoneNumber: String): String =
         logAppender.list
