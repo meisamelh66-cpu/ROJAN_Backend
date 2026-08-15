@@ -138,6 +138,13 @@ services:
       SMS_PROVIDER: ${SMS_PROVIDER:-}
       MELIPAYAMAK_API_KEY: ${MELIPAYAMAK_API_KEY:-}
       MELIPAYAMAK_BODY_ID: ${MELIPAYAMAK_BODY_ID:-}
+      # Real customer-facing domain encoded into generated salon QR codes
+      # and staff-invite links (rojan.public.base-url, bound via Spring's
+      # relaxed env-var binding — no YAML property mapping needed for this
+      # one). Without this, that property falls back to a placeholder
+      # domain (app.rojan.ai) that is not owned/live — see
+      # ROJAN_Phase0_Merge_PreApproval_Report_v1.md.
+      ROJAN_PUBLIC_BASE_URL: ${ROJAN_PUBLIC_BASE_URL:-https://rojanai.ir}
     volumes:
       - ${ROJAN_DATA_ROOT:-/opt/rojan}/logs:/app/logs
     networks:
