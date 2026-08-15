@@ -1,7 +1,10 @@
 package ai.rojan.backend.application.customer
 
+import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
-import ai.rojan.backend.domain.common.CustomerAccessDeniedException
+import ai.rojan.backend.application.salon.InMemorySpecialistRepository
+import ai.rojan.backend.application.salon.SalonPermissionResolver
+import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.InvalidCustomerStateException
 import ai.rojan.backend.domain.customer.Customer
 import ai.rojan.backend.domain.customer.CustomerStatus
@@ -16,7 +19,10 @@ class UpdateCustomerUseCaseTest {
     private val salonRepository = InMemorySalonRepository()
     private val customerRepository = InMemoryCustomerRepository()
     private val customerActivityRepository = InMemoryCustomerActivityRepository()
-    private val useCase = UpdateCustomerUseCase(salonRepository, customerRepository, customerActivityRepository)
+    private val specialistRepository = InMemorySpecialistRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
+    private val useCase = UpdateCustomerUseCase(salonRepository, customerRepository, customerActivityRepository, salonPermissionResolver)
 
     private val ownerId = UserId.new()
     private val salon = Salon.create(ownerId, "Test Salon", null, "0912", null, "Address").also { salonRepository.save(it) }
@@ -55,7 +61,7 @@ class UpdateCustomerUseCaseTest {
 
     @Test
     fun `rejects a caller who does not own the salon`() {
-        assertThrows<CustomerAccessDeniedException> {
+        assertThrows<SalonAccessDeniedException> {
             useCase.execute(UpdateCustomerCommand(customer.id, UserId.new(), "Someone Else", null, null, null, null))
         }
     }

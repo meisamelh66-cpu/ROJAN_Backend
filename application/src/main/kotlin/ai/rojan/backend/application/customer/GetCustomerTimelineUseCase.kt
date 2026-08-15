@@ -1,9 +1,9 @@
 package ai.rojan.backend.application.customer
 
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.booking.BookingStatus
-import ai.rojan.backend.domain.common.CustomerAccessDeniedException
 import ai.rojan.backend.domain.common.CustomerNotFoundException
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.PageResult
@@ -13,6 +13,7 @@ import ai.rojan.backend.domain.customer.CustomerActivityRepository
 import ai.rojan.backend.domain.customer.CustomerId
 import ai.rojan.backend.domain.customer.CustomerNoteRepository
 import ai.rojan.backend.domain.customer.CustomerRepository
+import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.user.UserId
 import java.time.Instant
@@ -53,15 +54,14 @@ class GetCustomerTimelineUseCase(
     private val customerActivityRepository: CustomerActivityRepository,
     private val customerNoteRepository: CustomerNoteRepository,
     private val bookingRepository: BookingRepository,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
     fun execute(command: GetCustomerTimelineCommand): PageResult<TimelineEntry> {
         val customer = customerRepository.findById(command.customerId)
             ?: throw CustomerNotFoundException(command.customerId.value.toString())
         val salon = salonRepository.findById(customer.salonId)
             ?: throw SalonNotFoundException(customer.salonId.value.toString())
-        if (salon.ownerId != command.callerId) {
-            throw CustomerAccessDeniedException(customer.id.value.toString())
-        }
+        salonPermissionResolver.require(salon.id, command.callerId, Permission.VIEW_CRM)
 
         val activityEntries = customerActivityRepository.findByCustomerId(customer.id)
             .map { TimelineEntry(it.type.name, it.description, it.occurredAt) }

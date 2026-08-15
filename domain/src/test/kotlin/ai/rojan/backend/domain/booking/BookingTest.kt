@@ -31,8 +31,9 @@ class BookingTest {
 
     @Test
     fun `rejects a start time that is not before end`() {
+        val same = LocalDateTime.of(2026, 8, 10, 9, 0)
         assertThrows(IllegalArgumentException::class.java) {
-            Booking.create(SalonId.new(), ServiceId.new(), SpecialistId.new(), UserId.new(), LocalDateTime.now(), LocalDateTime.now(), null)
+            Booking.create(SalonId.new(), ServiceId.new(), SpecialistId.new(), UserId.new(), same, same, null)
         }
     }
 

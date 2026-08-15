@@ -24,6 +24,9 @@ dependencies {
     runtimeOnly(libs.jjwt.impl)
     runtimeOnly(libs.jjwt.jackson)
 
+    implementation(libs.zxing.core)
+    implementation(libs.zxing.javase)
+
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.mockk)
 }

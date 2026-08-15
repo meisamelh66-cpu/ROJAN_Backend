@@ -1,7 +1,7 @@
 package ai.rojan.backend.application.customer
 
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.auth.PhoneNumber
-import ai.rojan.backend.domain.common.CustomerAccessDeniedException
 import ai.rojan.backend.domain.common.CustomerNotFoundException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.customer.Customer
@@ -11,6 +11,7 @@ import ai.rojan.backend.domain.customer.CustomerActivityType
 import ai.rojan.backend.domain.customer.CustomerId
 import ai.rojan.backend.domain.customer.CustomerRepository
 import ai.rojan.backend.domain.customer.CustomerStatus
+import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.UserId
@@ -39,15 +40,14 @@ class UpdateCustomerUseCase(
     private val salonRepository: SalonRepository,
     private val customerRepository: CustomerRepository,
     private val customerActivityRepository: CustomerActivityRepository,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
     fun execute(command: UpdateCustomerCommand): Customer {
         val customer = customerRepository.findById(command.customerId)
             ?: throw CustomerNotFoundException(command.customerId.value.toString())
         val salon = salonRepository.findById(customer.salonId)
             ?: throw SalonNotFoundException(customer.salonId.value.toString())
-        if (salon.ownerId != command.callerId) {
-            throw CustomerAccessDeniedException(customer.id.value.toString())
-        }
+        salonPermissionResolver.require(salon.id, command.callerId, Permission.MANAGE_CRM)
 
         customer.update(
             fullName = command.fullName ?: customer.fullName,

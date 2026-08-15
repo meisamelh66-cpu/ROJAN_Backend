@@ -46,6 +46,18 @@ class MeliPayamakSharedPatternProviderTest {
     }
 
     @Test
+    fun `extracts a 4-digit code as the first arg just as readily as a 6-digit one`() {
+        var capturedBody: String? = null
+        val provider = startStubServerAndCreateProvider(status = 200, responseBody = """{"recId":"1","status":"ok"}""") { exchange ->
+            capturedBody = exchange.requestBody.readBytes().toString(StandardCharsets.UTF_8)
+        }
+
+        provider.send(PhoneNumber("+989123456789"), "Your ROJAN verification code is 4821. It expires in 2 minutes.")
+
+        assertTrue(capturedBody!!.contains(""""args":["4821"]"""), "expected the 4-digit code as args[0], got: $capturedBody")
+    }
+
+    @Test
     fun `succeeds when the response contains a non-blank recId`() {
         val provider = startStubServerAndCreateProvider(status = 200, responseBody = """{"recId":"1","status":"ok"}""") { }
 

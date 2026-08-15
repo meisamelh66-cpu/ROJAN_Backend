@@ -73,6 +73,9 @@ class CustomerRepositoryAdapter(
     override fun existsBySalonIdAndPhoneNumber(salonId: SalonId, phoneNumber: PhoneNumber): Boolean =
         jpaRepository.existsBySalonIdAndPhoneNumber(salonId.value, phoneNumber.value)
 
+    override fun findBySalonIdAndUserId(salonId: SalonId, userId: UserId): Customer? =
+        jpaRepository.findBySalonIdAndUserId(salonId.value, userId.value)?.toDomain()
+
     private fun CustomerJpaEntity.toDomain(): Customer = Customer.reconstitute(
         id = CustomerId(id),
         salonId = SalonId(salonId),

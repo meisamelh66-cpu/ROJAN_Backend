@@ -10,6 +10,8 @@ import ai.rojan.backend.domain.salon.ServiceId
 import ai.rojan.backend.domain.salon.ServiceRepository
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.salon.SpecialistRepository
+import ai.rojan.backend.domain.salon.SpecialistServiceRepository
+import ai.rojan.backend.domain.salon.isSpecialistEligibleForService
 import ai.rojan.backend.domain.schedule.IntervalMath
 import ai.rojan.backend.domain.schedule.SpecialistBlockRepository
 import ai.rojan.backend.domain.schedule.SpecialistLeaveRepository
@@ -42,6 +44,7 @@ class GetAvailableSlotsUseCase(
     private val leaveRepository: SpecialistLeaveRepository,
     private val blockRepository: SpecialistBlockRepository,
     private val bookingRepository: BookingRepository,
+    private val specialistServiceRepository: SpecialistServiceRepository,
     private val now: () -> LocalDate = { LocalDate.now() },
     private val currentTime: () -> LocalTime = { LocalTime.now() },
 ) {
@@ -52,6 +55,11 @@ class GetAvailableSlotsUseCase(
         val service = serviceRepository.findById(query.serviceId)
             ?.takeIf { it.salonId == query.salonId && it.active }
             ?: throw ServiceNotFoundException(query.serviceId.value.toString())
+
+        val eligibleServiceIds = specialistServiceRepository.findServiceIdsBySpecialistId(specialist.id)
+        if (!isSpecialistEligibleForService(eligibleServiceIds, service.id)) {
+            return emptyList()
+        }
 
         if (leaveRepository.findBySpecialistIdCoveringDate(specialist.id, query.date).isNotEmpty()) {
             return emptyList()

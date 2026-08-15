@@ -46,6 +46,11 @@ server:
 # unset rather than silently signing tokens with a known/weak key.
 rojan:
   security:
+    # Explicit allow-list only, never a wildcard - see CorsConfig.kt. Dev
+    # default matches the ROJAN_Web Next.js dev server; production overrides
+    # this in application-prod.yml.
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
     jwt:
       secret: ${JWT_SECRET:}
       issuer: ${JWT_ISSUER:rojan-ai-backend}
@@ -63,6 +68,7 @@ rojan:
       refresh-limit-per-ip-window: ${AUTH_REFRESH_LIMIT_PER_IP_WINDOW:30}
       refresh-window-seconds: ${AUTH_REFRESH_WINDOW_SECONDS:300}
     otp:
+      code-length: ${OTP_CODE_LENGTH:4}
       ttl-seconds: ${OTP_TTL_SECONDS:120}
       max-attempts: ${OTP_MAX_ATTEMPTS:5}
       resend-cooldown-seconds: ${OTP_RESEND_COOLDOWN_SECONDS:60}

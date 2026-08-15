@@ -6,10 +6,12 @@ import ai.rojan.backend.application.booking.ConfirmBookingUseCase
 import ai.rojan.backend.application.booking.CreateBookingUseCase
 import ai.rojan.backend.application.booking.GetAvailableSlotsUseCase
 import ai.rojan.backend.application.booking.RescheduleBookingUseCase
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.ServiceRepository
 import ai.rojan.backend.domain.salon.SpecialistRepository
+import ai.rojan.backend.domain.salon.SpecialistServiceRepository
 import ai.rojan.backend.domain.schedule.SpecialistBlockRepository
 import ai.rojan.backend.domain.schedule.SpecialistLeaveRepository
 import ai.rojan.backend.domain.schedule.SpecialistScheduleOverrideRepository
@@ -28,26 +30,27 @@ class BookingUseCaseConfig {
         serviceRepository: ServiceRepository,
         specialistRepository: SpecialistRepository,
         bookingRepository: BookingRepository,
-    ) = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository)
+        specialistServiceRepository: SpecialistServiceRepository,
+    ) = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository)
 
     @Bean
-    fun confirmBookingUseCase(bookingRepository: BookingRepository, salonRepository: SalonRepository) =
-        ConfirmBookingUseCase(bookingRepository, salonRepository)
+    fun confirmBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =
+        ConfirmBookingUseCase(bookingRepository, salonPermissionResolver)
 
     @Bean
-    fun cancelBookingUseCase(bookingRepository: BookingRepository, salonRepository: SalonRepository) =
-        CancelBookingUseCase(bookingRepository, salonRepository)
+    fun cancelBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =
+        CancelBookingUseCase(bookingRepository, salonPermissionResolver)
 
     @Bean
-    fun completeBookingUseCase(bookingRepository: BookingRepository, salonRepository: SalonRepository) =
-        CompleteBookingUseCase(bookingRepository, salonRepository)
+    fun completeBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =
+        CompleteBookingUseCase(bookingRepository, salonPermissionResolver)
 
     @Bean
     fun rescheduleBookingUseCase(
         bookingRepository: BookingRepository,
-        salonRepository: SalonRepository,
         serviceRepository: ServiceRepository,
-    ) = RescheduleBookingUseCase(bookingRepository, salonRepository, serviceRepository)
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = RescheduleBookingUseCase(bookingRepository, serviceRepository, salonPermissionResolver)
 
     @Bean
     fun getAvailableSlotsUseCase(
@@ -59,6 +62,7 @@ class BookingUseCaseConfig {
         leaveRepository: SpecialistLeaveRepository,
         blockRepository: SpecialistBlockRepository,
         bookingRepository: BookingRepository,
+        specialistServiceRepository: SpecialistServiceRepository,
     ) = GetAvailableSlotsUseCase(
         specialistRepository,
         serviceRepository,
@@ -68,5 +72,6 @@ class BookingUseCaseConfig {
         leaveRepository,
         blockRepository,
         bookingRepository,
+        specialistServiceRepository,
     )
 }

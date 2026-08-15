@@ -4,6 +4,7 @@ import ai.rojan.backend.application.salon.InMemorySalonRepository
 import ai.rojan.backend.application.salon.InMemoryServiceCategoryRepository
 import ai.rojan.backend.application.salon.InMemoryServiceRepository
 import ai.rojan.backend.application.salon.InMemorySpecialistRepository
+import ai.rojan.backend.application.salon.InMemorySpecialistServiceRepository
 import ai.rojan.backend.application.schedule.InMemoryBlockRepository
 import ai.rojan.backend.application.schedule.InMemoryLeaveRepository
 import ai.rojan.backend.application.schedule.InMemoryScheduleOverrideRepository
@@ -41,6 +42,7 @@ class GetAvailableSlotsUseCaseTest {
     private val leaveRepository = InMemoryLeaveRepository()
     private val blockRepository = InMemoryBlockRepository()
     private val bookingRepository = InMemoryBookingRepository()
+    private val specialistServiceRepository = InMemorySpecialistServiceRepository()
 
     private val salon: Salon = salonRepository.save(Salon.create(UserId.new(), "Glow Salon", null, "+1 555 0100", null, "1 Main St"))
     private val category: ServiceCategory = categoryRepository.save(ServiceCategory.create(salon.id, "Hair", null))
@@ -59,6 +61,7 @@ class GetAvailableSlotsUseCaseTest {
         leaveRepository,
         blockRepository,
         bookingRepository,
+        specialistServiceRepository,
         now = { LocalDate.of(2000, 1, 1) },
     )
 
@@ -91,6 +94,24 @@ class GetAvailableSlotsUseCaseTest {
             slots.map { it.start },
         )
         assertTrue(slots.all { it.end.toLocalTime() <= LocalTime.of(17, 0) })
+    }
+
+    @Test
+    fun `no slots for a specialist assigned to other services but not the requested one`() {
+        workingHoursRepository.save(WorkingHours.create(salon.id, DayOfWeek.MONDAY, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(17, 0)))))
+        weeklyAvailabilityRepository.save(SpecialistWeeklyAvailability.create(specialist.id, DayOfWeek.MONDAY, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(17, 0)))))
+        val otherService = serviceRepository.save(Service.create(salon.id, category.id, "Manicure", null, 30, BigDecimal("15.00")))
+        specialistServiceRepository.assign(specialist.id, otherService.id)
+
+        assertEquals(emptyList<TimeSlot>(), useCase.execute(query()))
+    }
+
+    @Test
+    fun `slots are unaffected for a specialist with no service assignments - backward compatible default`() {
+        workingHoursRepository.save(WorkingHours.create(salon.id, DayOfWeek.MONDAY, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(17, 0)))))
+        weeklyAvailabilityRepository.save(SpecialistWeeklyAvailability.create(specialist.id, DayOfWeek.MONDAY, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(17, 0)))))
+
+        assertTrue(useCase.execute(query()).isNotEmpty())
     }
 
     @Test
@@ -128,7 +149,7 @@ class GetAvailableSlotsUseCaseTest {
     fun `an existing booking removes the overlapping slot`() {
         workingHoursRepository.save(WorkingHours.create(salon.id, DayOfWeek.MONDAY, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(10, 0)))))
         weeklyAvailabilityRepository.save(SpecialistWeeklyAvailability.create(specialist.id, DayOfWeek.MONDAY, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(10, 0)))))
-        val createBookingUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository)
+        val createBookingUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository)
         createBookingUseCase.execute(CreateBookingCommand(salon.id, service.id, specialist.id, UserId.new(), monday.atTime(9, 0), null))
 
         val slots = useCase.execute(query())

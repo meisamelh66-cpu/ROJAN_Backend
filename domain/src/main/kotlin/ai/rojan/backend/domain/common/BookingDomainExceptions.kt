@@ -25,3 +25,6 @@ class InvalidBookingStateException(message: String) : DomainException(message)
 
 class BookingAccessDeniedException(bookingId: String) :
     DomainException("You do not have permission to manage booking: $bookingId")
+
+class SpecialistNotEligibleForServiceException(specialistId: String, serviceId: String) :
+    DomainException("Specialist $specialistId is not eligible to perform service $serviceId")

@@ -1,7 +1,9 @@
 package ai.rojan.backend.application.schedule
 
+import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
 import ai.rojan.backend.application.salon.InMemorySpecialistRepository
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.Specialist
@@ -17,14 +19,16 @@ class SpecialistLeaveUseCasesTest {
     private val salonRepository = InMemorySalonRepository()
     private val specialistRepository = InMemorySpecialistRepository()
     private val leaveRepository = InMemoryLeaveRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
     private val owner = UserId.new()
     private val stranger = UserId.new()
 
     private val salon: Salon = salonRepository.save(Salon.create(owner, "Glow Salon", null, "+1 555 0100", null, "1 Main St"))
     private val specialist: Specialist = specialistRepository.save(Specialist.create(salon.id, null, "Jamie", null, null))
 
-    private val createUseCase = CreateSpecialistLeaveUseCase(salonRepository, specialistRepository, leaveRepository)
-    private val removeUseCase = RemoveSpecialistLeaveUseCase(salonRepository, specialistRepository, leaveRepository)
+    private val createUseCase = CreateSpecialistLeaveUseCase(specialistRepository, leaveRepository, salonPermissionResolver)
+    private val removeUseCase = RemoveSpecialistLeaveUseCase(specialistRepository, leaveRepository, salonPermissionResolver)
 
     @Test
     fun `owner can record a leave date range`() {

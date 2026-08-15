@@ -2,13 +2,14 @@ package ai.rojan.backend.application.customer
 
 import ai.rojan.backend.application.booking.CreateBookingCommand
 import ai.rojan.backend.application.booking.CreateBookingUseCase
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.common.CustomerNotFoundException
 import ai.rojan.backend.domain.common.CustomerNotLinkedToAccountException
-import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.customer.CustomerId
 import ai.rojan.backend.domain.customer.CustomerRepository
+import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.ServiceId
@@ -52,13 +53,12 @@ class CreateBookingForCustomerUseCase(
     private val salonRepository: SalonRepository,
     private val customerRepository: CustomerRepository,
     private val createBookingUseCase: CreateBookingUseCase,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
     fun execute(command: CreateBookingForCustomerCommand): Booking {
         val salon = salonRepository.findById(command.salonId)
             ?: throw SalonNotFoundException(command.salonId.value.toString())
-        if (salon.ownerId != command.callerId) {
-            throw SalonAccessDeniedException(salon.id.value.toString())
-        }
+        salonPermissionResolver.require(salon.id, command.callerId, Permission.MANAGE_BOOKINGS)
 
         val customer = customerRepository.findById(command.customerId)
             ?.takeIf { it.salonId == command.salonId }

@@ -1,6 +1,7 @@
 package ai.rojan.backend.api.schedule
 
 import ai.rojan.backend.api.common.CurrentUserResolver
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.application.schedule.CreateSpecialistBlockCommand
 import ai.rojan.backend.application.schedule.CreateSpecialistBlockUseCase
 import ai.rojan.backend.application.schedule.CreateSpecialistLeaveCommand
@@ -22,7 +23,6 @@ import ai.rojan.backend.domain.common.SpecialistBlockNotFoundException
 import ai.rojan.backend.domain.common.SpecialistLeaveNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.common.WeeklyAvailabilityNotFoundException
-import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.Specialist
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.salon.SpecialistRepository
@@ -38,6 +38,7 @@ import ai.rojan.backend.domain.schedule.SpecialistScheduleOverrideRepository
 import ai.rojan.backend.domain.schedule.SpecialistWeeklyAvailability
 import ai.rojan.backend.domain.schedule.SpecialistWeeklyAvailabilityRepository
 import ai.rojan.backend.domain.schedule.TimeInterval
+import ai.rojan.backend.domain.salon.Permission
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
@@ -61,7 +62,6 @@ import java.util.UUID
 @Tag(name = "Specialist Schedule")
 class SpecialistScheduleController(
     private val specialistRepository: SpecialistRepository,
-    private val salonRepository: SalonRepository,
     private val weeklyAvailabilityRepository: SpecialistWeeklyAvailabilityRepository,
     private val overrideRepository: SpecialistScheduleOverrideRepository,
     private val leaveRepository: SpecialistLeaveRepository,
@@ -75,6 +75,7 @@ class SpecialistScheduleController(
     private val createBlockUseCase: CreateSpecialistBlockUseCase,
     private val removeBlockUseCase: RemoveSpecialistBlockUseCase,
     private val currentUserResolver: CurrentUserResolver,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
 
     // ---- Weekly availability ----
@@ -301,11 +302,10 @@ class SpecialistScheduleController(
             ?: throw SpecialistBlockNotFoundException(blockId.toString())
     }
 
-    /** Only the salon owner may see why a specialist is unavailable (OWASP API3: excessive data exposure). */
+    /** Only someone authorized to manage this specialist's schedule (owner, manager, or the specialist themself) may see why they're unavailable (OWASP API3: excessive data exposure). */
     private fun isOwner(specialist: Specialist, principal: UserDetails): Boolean {
         val callerId = currentUserResolver.resolve(principal)
-        val salon = salonRepository.findById(specialist.salonId) ?: return false
-        return salon.ownerId == callerId
+        return salonPermissionResolver.canManageSpecialist(specialist, callerId, Permission.MANAGE_SCHEDULE_ALL)
     }
 
     private fun SpecialistWeeklyAvailability.toResponse() = WeeklyAvailabilityResponse(

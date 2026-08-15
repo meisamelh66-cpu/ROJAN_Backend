@@ -11,6 +11,7 @@ zonkyEmbeddedPostgres = "2.2.2"
 zonkyPostgresBinaries = "16.14.0"
 commonsCompress = "1.28.0"
 commonsLang3 = "3.18.0"
+zxing = "3.5.3"
 
 [libraries]
 # Kotlin
@@ -38,6 +39,10 @@ jakarta-servlet-api = { module = "jakarta.servlet:jakarta.servlet-api" }
 postgresql = { module = "org.postgresql:postgresql" }
 flyway-core = { module = "org.flywaydb:flyway-core" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
+
+# QR code generation (salon activation flow - printable QR for reception counter)
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+zxing-javase = { module = "com.google.zxing:javase", version.ref = "zxing" }
 
 # JWT
 jjwt-api = { module = "io.jsonwebtoken:jjwt-api", version.ref = "jjwt" }

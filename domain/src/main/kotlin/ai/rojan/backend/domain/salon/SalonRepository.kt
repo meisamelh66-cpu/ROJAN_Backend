@@ -14,6 +14,8 @@ interface SalonRepository {
     fun save(salon: Salon): Salon
     fun findById(id: SalonId): Salon?
     fun findByOwnerId(ownerId: UserId): List<Salon>
+    fun findBySlug(slug: String): Salon?
+    fun existsBySlug(slug: String): Boolean
 
     /** Browses active salons, optionally filtered by a case-insensitive name substring, sorted by name. */
     fun findAllActive(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon>

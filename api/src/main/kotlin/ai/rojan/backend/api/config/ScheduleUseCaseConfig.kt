@@ -1,5 +1,6 @@
 package ai.rojan.backend.api.config
 
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.application.schedule.CreateSpecialistBlockUseCase
 import ai.rojan.backend.application.schedule.CreateSpecialistLeaveUseCase
 import ai.rojan.backend.application.schedule.RemoveScheduleOverrideUseCase
@@ -25,66 +26,66 @@ import org.springframework.context.annotation.Configuration
 class ScheduleUseCaseConfig {
 
     @Bean
-    fun setWorkingHoursUseCase(salonRepository: SalonRepository, workingHoursRepository: WorkingHoursRepository) =
-        SetWorkingHoursUseCase(salonRepository, workingHoursRepository)
+    fun setWorkingHoursUseCase(salonRepository: SalonRepository, workingHoursRepository: WorkingHoursRepository, salonPermissionResolver: SalonPermissionResolver) =
+        SetWorkingHoursUseCase(salonRepository, workingHoursRepository, salonPermissionResolver)
 
     @Bean
-    fun removeWorkingHoursUseCase(salonRepository: SalonRepository, workingHoursRepository: WorkingHoursRepository) =
-        RemoveWorkingHoursUseCase(salonRepository, workingHoursRepository)
+    fun removeWorkingHoursUseCase(salonRepository: SalonRepository, workingHoursRepository: WorkingHoursRepository, salonPermissionResolver: SalonPermissionResolver) =
+        RemoveWorkingHoursUseCase(salonRepository, workingHoursRepository, salonPermissionResolver)
 
     @Bean
     fun setSpecialistWeeklyAvailabilityUseCase(
-        salonRepository: SalonRepository,
         specialistRepository: SpecialistRepository,
         weeklyAvailabilityRepository: SpecialistWeeklyAvailabilityRepository,
-    ) = SetSpecialistWeeklyAvailabilityUseCase(salonRepository, specialistRepository, weeklyAvailabilityRepository)
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = SetSpecialistWeeklyAvailabilityUseCase(specialistRepository, weeklyAvailabilityRepository, salonPermissionResolver)
 
     @Bean
     fun removeSpecialistWeeklyAvailabilityUseCase(
-        salonRepository: SalonRepository,
         specialistRepository: SpecialistRepository,
         weeklyAvailabilityRepository: SpecialistWeeklyAvailabilityRepository,
-    ) = RemoveSpecialistWeeklyAvailabilityUseCase(salonRepository, specialistRepository, weeklyAvailabilityRepository)
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = RemoveSpecialistWeeklyAvailabilityUseCase(specialistRepository, weeklyAvailabilityRepository, salonPermissionResolver)
 
     @Bean
     fun setScheduleOverrideUseCase(
-        salonRepository: SalonRepository,
         specialistRepository: SpecialistRepository,
         overrideRepository: SpecialistScheduleOverrideRepository,
-    ) = SetScheduleOverrideUseCase(salonRepository, specialistRepository, overrideRepository)
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = SetScheduleOverrideUseCase(specialistRepository, overrideRepository, salonPermissionResolver)
 
     @Bean
     fun removeScheduleOverrideUseCase(
-        salonRepository: SalonRepository,
         specialistRepository: SpecialistRepository,
         overrideRepository: SpecialistScheduleOverrideRepository,
-    ) = RemoveScheduleOverrideUseCase(salonRepository, specialistRepository, overrideRepository)
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = RemoveScheduleOverrideUseCase(specialistRepository, overrideRepository, salonPermissionResolver)
 
     @Bean
     fun createSpecialistLeaveUseCase(
-        salonRepository: SalonRepository,
         specialistRepository: SpecialistRepository,
         leaveRepository: SpecialistLeaveRepository,
-    ) = CreateSpecialistLeaveUseCase(salonRepository, specialistRepository, leaveRepository)
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = CreateSpecialistLeaveUseCase(specialistRepository, leaveRepository, salonPermissionResolver)
 
     @Bean
     fun removeSpecialistLeaveUseCase(
-        salonRepository: SalonRepository,
         specialistRepository: SpecialistRepository,
         leaveRepository: SpecialistLeaveRepository,
-    ) = RemoveSpecialistLeaveUseCase(salonRepository, specialistRepository, leaveRepository)
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = RemoveSpecialistLeaveUseCase(specialistRepository, leaveRepository, salonPermissionResolver)
 
     @Bean
     fun createSpecialistBlockUseCase(
-        salonRepository: SalonRepository,
         specialistRepository: SpecialistRepository,
         blockRepository: SpecialistBlockRepository,
-    ) = CreateSpecialistBlockUseCase(salonRepository, specialistRepository, blockRepository)
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = CreateSpecialistBlockUseCase(specialistRepository, blockRepository, salonPermissionResolver)
 
     @Bean
     fun removeSpecialistBlockUseCase(
-        salonRepository: SalonRepository,
         specialistRepository: SpecialistRepository,
         blockRepository: SpecialistBlockRepository,
-    ) = RemoveSpecialistBlockUseCase(salonRepository, specialistRepository, blockRepository)
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = RemoveSpecialistBlockUseCase(specialistRepository, blockRepository, salonPermissionResolver)
 }

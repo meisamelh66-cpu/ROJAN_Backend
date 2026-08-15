@@ -20,6 +20,7 @@ class SecurityPropertiesConfig {
      */
     @Bean
     fun otpPolicy(properties: OtpProperties) = OtpPolicy(
+        codeLength = properties.codeLength,
         ttlSeconds = properties.ttlSeconds,
         maxAttempts = properties.maxAttempts,
         resendCooldownSeconds = properties.resendCooldownSeconds,

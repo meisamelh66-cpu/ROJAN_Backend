@@ -51,8 +51,10 @@
 ###     `management.health.kafka.enabled: false`. Re-enable both the
 ###     moment Kafka is actually deployed alongside this stack.
 ###
-### This file is deployment PREP, not a deployment: nothing in this repo
-### has been run against the target VPS yet. See `DEPLOYMENT.md`.
+### This file has since been run against the target VPS: the backend is
+### live at https://api.rojanai.ir (verified via /actuator/health). See
+### `DEPLOYMENT.md`'s Status line for what's been independently confirmed
+### vs. not re-verified.
 
 services:
   postgres:
@@ -128,9 +130,9 @@ services:
       # startup must fail loudly if these are unset"). These three are
       # therefore required unconditionally, not only when SMS_PROVIDER is
       # blank.
-      SMS_API_URL: ${SMS_API_URL:?SMS_API_URL must be set — see .env.example}
-      SMS_API_KEY: ${SMS_API_KEY:?SMS_API_KEY must be set — see .env.example}
-      SMS_SENDER: ${SMS_SENDER:?SMS_SENDER must be set — see .env.example}
+      SMS_API_URL: ${SMS_API_URL:?SMS_API_URL must be set to MeliPayamak's send endpoint (without the API key appended) — see .env.example}
+      SMS_API_KEY: ${SMS_API_KEY:?SMS_API_KEY must be set to your MeliPayamak API key — see .env.example}
+      SMS_SENDER: ${SMS_SENDER:?SMS_SENDER must be set to your approved MeliPayamak sender line — see .env.example}
       # Optional Shared Pattern adapter — set SMS_PROVIDER=melipayamak-shared
       # to make MeliPayamakSharedPatternProvider @Primary instead of the
       # Simple-endpoint adapter above (both remain instantiated either way,

@@ -18,6 +18,8 @@ import ai.rojan.backend.api.salon.ServiceResponse
 import ai.rojan.backend.api.salon.SpecialistResponse
 import ai.rojan.backend.api.schedule.CreateLeaveRequest
 import ai.rojan.backend.api.schedule.LeaveResponse
+import ai.rojan.backend.api.schedule.SetWorkingHoursRequest
+import ai.rojan.backend.api.schedule.TimeIntervalDto
 import ai.rojan.backend.domain.user.UserRole
 import io.zonky.test.db.AutoConfigureEmbeddedDatabase
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -38,6 +40,7 @@ import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 
 /**
  * Verifies the API-hardening milestone's cross-cutting behavior: pagination
@@ -58,6 +61,15 @@ class ApiHardeningIntegrationTest {
     private fun url(path: String) = "http://localhost:$port$path"
 
     private fun bearer(token: String) = HttpHeaders().apply { setBearerAuth(token) }
+
+    private fun activateSalon(ownerToken: String, salonId: java.util.UUID) {
+        restTemplate.exchange(
+            url("/api/v1/salons/$salonId/working-hours/MONDAY"), HttpMethod.PUT,
+            HttpEntity(SetWorkingHoursRequest(listOf(TimeIntervalDto(LocalTime.of(9, 0), LocalTime.of(17, 0)))), bearer(ownerToken)),
+            String::class.java,
+        )
+        restTemplate.exchange(url("/api/v1/salons/$salonId/activate"), HttpMethod.POST, HttpEntity<Void>(bearer(ownerToken)), SalonResponse::class.java)
+    }
 
     private fun registerAndLogin(role: UserRole): String {
         val email = "hardening.${System.nanoTime()}@example.com"
@@ -168,6 +180,7 @@ class ApiHardeningIntegrationTest {
                 SpecialistResponse::class.java,
             ).body,
         )
+        activateSalon(managerToken, salon.id)
 
         val start = LocalDateTime.now().plusDays(60).withHour(9).withMinute(0).withSecond(0).withNano(0)
         val booking = requireNotNull(
@@ -365,6 +378,7 @@ class ApiHardeningIntegrationTest {
                 SpecialistResponse::class.java,
             ).body,
         )
+        activateSalon(managerToken, salon.id)
         return BookableSalon(salon, service, specialist)
     }
 }

@@ -11,6 +11,7 @@ package ai.rojan.backend.application.auth
  * touching this class.
  */
 data class OtpPolicy(
+    val codeLength: Int,
     val ttlSeconds: Long,
     val maxAttempts: Int,
     val resendCooldownSeconds: Long,

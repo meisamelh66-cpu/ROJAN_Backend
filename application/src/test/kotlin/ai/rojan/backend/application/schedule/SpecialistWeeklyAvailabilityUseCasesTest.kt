@@ -1,7 +1,9 @@
 package ai.rojan.backend.application.schedule
 
+import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
 import ai.rojan.backend.application.salon.InMemorySpecialistRepository
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.Specialist
@@ -19,14 +21,16 @@ class SpecialistWeeklyAvailabilityUseCasesTest {
     private val salonRepository = InMemorySalonRepository()
     private val specialistRepository = InMemorySpecialistRepository()
     private val availabilityRepository = InMemoryWeeklyAvailabilityRepository()
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
     private val owner = UserId.new()
     private val stranger = UserId.new()
 
     private val salon: Salon = salonRepository.save(Salon.create(owner, "Glow Salon", null, "+1 555 0100", null, "1 Main St"))
     private val specialist: Specialist = specialistRepository.save(Specialist.create(salon.id, null, "Jamie", null, null))
 
-    private val setUseCase = SetSpecialistWeeklyAvailabilityUseCase(salonRepository, specialistRepository, availabilityRepository)
-    private val removeUseCase = RemoveSpecialistWeeklyAvailabilityUseCase(salonRepository, specialistRepository, availabilityRepository)
+    private val setUseCase = SetSpecialistWeeklyAvailabilityUseCase(specialistRepository, availabilityRepository, salonPermissionResolver)
+    private val removeUseCase = RemoveSpecialistWeeklyAvailabilityUseCase(specialistRepository, availabilityRepository, salonPermissionResolver)
 
     private val intervals = listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(17, 0)))
 

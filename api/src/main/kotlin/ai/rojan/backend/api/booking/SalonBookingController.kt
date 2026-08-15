@@ -6,14 +6,15 @@ import ai.rojan.backend.api.common.PagedResponse
 import ai.rojan.backend.api.common.toPagedResponse
 import ai.rojan.backend.application.customer.CreateBookingForCustomerCommand
 import ai.rojan.backend.application.customer.CreateBookingForCustomerUseCase
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.booking.BookingStatus
 import ai.rojan.backend.domain.common.PageRequest
-import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.customer.CustomerId
+import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.ServiceId
@@ -46,10 +47,11 @@ class SalonBookingController(
     private val salonRepository: SalonRepository,
     private val createBookingForCustomerUseCase: CreateBookingForCustomerUseCase,
     private val currentUserResolver: CurrentUserResolver,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
 
     @GetMapping
-    @Operation(summary = "List all bookings for a salon, paginated and optionally filtered by status (owner only)")
+    @Operation(summary = "List all bookings for a salon, paginated and optionally filtered by status (owner, manager, or receptionist)")
     fun list(
         @PathVariable salonId: UUID,
         @RequestParam(defaultValue = "0") page: Int,
@@ -60,7 +62,7 @@ class SalonBookingController(
     ): PagedResponse<BookingResponse> {
         val callerId = currentUserResolver.resolve(principal)
         val salon = salonRepository.findById(SalonId(salonId)) ?: throw SalonNotFoundException(salonId.toString())
-        if (salon.ownerId != callerId) throw SalonAccessDeniedException(salon.id.value.toString())
+        salonPermissionResolver.require(salon.id, callerId, Permission.MANAGE_BOOKINGS)
         val result = bookingRepository.findBySalonId(
             salon.id,
             PageRequest(page, size),
