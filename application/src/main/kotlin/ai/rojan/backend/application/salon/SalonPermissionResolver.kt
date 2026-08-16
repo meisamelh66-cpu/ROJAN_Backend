@@ -41,6 +41,14 @@ class SalonPermissionResolver(
         }
     }
 
+    /** For a read-shaped action any of several permissions should satisfy (e.g. VIEW_DOCUMENTS or the stronger MANAGE_DOCUMENTS) - avoids every such call site re-deriving [resolve] itself. */
+    fun requireAny(salonId: SalonId, callerId: UserId, vararg permissions: Permission) {
+        val granted = resolve(salonId, callerId)
+        if (permissions.none { it in granted }) {
+            throw SalonAccessDeniedException(salonId.value.toString())
+        }
+    }
+
     /**
      * For an action on one specific [specialist]: true if the caller holds
      * [allPermission] at the salon (e.g. [Permission.MANAGE_SCHEDULE_ALL] for

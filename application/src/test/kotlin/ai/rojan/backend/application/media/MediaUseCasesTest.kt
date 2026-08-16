@@ -16,6 +16,7 @@ import ai.rojan.backend.domain.media.MediaType
 import ai.rojan.backend.domain.salon.IdentitySlot
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.salon.SalonRole
 import ai.rojan.backend.domain.user.UserId
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -170,5 +171,59 @@ class MediaUseCasesTest {
         assertThrows<MediaAssetNotFoundException> {
             assignIdentityMediaUseCase.execute(AssignIdentityMediaCommand(salon.id, ownerId, IdentitySlot.LOGO, MediaAssetId.new()))
         }
+    }
+
+    // ---------- Document Archive (Phase 2) retrofits to this Phase 1 code ----------
+
+    private val managerId = UserId.new().also { membershipRepository.assign(salon.id, it, SalonRole.MANAGER) }
+
+    @Test
+    fun `owner can upload a DOCUMENT with an allowed mime type`() {
+        val asset = uploadMediaUseCase.execute(
+            uploadCommand(MediaType.DOCUMENT).copy(mimeType = "application/pdf", originalName = "license.pdf"),
+        )
+        assertEquals(MediaType.DOCUMENT, asset.mediaType)
+    }
+
+    @Test
+    fun `DOCUMENT uploads are now mime-validated - previously accepted anything`() {
+        assertThrows<MediaTypeInvalidException> {
+            uploadMediaUseCase.execute(uploadCommand(MediaType.DOCUMENT).copy(mimeType = "application/zip"))
+        }
+    }
+
+    @Test
+    fun `a manager cannot upload a DOCUMENT - MANAGE_MEDIA does not imply MANAGE_DOCUMENTS`() {
+        assertThrows<SalonAccessDeniedException> {
+            uploadMediaUseCase.execute(uploadCommand(MediaType.DOCUMENT, caller = managerId).copy(mimeType = "application/pdf"))
+        }
+    }
+
+    @Test
+    fun `a manager can still upload non-document media - MANAGE_MEDIA is unaffected for public types`() {
+        val asset = uploadMediaUseCase.execute(uploadCommand(MediaType.GALLERY, caller = managerId))
+        assertEquals(MediaType.GALLERY, asset.mediaType)
+    }
+
+    @Test
+    fun `DOCUMENT uploads route into a distinct, non-public storage prefix`() {
+        val document = uploadMediaUseCase.execute(uploadCommand(MediaType.DOCUMENT).copy(mimeType = "application/pdf"))
+        val publicAsset = uploadMediaUseCase.execute(uploadCommand(MediaType.LOGO))
+
+        assertTrue(document.storageKey.contains("/documents/"))
+        assertTrue(publicAsset.storageKey.contains("/media/"))
+    }
+
+    @Test
+    fun `list unconditionally excludes DOCUMENT-typed assets, even when explicitly requested`() {
+        uploadMediaUseCase.execute(uploadCommand(MediaType.DOCUMENT).copy(mimeType = "application/pdf"))
+        uploadMediaUseCase.execute(uploadCommand(MediaType.LOGO))
+
+        val all = listMediaUseCase.execute(ListMediaQuery(salon.id, mediaType = null))
+        val documentsOnly = listMediaUseCase.execute(ListMediaQuery(salon.id, mediaType = MediaType.DOCUMENT))
+
+        assertEquals(1, all.size)
+        assertEquals(MediaType.LOGO, all.single().mediaType)
+        assertTrue(documentsOnly.isEmpty())
     }
 }

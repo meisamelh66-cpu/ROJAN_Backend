@@ -20,4 +20,6 @@ enum class Permission {
     MANAGE_BOOKINGS,
     MANAGE_OWN_BOOKINGS,
     MANAGE_MEDIA,
+    VIEW_DOCUMENTS,
+    MANAGE_DOCUMENTS,
 }

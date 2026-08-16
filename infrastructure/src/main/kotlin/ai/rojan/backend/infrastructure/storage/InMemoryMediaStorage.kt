@@ -29,4 +29,7 @@ class InMemoryMediaStorage : MediaStoragePort {
     }
 
     override fun resolveUrl(storageKey: String): String = "https://cdn.test.rojan.ai/$storageKey"
+
+    override fun resolveSignedUrl(storageKey: String, expirySeconds: Long): String =
+        "https://cdn.test.rojan.ai/signed/$storageKey?expires=$expirySeconds"
 }

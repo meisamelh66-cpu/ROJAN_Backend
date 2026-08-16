@@ -6,7 +6,11 @@ import org.springframework.stereotype.Component
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
+import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
+import software.amazon.awssdk.services.s3.presigner.S3Presigner
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
+import java.time.Duration
 
 /**
  * The real [MediaStoragePort] implementation - speaks the S3 API via the
@@ -25,6 +29,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest
 @Profile("!test")
 class S3CompatibleMediaStorage(
     private val s3Client: S3Client,
+    private val s3Presigner: S3Presigner,
     private val properties: MediaStorageProperties,
 ) : MediaStoragePort {
 
@@ -51,4 +56,16 @@ class S3CompatibleMediaStorage(
 
     override fun resolveUrl(storageKey: String): String =
         "${properties.publicBaseUrl.trimEnd('/')}/$storageKey"
+
+    override fun resolveSignedUrl(storageKey: String, expirySeconds: Long): String {
+        val getObjectRequest = GetObjectRequest.builder()
+            .bucket(properties.bucket)
+            .key(storageKey)
+            .build()
+        val presignRequest = GetObjectPresignRequest.builder()
+            .signatureDuration(Duration.ofSeconds(expirySeconds))
+            .getObjectRequest(getObjectRequest)
+            .build()
+        return s3Presigner.presignGetObject(presignRequest).url().toString()
+    }
 }

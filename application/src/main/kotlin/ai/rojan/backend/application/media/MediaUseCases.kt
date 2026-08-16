@@ -22,6 +22,10 @@ import java.util.UUID
 
 private val PUBLIC_IMAGE_TYPES = setOf(MediaType.LOGO, MediaType.COVER, MediaType.GALLERY, MediaType.PORTFOLIO)
 private val ALLOWED_IMAGE_MIME_TYPES = setOf("image/png", "image/jpeg", "image/webp")
+// Document Archive (Phase 2) Security Gate §10.3: a license/certificate is
+// as often a phone-camera photo as a scanned PDF - PDF-only would reject
+// the common case.
+private val ALLOWED_DOCUMENT_MIME_TYPES = setOf("application/pdf", "image/jpeg", "image/png")
 private const val MAX_IMAGE_BYTES = 8L * 1024 * 1024
 private const val MAX_DOCUMENT_BYTES = 20L * 1024 * 1024
 
@@ -48,10 +52,18 @@ class UploadMediaUseCase(
 ) {
     fun execute(command: UploadMediaCommand): MediaAsset {
         salonRepository.findById(command.salonId) ?: throw SalonNotFoundException(command.salonId.value.toString())
-        salonPermissionResolver.require(command.salonId, command.callerId, Permission.MANAGE_MEDIA)
+        // Document Archive (Phase 2): DOCUMENT uploads require MANAGE_DOCUMENTS,
+        // never the weaker MANAGE_MEDIA - closes the gap where a Manager
+        // (MANAGE_MEDIA but not MANAGE_DOCUMENTS, per the approved matrix)
+        // could otherwise upload compliance documents.
+        val requiredPermission = if (command.mediaType == MediaType.DOCUMENT) Permission.MANAGE_DOCUMENTS else Permission.MANAGE_MEDIA
+        salonPermissionResolver.require(command.salonId, command.callerId, requiredPermission)
 
         val isPublicImage = command.mediaType in PUBLIC_IMAGE_TYPES
-        if (isPublicImage && command.mimeType !in ALLOWED_IMAGE_MIME_TYPES) {
+        // Every media type is now mime-validated - DOCUMENT previously had
+        // no check at all (Security Gate §10.3 finding).
+        val allowedMimeTypes = if (isPublicImage) ALLOWED_IMAGE_MIME_TYPES else ALLOWED_DOCUMENT_MIME_TYPES
+        if (command.mimeType !in allowedMimeTypes) {
             throw MediaTypeInvalidException(command.mimeType, command.mediaType.name)
         }
         val maxBytes = if (isPublicImage) MAX_IMAGE_BYTES else MAX_DOCUMENT_BYTES
@@ -60,7 +72,12 @@ class UploadMediaUseCase(
             throw MediaSizeExceededException(actualBytes, maxBytes)
         }
 
-        val storageKey = "salons/${command.salonId.value}/media/${UUID.randomUUID()}"
+        // Document Archive (Phase 2) Security Gate §10.1: DOCUMENT content
+        // lives under a distinct, private-only prefix - never the public
+        // media/ prefix, so a bucket policy can grant public read on
+        // media/ while denying it entirely on documents/.
+        val prefix = if (command.mediaType == MediaType.DOCUMENT) "documents" else "media"
+        val storageKey = "salons/${command.salonId.value}/$prefix/${UUID.randomUUID()}"
         mediaStoragePort.upload(storageKey, command.content, command.mimeType)
 
         val mediaAsset = MediaAsset.create(
@@ -85,11 +102,19 @@ class ListMediaUseCase(
     private val salonRepository: SalonRepository,
     private val mediaAssetRepository: MediaAssetRepository,
 ) {
-    /** No permission gate beyond a valid salon - any authenticated caller may list non-document media (§03); Phase 1 carries no DOCUMENT rows, so there is nothing here yet to filter by VIEW_DOCUMENTS/MANAGE_DOCUMENTS. */
+    /**
+     * No permission gate beyond a valid salon - this is the *public* media
+     * surface (logo/cover/gallery/portfolio), intentionally open to any
+     * authenticated caller. Document Archive (Phase 2) Security Gate
+     * §10.1: `DOCUMENT`-typed assets are unconditionally excluded here,
+     * regardless of any `mediaType` filter the caller passes - documents
+     * are discoverable exclusively through the permission-gated
+     * `GET /salons/{salonId}/documents` surface, never this one.
+     */
     fun execute(query: ListMediaQuery): List<MediaAsset> {
         salonRepository.findById(query.salonId) ?: throw SalonNotFoundException(query.salonId.value.toString())
         return mediaAssetRepository.findBySalonId(query.salonId, query.mediaType)
-            .filter { it.status != MediaAssetStatus.DELETED }
+            .filter { it.status != MediaAssetStatus.DELETED && it.mediaType != MediaType.DOCUMENT }
     }
 }
 

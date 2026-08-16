@@ -35,4 +35,7 @@ internal class InMemoryMediaStoragePort : MediaStoragePort {
     }
 
     override fun resolveUrl(storageKey: String): String = "https://cdn.test/$storageKey"
+
+    override fun resolveSignedUrl(storageKey: String, expirySeconds: Long): String =
+        "https://cdn.test/signed/$storageKey?expires=$expirySeconds"
 }

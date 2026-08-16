@@ -11,6 +11,7 @@ import ai.rojan.backend.domain.common.CustomerAlreadyExistsException
 import ai.rojan.backend.domain.common.CustomerNotFoundException
 import ai.rojan.backend.domain.common.CustomerNotLinkedToAccountException
 import ai.rojan.backend.domain.common.CustomerTagNotFoundException
+import ai.rojan.backend.domain.common.DocumentAlreadyAttachedException
 import ai.rojan.backend.domain.common.EmailAlreadyRegisteredException
 import ai.rojan.backend.domain.common.InactiveUserException
 import ai.rojan.backend.domain.common.InvalidBookingStateException
@@ -29,6 +30,7 @@ import ai.rojan.backend.domain.common.RefreshRateLimitExceededException
 import ai.rojan.backend.domain.common.RegisterRateLimitExceededException
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.InvalidMembershipAssignmentException
+import ai.rojan.backend.domain.common.SalonDocumentNotFoundException
 import ai.rojan.backend.domain.common.SalonInviteAcceptRateLimitExceededException
 import ai.rojan.backend.domain.common.SalonInviteNotFoundException
 import ai.rojan.backend.domain.common.SalonNotActiveException
@@ -132,6 +134,7 @@ class GlobalExceptionHandler {
         CustomerTagNotFoundException::class,
         SalonInviteNotFoundException::class,
         MediaAssetNotFoundException::class,
+        SalonDocumentNotFoundException::class,
         NoResourceFoundException::class,
     )
     fun handleNotFound(ex: Exception, request: WebRequest) =
@@ -163,6 +166,7 @@ class GlobalExceptionHandler {
         InvalidMembershipAssignmentException::class,
         SalonNotActiveException::class,
         MediaTypeMismatchException::class,
+        DocumentAlreadyAttachedException::class,
     )
     fun handleConflict(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -239,6 +243,8 @@ class GlobalExceptionHandler {
         is MediaTypeInvalidException -> "MEDIA_TYPE_INVALID"
         is MediaSizeExceededException -> "MEDIA_SIZE_EXCEEDED"
         is MediaTypeMismatchException -> "MEDIA_TYPE_MISMATCH"
+        is SalonDocumentNotFoundException -> "SALON_DOCUMENT_NOT_FOUND"
+        is DocumentAlreadyAttachedException -> "DOCUMENT_ALREADY_ATTACHED"
         is NoResourceFoundException -> "RESOURCE_NOT_FOUND"
         is SalonAccessDeniedException, is BookingAccessDeniedException, is CustomerAccessDeniedException -> "ACCESS_DENIED"
         is BookingRoleNotAllowedException -> "BOOKING_ROLE_NOT_ALLOWED"
