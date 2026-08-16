@@ -1,17 +1,22 @@
 package ai.rojan.backend.application.port
 
 /**
- * Output port for external media file storage — kept out of this
- * (framework-free) module's dependency graph exactly like
- * [QrCodeGeneratorPort]/[SmsProviderPort]. The database only ever sees a
- * [storageKey] string via [ai.rojan.backend.domain.media.MediaAsset] — the
- * real bytes live wherever this port's implementation puts them (local disk
- * today, swappable for S3/object storage later without touching
- * application or domain code).
+ * Output port for file storage - kept out of this (framework-free)
+ * module's dependency graph exactly like [QrCodeGeneratorPort]/
+ * [SmsProviderPort] already are; the real S3-compatible client lives only
+ * in the infrastructure implementation. Never a public/private access
+ * decision here - Phase 1 (Media Foundation) only ever stores public
+ * assets (logo/cover/gallery/portfolio); a future document-storage phase
+ * that needs private, signed-access objects extends this port rather than
+ * bolting visibility logic onto [resolveUrl].
  */
 interface MediaStoragePort {
-    /** Writes [content] under [storageKey], returning the publicly reachable URL for it. */
-    fun store(storageKey: String, content: ByteArray, mimeType: String): String
+    /** Uploads [content] under [storageKey], overwriting if the key already exists. */
+    fun upload(storageKey: String, content: ByteArray, contentType: String)
 
+    /** Deletes the object at [storageKey]. A missing object is not an error - deletion is idempotent from the caller's perspective. */
     fun delete(storageKey: String)
+
+    /** Resolves [storageKey] to a publicly servable URL. */
+    fun resolveUrl(storageKey: String): String
 }

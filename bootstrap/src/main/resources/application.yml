@@ -121,6 +121,18 @@ rojan:
       api-key: ${MELIPAYAMAK_API_KEY}
       body-id: ${MELIPAYAMAK_BODY_ID}
 
+  # Media Foundation (Phase 1): S3-compatible object storage, MinIO by
+  # default for local/dev - safe localhost defaults, not fail-loud like
+  # sms/jwt above, since an unconfigured dev environment pointing at a
+  # local MinIO container is the normal case here.
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    region: ${STORAGE_REGION:us-east-1}
+    bucket: ${STORAGE_BUCKET:rojan-media}
+    access-key: ${STORAGE_ACCESS_KEY:minioadmin}
+    secret-key: ${STORAGE_SECRET_KEY:minioadmin}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://localhost:9000/rojan-media}
+
 management:
   endpoints:
     web:

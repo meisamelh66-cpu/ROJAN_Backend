@@ -7,41 +7,32 @@ import ai.rojan.backend.domain.media.MediaAssetRepository
 import ai.rojan.backend.domain.media.MediaType
 import ai.rojan.backend.domain.salon.SalonId
 
-/** Shared in-memory fake for the media use case tests, mirroring `SalonTestFixtures.kt`'s style. */
+/** Mirrors [ai.rojan.backend.application.salon.InMemorySalonRepository]'s style. */
 internal class InMemoryMediaAssetRepository : MediaAssetRepository {
     private val store = mutableMapOf<MediaAssetId, MediaAsset>()
+
     override fun save(mediaAsset: MediaAsset): MediaAsset = mediaAsset.also { store[it.id] = it }
-    override fun findById(id: MediaAssetId): MediaAsset? = store[id]
-    override fun findBySalonId(salonId: SalonId): List<MediaAsset> = store.values.filter { it.salonId == salonId }
-    override fun findBySalonIdAndMediaType(salonId: SalonId, mediaType: MediaType): List<MediaAsset> =
-        store.values.filter { it.salonId == salonId && it.mediaType == mediaType }
-    override fun delete(id: MediaAssetId) {
-        store.remove(id)
-    }
+
+    override fun findByIdAndSalonId(id: MediaAssetId, salonId: SalonId): MediaAsset? =
+        store[id]?.takeIf { it.salonId == salonId }
+
+    override fun findBySalonId(salonId: SalonId, mediaType: MediaType?): List<MediaAsset> =
+        store.values.filter { it.salonId == salonId && (mediaType == null || it.mediaType == mediaType) }
 }
 
-/** A minimal, real JPEG signature (FF D8 FF) followed by zero-padding - the actual bytes `UploadMediaUseCase`'s content-sniffing check validates against, independent of whatever mime type/filename a test declares alongside it. */
-internal fun jpegBytes(sizeBytes: Int = 10): ByteArray {
-    val bytes = ByteArray(sizeBytes)
-    if (sizeBytes >= 3) {
-        bytes[0] = 0xFF.toByte()
-        bytes[1] = 0xD8.toByte()
-        bytes[2] = 0xFF.toByte()
-    }
-    return bytes
-}
-
-/** Records every store()/delete() call so tests can assert on them, without touching a real filesystem. */
-internal class FakeMediaStoragePort : MediaStoragePort {
-    val stored = mutableListOf<String>()
+/** In-memory - no real bytes stored, just tracks what was uploaded/deleted for assertions. */
+internal class InMemoryMediaStoragePort : MediaStoragePort {
+    val uploaded = mutableMapOf<String, ByteArray>()
     val deleted = mutableListOf<String>()
 
-    override fun store(storageKey: String, content: ByteArray, mimeType: String): String {
-        stored += storageKey
-        return "https://rojanai.ir/media/$storageKey"
+    override fun upload(storageKey: String, content: ByteArray, contentType: String) {
+        uploaded[storageKey] = content
     }
 
     override fun delete(storageKey: String) {
-        deleted += storageKey
+        deleted.add(storageKey)
+        uploaded.remove(storageKey)
     }
+
+    override fun resolveUrl(storageKey: String): String = "https://cdn.test/$storageKey"
 }

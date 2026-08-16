@@ -17,7 +17,7 @@ data class PublicSalonResponse(
     val phone: String,
     val address: String,
     val logoUrl: String?,
-    val coverUrl: String?,
+    val coverImageUrl: String?,
     val latitude: Double?,
     val longitude: Double?,
 )

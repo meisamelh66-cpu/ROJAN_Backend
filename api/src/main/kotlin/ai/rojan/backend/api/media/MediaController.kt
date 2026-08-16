@@ -1,23 +1,25 @@
 package ai.rojan.backend.api.media
 
+import ai.rojan.backend.api.common.ApiError
 import ai.rojan.backend.api.common.CurrentUserResolver
 import ai.rojan.backend.application.media.DeleteMediaCommand
 import ai.rojan.backend.application.media.DeleteMediaUseCase
+import ai.rojan.backend.application.media.ListMediaQuery
+import ai.rojan.backend.application.media.ListMediaUseCase
 import ai.rojan.backend.application.media.UploadMediaCommand
 import ai.rojan.backend.application.media.UploadMediaUseCase
-import ai.rojan.backend.application.salon.SalonPermissionResolver
-import ai.rojan.backend.domain.common.MediaAssetNotFoundException
-import ai.rojan.backend.domain.common.MediaAssetTenantMismatchException
+import ai.rojan.backend.application.port.MediaStoragePort
 import ai.rojan.backend.domain.media.MediaAsset
 import ai.rojan.backend.domain.media.MediaAssetId
-import ai.rojan.backend.domain.media.MediaAssetRepository
 import ai.rojan.backend.domain.media.MediaType
-import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.SalonId
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.HttpStatus
-import org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -32,33 +34,45 @@ import org.springframework.web.multipart.MultipartFile
 import java.util.UUID
 
 /**
- * Owner-only ([Permission.MANAGE_SALON], same gate every other salon-identity
- * write already uses) media CRUD for a salon — Salon Identity Foundation
- * Phase A. [list] deliberately re-checks the permission itself (unlike e.g.
- * `SpecialistController.list`, which is open to any authenticated caller) —
- * this phase's explicit tenant-security requirement is stricter than that
- * older sibling endpoint's existing behavior, not loosened to match it.
- * Public/gallery reads live on [ai.rojan.backend.api.publicsalon.PublicSalonController]
- * instead, scoped to `GALLERY`/`PORTFOLIO` on `ACTIVE` salons only.
+ * Media Foundation (Phase 1). Direct multipart upload rather than a
+ * signed-URL two-phase flow - see `MediaStoragePort`'s own doc comment for
+ * why, and why [ai.rojan.backend.domain.media.MediaAssetStatus.PENDING]
+ * exists even though nothing here currently leaves a row parked there.
+ * Not paginated: a salon's media count (logo/cover + a handful of
+ * gallery/portfolio images) is small enough that a plain list is honest to
+ * actual scale - a disclosed simplification, not an oversight.
  */
 @RestController
 @RequestMapping("/api/v1/salons/{salonId}/media")
-@Tag(name = "Salon Media")
+@Tag(name = "Media")
 class MediaController(
-    private val mediaAssetRepository: MediaAssetRepository,
     private val uploadMediaUseCase: UploadMediaUseCase,
+    private val listMediaUseCase: ListMediaUseCase,
     private val deleteMediaUseCase: DeleteMediaUseCase,
-    private val salonPermissionResolver: SalonPermissionResolver,
+    private val mediaStoragePort: MediaStoragePort,
     private val currentUserResolver: CurrentUserResolver,
 ) {
 
-    @PostMapping(consumes = [MULTIPART_FORM_DATA_VALUE])
+    @PostMapping(consumes = ["multipart/form-data"])
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Upload a media file for this salon (logo/cover/gallery/portfolio) - owner only")
+    @Operation(summary = "Upload a media asset (owner or MANAGE_MEDIA member)")
+    @ApiResponses(
+        ApiResponse(responseCode = "201", description = "Media uploaded"),
+        ApiResponse(
+            responseCode = "400",
+            description = "Disallowed mime type for the declared media type",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+        ApiResponse(
+            responseCode = "413",
+            description = "File exceeds the size ceiling for its category",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+    )
     fun upload(
         @PathVariable salonId: UUID,
-        @RequestParam mediaType: MediaType,
         @RequestParam file: MultipartFile,
+        @RequestParam mediaType: MediaType,
         @AuthenticationPrincipal principal: UserDetails,
     ): MediaAssetResponse {
         val callerId = currentUserResolver.resolve(principal)
@@ -67,68 +81,43 @@ class MediaController(
                 salonId = SalonId(salonId),
                 callerId = callerId,
                 mediaType = mediaType,
-                fileName = file.originalFilename ?: "upload",
-                mimeType = file.contentType ?: "application/octet-stream",
                 content = file.bytes,
+                originalName = file.originalFilename ?: file.name,
+                mimeType = file.contentType ?: "application/octet-stream",
             ),
         )
         return mediaAsset.toResponse()
     }
 
     @GetMapping
-    @Operation(summary = "List this salon's media assets, optionally filtered by type - owner only")
+    @Operation(summary = "List a salon's media, optionally filtered by type")
     fun list(
         @PathVariable salonId: UUID,
         @RequestParam(required = false) mediaType: MediaType?,
-        @AuthenticationPrincipal principal: UserDetails,
-    ): List<MediaAssetResponse> {
-        val callerId = currentUserResolver.resolve(principal)
-        salonPermissionResolver.require(SalonId(salonId), callerId, Permission.MANAGE_SALON)
-        val all = mediaAssetRepository.findBySalonId(SalonId(salonId))
-        return all.filter { mediaType == null || it.mediaType == mediaType }.map { it.toResponse() }
-    }
+    ): List<MediaAssetResponse> =
+        listMediaUseCase.execute(ListMediaQuery(SalonId(salonId), mediaType)).map { it.toResponse() }
 
     @DeleteMapping("/{mediaId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Delete a media asset - owner only")
+    @Operation(summary = "Delete a media asset (owner or MANAGE_MEDIA member)")
     fun delete(
         @PathVariable salonId: UUID,
         @PathVariable mediaId: UUID,
         @AuthenticationPrincipal principal: UserDetails,
     ) {
         val callerId = currentUserResolver.resolve(principal)
-        val mediaAsset = requireOwnedByRequestedSalon(salonId, mediaId)
-        deleteMediaUseCase.execute(DeleteMediaCommand(mediaAsset.id, callerId))
-    }
-
-    /**
-     * The path already carries [salonId], but a media asset's own
-     * authority for "which salon do I belong to" is [MediaAsset.salonId],
-     * never trusted from the URL alone — this is the check that turns "an
-     * owner deletes media on a salon they own" into "an owner can only
-     * touch media that actually belongs to *that* salon," closing the one
-     * cross-salon path a same-owner-multiple-salons account could
-     * otherwise exploit by passing a real `mediaId` under the wrong
-     * `salonId` segment.
-     */
-    private fun requireOwnedByRequestedSalon(salonId: UUID, mediaId: UUID): MediaAsset {
-        val mediaAsset = mediaAssetRepository.findById(MediaAssetId(mediaId))
-            ?: throw MediaAssetNotFoundException(mediaId.toString())
-        if (mediaAsset.salonId != SalonId(salonId)) {
-            throw MediaAssetTenantMismatchException(mediaId.toString(), salonId.toString())
-        }
-        return mediaAsset
+        deleteMediaUseCase.execute(DeleteMediaCommand(SalonId(salonId), callerId, MediaAssetId(mediaId)))
     }
 
     private fun MediaAsset.toResponse() = MediaAssetResponse(
         id = id.value,
         salonId = salonId.value,
         mediaType = mediaType,
-        fileName = fileName,
+        originalName = originalName,
         mimeType = mimeType,
         fileSize = fileSize,
-        url = url,
+        status = status,
+        url = mediaStoragePort.resolveUrl(storageKey),
         createdAt = createdAt,
-        updatedAt = updatedAt,
     )
 }

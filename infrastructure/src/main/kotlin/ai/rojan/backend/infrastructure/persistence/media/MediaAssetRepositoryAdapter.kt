@@ -5,9 +5,11 @@ import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.media.MediaAssetRepository
 import ai.rojan.backend.domain.media.MediaType
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.user.UserId
 import org.springframework.stereotype.Repository
 import java.time.Instant
 
+/** Repository-pattern adapter: implements the domain [MediaAssetRepository] port on top of Spring Data JPA. */
 @Repository
 class MediaAssetRepositoryAdapter(
     private val jpaRepository: MediaAssetSpringDataRepository,
@@ -15,47 +17,43 @@ class MediaAssetRepositoryAdapter(
 
     override fun save(mediaAsset: MediaAsset): MediaAsset {
         val entity = jpaRepository.findById(mediaAsset.id.value).orElse(null)
+            ?.apply {
+                mediaType = mediaAsset.mediaType
+                storageKey = mediaAsset.storageKey
+                status = mediaAsset.status
+            }
             ?: MediaAssetJpaEntity(
                 id = mediaAsset.id.value,
                 salonId = mediaAsset.salonId.value,
-                ownerType = mediaAsset.ownerType,
-                ownerId = mediaAsset.ownerId,
                 mediaType = mediaAsset.mediaType,
                 storageKey = mediaAsset.storageKey,
-                fileName = mediaAsset.fileName,
+                originalName = mediaAsset.originalName,
                 mimeType = mediaAsset.mimeType,
                 fileSize = mediaAsset.fileSize,
-                url = mediaAsset.url,
+                status = mediaAsset.status,
+                uploadedBy = mediaAsset.uploadedBy.value,
             )
-        // MediaAsset is create-once, immutable metadata after that (no
-        // update() on the domain entity) - save() only ever inserts.
         return jpaRepository.save(entity).toDomain()
     }
 
-    override fun findById(id: MediaAssetId): MediaAsset? =
-        jpaRepository.findById(id.value).orElse(null)?.toDomain()
+    override fun findByIdAndSalonId(id: MediaAssetId, salonId: SalonId): MediaAsset? =
+        jpaRepository.findByIdAndSalonId(id.value, salonId.value)?.toDomain()
 
-    override fun findBySalonId(salonId: SalonId): List<MediaAsset> =
-        jpaRepository.findBySalonId(salonId.value).map { it.toDomain() }
-
-    override fun findBySalonIdAndMediaType(salonId: SalonId, mediaType: MediaType): List<MediaAsset> =
-        jpaRepository.findBySalonIdAndMediaType(salonId.value, mediaType).map { it.toDomain() }
-
-    override fun delete(id: MediaAssetId) {
-        jpaRepository.deleteById(id.value)
-    }
+    override fun findBySalonId(salonId: SalonId, mediaType: MediaType?): List<MediaAsset> =
+        jpaRepository.findBySalonId(salonId.value)
+            .filter { mediaType == null || it.mediaType == mediaType }
+            .map { it.toDomain() }
 
     private fun MediaAssetJpaEntity.toDomain(): MediaAsset = MediaAsset.reconstitute(
         id = MediaAssetId(id),
         salonId = SalonId(salonId),
-        ownerType = ownerType,
-        ownerId = ownerId,
         mediaType = mediaType,
         storageKey = storageKey,
-        fileName = fileName,
+        originalName = originalName,
         mimeType = mimeType,
         fileSize = fileSize,
-        url = url,
+        status = status,
+        uploadedBy = UserId(uploadedBy),
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
     )

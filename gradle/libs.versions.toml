@@ -12,6 +12,7 @@ zonkyPostgresBinaries = "16.14.0"
 commonsCompress = "1.28.0"
 commonsLang3 = "3.18.0"
 zxing = "3.5.3"
+awsSdk = "2.28.11"
 
 [libraries]
 # Kotlin
@@ -43,6 +44,12 @@ flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 # QR code generation (salon activation flow - printable QR for reception counter)
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 zxing-javase = { module = "com.google.zxing:javase", version.ref = "zxing" }
+
+# Media storage (Phase 1, Media Foundation) - AWS SDK v2's S3 client speaks
+# the S3 API any S3-compatible provider implements (MinIO today, real S3 or
+# another provider later) via a custom endpoint override - one client
+# library for every provider MediaStoragePort might ever be pointed at.
+aws-s3 = { module = "software.amazon.awssdk:s3", version.ref = "awsSdk" }
 
 # JWT
 jjwt-api = { module = "io.jsonwebtoken:jjwt-api", version.ref = "jjwt" }

@@ -28,12 +28,11 @@ class Salon private constructor(
     address: String,
     slug: String,
     onboardingStatus: SalonOnboardingStatus,
-    logoUrl: String?,
+    logoMediaId: MediaAssetId?,
+    coverMediaId: MediaAssetId?,
     latitude: Double?,
     longitude: Double?,
     active: Boolean,
-    logoMediaId: MediaAssetId?,
-    coverMediaId: MediaAssetId?,
     val createdAt: Instant,
     updatedAt: Instant,
 ) {
@@ -58,7 +57,10 @@ class Salon private constructor(
     var onboardingStatus: SalonOnboardingStatus = onboardingStatus
         private set
 
-    var logoUrl: String? = logoUrl
+    var logoMediaId: MediaAssetId? = logoMediaId
+        private set
+
+    var coverMediaId: MediaAssetId? = coverMediaId
         private set
 
     var latitude: Double? = latitude
@@ -68,13 +70,6 @@ class Salon private constructor(
         private set
 
     var active: Boolean = active
-        private set
-
-    /** References into the media subsystem (Salon Identity Foundation Phase B) - never the media's own URL/bytes, see [ai.rojan.backend.domain.media.MediaAsset]. Null means "not set," not "use [logoUrl]" - [logoUrl] stays purely legacy (see [updateProfile]) and is never written by [assignIdentityMedia]. */
-    var logoMediaId: MediaAssetId? = logoMediaId
-        private set
-
-    var coverMediaId: MediaAssetId? = coverMediaId
         private set
 
     var updatedAt: Instant = updatedAt
@@ -106,33 +101,38 @@ class Salon private constructor(
     }
 
     /**
-     * Profile completion fields (logo, geo-location) - deliberately separate
-     * from [update] (core business fields) so an owner filling in the QR/map
+     * Profile completion fields (geo-location) - deliberately separate from
+     * [update] (core business fields) so an owner filling in the map
      * presentation details doesn't need to re-submit name/phone/address too.
+     * Logo/cover are handled by [assignIdentityMedia], not here - see that
+     * method's own doc comment for why.
      */
-    fun updateProfile(logoUrl: String?, latitude: Double?, longitude: Double?) {
+    fun updateProfile(latitude: Double?, longitude: Double?) {
         require(latitude == null || latitude in -90.0..90.0) { "Latitude must be between -90 and 90" }
         require(longitude == null || longitude in -180.0..180.0) { "Longitude must be between -180 and 180" }
-        this.logoUrl = logoUrl?.trim()?.ifBlank { null }
         this.latitude = latitude
         this.longitude = longitude
         this.updatedAt = Instant.now()
     }
 
     /**
-     * Sets which already-uploaded [ai.rojan.backend.domain.media.MediaAsset]
-     * (by id) is this salon's current logo/cover - explicit `null` clears
-     * that slot (unlike [updateProfile]'s "null means leave unchanged"),
-     * since this method's whole purpose is "set the identity media,"
+     * The only writer of [logoMediaId]/[coverMediaId] - a `MediaAsset` id,
+     * never a URL (Salon must reference media through IDs). The servable
+     * URL is resolved from this id only at the API response boundary,
+     * through the storage port - nothing here ever stores one. `null`
+     * clears the slot - unlike [updateProfile]'s "null means leave
+     * unchanged," this method's whole purpose is "set the identity media,"
      * clearing included. Verifying the referenced id actually belongs to
      * this salon is cross-aggregate (needs
      * [ai.rojan.backend.domain.media.MediaAssetRepository]) and
-     * deliberately lives in `AssignSalonIdentityMediaUseCase`, not here -
-     * same split as [activate]'s readiness check.
+     * deliberately lives in `AssignIdentityMediaUseCase`, not here - same
+     * split as [activate]'s readiness check.
      */
-    fun assignIdentityMedia(logoMediaId: MediaAssetId?, coverMediaId: MediaAssetId?) {
-        this.logoMediaId = logoMediaId
-        this.coverMediaId = coverMediaId
+    fun assignIdentityMedia(slot: IdentitySlot, mediaId: MediaAssetId?) {
+        when (slot) {
+            IdentitySlot.LOGO -> this.logoMediaId = mediaId
+            IdentitySlot.COVER -> this.coverMediaId = mediaId
+        }
         this.updatedAt = Instant.now()
     }
 
@@ -197,7 +197,8 @@ class Salon private constructor(
             address: String,
             slug: String? = null,
             onboardingStatus: SalonOnboardingStatus = SalonOnboardingStatus.ACTIVE,
-            logoUrl: String? = null,
+            logoMediaId: MediaAssetId? = null,
+            coverMediaId: MediaAssetId? = null,
             latitude: Double? = null,
             longitude: Double? = null,
         ): Salon {
@@ -219,12 +220,11 @@ class Salon private constructor(
                 address = address.trim(),
                 slug = resolvedSlug,
                 onboardingStatus = onboardingStatus,
-                logoUrl = logoUrl?.trim()?.ifBlank { null },
+                logoMediaId = logoMediaId,
+                coverMediaId = coverMediaId,
                 latitude = latitude,
                 longitude = longitude,
                 active = true,
-                logoMediaId = null,
-                coverMediaId = null,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -240,17 +240,19 @@ class Salon private constructor(
             address: String,
             slug: String,
             onboardingStatus: SalonOnboardingStatus,
-            logoUrl: String?,
+            logoMediaId: MediaAssetId?,
+            coverMediaId: MediaAssetId?,
             latitude: Double?,
             longitude: Double?,
             active: Boolean,
-            logoMediaId: MediaAssetId?,
-            coverMediaId: MediaAssetId?,
             createdAt: Instant,
             updatedAt: Instant,
         ): Salon = Salon(
             id, ownerId, name, description, phone, email, address, slug,
-            onboardingStatus, logoUrl, latitude, longitude, active, logoMediaId, coverMediaId, createdAt, updatedAt,
+            onboardingStatus, logoMediaId, coverMediaId, latitude, longitude, active, createdAt, updatedAt,
         )
     }
 }
+
+/** The two identity-media slots a [Salon] can have a current [ai.rojan.backend.domain.media.MediaAsset] assigned to. */
+enum class IdentitySlot { LOGO, COVER }

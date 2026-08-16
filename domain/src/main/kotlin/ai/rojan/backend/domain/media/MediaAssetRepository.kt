@@ -4,11 +4,9 @@ import ai.rojan.backend.domain.salon.SalonId
 
 interface MediaAssetRepository {
     fun save(mediaAsset: MediaAsset): MediaAsset
-    fun findById(id: MediaAssetId): MediaAsset?
-    fun findBySalonId(salonId: SalonId): List<MediaAsset>
 
-    /** Scoped read for the public gallery endpoint - active salon's GALLERY/PORTFOLIO items only, never LOGO/COVER (those are surfaced via the salon's own resolved reference, not a list). */
-    fun findBySalonIdAndMediaType(salonId: SalonId, mediaType: MediaType): List<MediaAsset>
+    /** Tenant-scoped by construction - callers must always resolve through this, never [findById] alone, so a cross-salon lookup can 404 rather than leak. */
+    fun findByIdAndSalonId(id: MediaAssetId, salonId: SalonId): MediaAsset?
 
-    fun delete(id: MediaAssetId)
+    fun findBySalonId(salonId: SalonId, mediaType: MediaType? = null): List<MediaAsset>
 }

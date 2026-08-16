@@ -4,8 +4,9 @@ import ai.rojan.backend.api.common.ApiError
 import ai.rojan.backend.api.common.CurrentUserResolver
 import ai.rojan.backend.api.common.PagedResponse
 import ai.rojan.backend.api.common.toPagedResponse
-import ai.rojan.backend.application.media.AssignSalonIdentityMediaCommand
-import ai.rojan.backend.application.media.AssignSalonIdentityMediaUseCase
+import ai.rojan.backend.application.media.AssignIdentityMediaCommand
+import ai.rojan.backend.application.media.AssignIdentityMediaUseCase
+import ai.rojan.backend.application.port.MediaStoragePort
 import ai.rojan.backend.application.salon.ActivateSalonCommand
 import ai.rojan.backend.application.salon.ActivateSalonUseCase
 import ai.rojan.backend.application.salon.ChangeSalonSlugCommand
@@ -62,9 +63,10 @@ class SalonController(
     private val changeSalonSlugUseCase: ChangeSalonSlugUseCase,
     private val activateSalonUseCase: ActivateSalonUseCase,
     private val generateSalonQrCodeUseCase: GenerateSalonQrCodeUseCase,
-    private val assignSalonIdentityMediaUseCase: AssignSalonIdentityMediaUseCase,
-    private val mediaAssetRepository: MediaAssetRepository,
     private val currentUserResolver: CurrentUserResolver,
+    private val mediaAssetRepository: MediaAssetRepository,
+    private val mediaStoragePort: MediaStoragePort,
+    private val assignIdentityMediaUseCase: AssignIdentityMediaUseCase,
 ) {
 
     @PostMapping
@@ -146,7 +148,6 @@ class SalonController(
                 phone = request.phone,
                 email = request.email,
                 address = request.address,
-                logoUrl = request.logoUrl,
                 latitude = request.latitude,
                 longitude = request.longitude,
             ),
@@ -193,28 +194,6 @@ class SalonController(
         return salon.toResponse()
     }
 
-    @PutMapping("/{salonId}/identity-media")
-    @Operation(
-        summary = "Assign an already-uploaded media asset as this salon's logo/cover (owner only)",
-        description = "The referenced media id(s) must already exist and belong to this salon (POST /{salonId}/media first) - explicit null clears that slot.",
-    )
-    fun assignIdentityMedia(
-        @PathVariable salonId: UUID,
-        @RequestBody request: AssignSalonIdentityMediaRequest,
-        @AuthenticationPrincipal principal: UserDetails,
-    ): SalonResponse {
-        val callerId = currentUserResolver.resolve(principal)
-        val salon = assignSalonIdentityMediaUseCase.execute(
-            AssignSalonIdentityMediaCommand(
-                salonId = SalonId(salonId),
-                callerId = callerId,
-                logoMediaId = request.logoMediaId?.let { MediaAssetId(it) },
-                coverMediaId = request.coverMediaId?.let { MediaAssetId(it) },
-            ),
-        )
-        return salon.toResponse()
-    }
-
     @GetMapping("/{salonId}/qr-code", produces = [MediaType.IMAGE_PNG_VALUE])
     @Operation(summary = "Generate a printable QR code (PNG) encoding this salon's public URL (owner only)")
     fun qrCode(
@@ -227,40 +206,63 @@ class SalonController(
         return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(png)
     }
 
+    @PutMapping("/{salonId}/identity-media")
+    @Operation(summary = "Assign or clear a salon's logo/cover media (owner or MANAGE_MEDIA member)")
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "Identity media updated"),
+        ApiResponse(
+            responseCode = "409",
+            description = "The referenced media asset's type doesn't match the requested slot",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+        ApiResponse(
+            responseCode = "404",
+            description = "No such media asset for this salon",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+    )
+    fun assignIdentityMedia(
+        @PathVariable salonId: UUID,
+        @Valid @RequestBody request: AssignIdentityMediaRequest,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): SalonResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        val salon = assignIdentityMediaUseCase.execute(
+            AssignIdentityMediaCommand(
+                salonId = SalonId(salonId),
+                callerId = callerId,
+                slot = request.slot,
+                mediaId = request.mediaId?.let { MediaAssetId(it) },
+            ),
+        )
+        return salon.toResponse()
+    }
+
     private fun findSalonOrThrow(salonId: UUID): Salon =
         salonRepository.findById(SalonId(salonId)) ?: throw SalonNotFoundException(salonId.toString())
 
-    /**
-     * [logoUrl]/[coverUrl] resolution: [Salon.logoMediaId]/[Salon.coverMediaId]
-     * win when set (real upload), falling back to the legacy raw
-     * [Salon.logoUrl] string only for [logoUrl] (there is no legacy cover
-     * field). One extra lookup per reference per response - accepted for
-     * this phase; batching would only matter once salon lists get large
-     * enough for it to show up, not yet the case for a single-pilot-salon
-     * deployment.
-     */
-    private fun Salon.toResponse(): SalonResponse {
-        val resolvedLogoUrl = logoMediaId?.let { mediaAssetRepository.findById(it)?.url } ?: logoUrl
-        val resolvedCoverUrl = coverMediaId?.let { mediaAssetRepository.findById(it)?.url }
-        return SalonResponse(
-            id = id.value,
-            ownerId = ownerId.value,
-            name = name,
-            description = description,
-            phone = phone,
-            email = email,
-            address = address,
-            slug = slug,
-            onboardingStatus = onboardingStatus,
-            logoUrl = resolvedLogoUrl,
-            coverUrl = resolvedCoverUrl,
-            logoMediaId = logoMediaId?.value,
-            coverMediaId = coverMediaId?.value,
-            latitude = latitude,
-            longitude = longitude,
-            active = active,
-            createdAt = createdAt,
-            updatedAt = updatedAt,
-        )
-    }
+    /** [logoMediaId]/[coverMediaId] are resolved to a servable URL here, at the response boundary - `Salon` itself never stores one (media referenced by id, not URL). */
+    private fun Salon.toResponse() = SalonResponse(
+        id = id.value,
+        ownerId = ownerId.value,
+        name = name,
+        description = description,
+        phone = phone,
+        email = email,
+        address = address,
+        slug = slug,
+        onboardingStatus = onboardingStatus,
+        logoMediaId = logoMediaId?.value,
+        coverMediaId = coverMediaId?.value,
+        logoUrl = logoMediaId?.let { resolveMediaUrl(it) },
+        coverImageUrl = coverMediaId?.let { resolveMediaUrl(it) },
+        latitude = latitude,
+        longitude = longitude,
+        active = active,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+    )
+
+    private fun Salon.resolveMediaUrl(mediaId: MediaAssetId): String? =
+        mediaAssetRepository.findByIdAndSalonId(mediaId, id)?.let { mediaStoragePort.resolveUrl(it.storageKey) }
 }

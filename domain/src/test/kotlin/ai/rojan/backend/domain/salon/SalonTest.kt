@@ -1,7 +1,9 @@
 package ai.rojan.backend.domain.salon
 
+import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.user.UserId
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 
@@ -43,12 +45,11 @@ class SalonTest {
     }
 
     @Test
-    fun `updateProfile sets logo and coordinates`() {
+    fun `updateProfile sets coordinates`() {
         val salon = newSalon()
 
-        salon.updateProfile("https://example.com/logo.png", 35.6892, 51.3890)
+        salon.updateProfile(35.6892, 51.3890)
 
-        assertEquals("https://example.com/logo.png", salon.logoUrl)
         assertEquals(35.6892, salon.latitude)
         assertEquals(51.3890, salon.longitude)
     }
@@ -57,7 +58,7 @@ class SalonTest {
     fun `updateProfile rejects an out-of-range latitude`() {
         val salon = newSalon()
         assertThrows(IllegalArgumentException::class.java) {
-            salon.updateProfile(null, 90.1, null)
+            salon.updateProfile(90.1, null)
         }
     }
 
@@ -65,7 +66,7 @@ class SalonTest {
     fun `updateProfile rejects an out-of-range longitude`() {
         val salon = newSalon()
         assertThrows(IllegalArgumentException::class.java) {
-            salon.updateProfile(null, null, -180.1)
+            salon.updateProfile(null, -180.1)
         }
     }
 
@@ -74,5 +75,23 @@ class SalonTest {
         assertThrows(IllegalArgumentException::class.java) {
             Salon.create(UserId.new(), "Glow Salon", null, "+1 555 0100", null, "1 Main St", latitude = 91.0)
         }
+    }
+
+    @Test
+    fun `assignIdentityMedia sets and independently clears the logo and cover slots`() {
+        val salon = newSalon()
+        val logoId = MediaAssetId.new()
+        val coverId = MediaAssetId.new()
+
+        salon.assignIdentityMedia(IdentitySlot.LOGO, logoId)
+        salon.assignIdentityMedia(IdentitySlot.COVER, coverId)
+
+        assertEquals(logoId, salon.logoMediaId)
+        assertEquals(coverId, salon.coverMediaId)
+
+        salon.assignIdentityMedia(IdentitySlot.LOGO, null)
+
+        assertNull(salon.logoMediaId)
+        assertEquals(coverId, salon.coverMediaId)
     }
 }

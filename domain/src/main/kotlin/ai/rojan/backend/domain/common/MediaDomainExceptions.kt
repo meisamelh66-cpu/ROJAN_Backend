@@ -3,12 +3,11 @@ package ai.rojan.backend.domain.common
 class MediaAssetNotFoundException(identifier: String) :
     DomainException("Media asset not found: $identifier")
 
-/** Thrown when a media asset (or a `logoMediaId`/`coverMediaId` reference to one) belongs to a different salon than the one being operated on - the core tenant-isolation guard for the whole media subsystem. */
-class MediaAssetTenantMismatchException(mediaAssetId: String, salonId: String) :
-    DomainException("Media asset $mediaAssetId does not belong to salon $salonId")
+class MediaTypeInvalidException(mimeType: String, mediaType: String) :
+    DomainException("Mime type '$mimeType' is not allowed for media type $mediaType")
 
-class UnsupportedMediaTypeException(mimeType: String) :
-    DomainException("Unsupported media file type: $mimeType")
+class MediaSizeExceededException(actualBytes: Long, maxBytes: Long) :
+    DomainException("Media file size $actualBytes bytes exceeds the maximum of $maxBytes bytes")
 
-class MediaFileTooLargeException(fileSize: Long, maxAllowed: Long) :
-    DomainException("Media file size $fileSize bytes exceeds the maximum allowed $maxAllowed bytes")
+class MediaTypeMismatchException(mediaId: String, expectedType: String) :
+    DomainException("Media asset $mediaId is not of type $expectedType")

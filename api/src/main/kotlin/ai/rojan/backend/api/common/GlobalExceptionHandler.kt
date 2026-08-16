@@ -4,6 +4,7 @@ import ai.rojan.backend.domain.common.AmbiguousSalonContextException
 import ai.rojan.backend.domain.common.BookingAccessDeniedException
 import ai.rojan.backend.domain.common.BookingConflictException
 import ai.rojan.backend.domain.common.BookingNotFoundException
+import ai.rojan.backend.domain.common.BookingRoleNotAllowedException
 import ai.rojan.backend.domain.common.BranchNotFoundException
 import ai.rojan.backend.domain.common.CustomerAccessDeniedException
 import ai.rojan.backend.domain.common.CustomerAlreadyExistsException
@@ -19,8 +20,9 @@ import ai.rojan.backend.domain.common.InvalidOtpException
 import ai.rojan.backend.domain.common.InvalidTokenException
 import ai.rojan.backend.domain.common.LoginRateLimitExceededException
 import ai.rojan.backend.domain.common.MediaAssetNotFoundException
-import ai.rojan.backend.domain.common.MediaAssetTenantMismatchException
-import ai.rojan.backend.domain.common.MediaFileTooLargeException
+import ai.rojan.backend.domain.common.MediaSizeExceededException
+import ai.rojan.backend.domain.common.MediaTypeInvalidException
+import ai.rojan.backend.domain.common.MediaTypeMismatchException
 import ai.rojan.backend.domain.common.OtpRateLimitExceededException
 import ai.rojan.backend.domain.common.OtpVerifyRateLimitExceededException
 import ai.rojan.backend.domain.common.RefreshRateLimitExceededException
@@ -40,7 +42,6 @@ import ai.rojan.backend.domain.common.SpecialistBlockNotFoundException
 import ai.rojan.backend.domain.common.SpecialistLeaveNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotEligibleForServiceException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
-import ai.rojan.backend.domain.common.UnsupportedMediaTypeException
 import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.common.WeeklyAvailabilityNotFoundException
 import ai.rojan.backend.domain.common.WorkingHoursNotFoundException
@@ -136,18 +137,17 @@ class GlobalExceptionHandler {
     fun handleNotFound(ex: Exception, request: WebRequest) =
         respond(HttpStatus.NOT_FOUND, errorCodeFor(ex), ex.message.orEmpty(), request)
 
-    @ExceptionHandler(
-        SalonAccessDeniedException::class,
-        BookingAccessDeniedException::class,
-        CustomerAccessDeniedException::class,
-        MediaAssetTenantMismatchException::class,
-    )
+    @ExceptionHandler(MediaTypeInvalidException::class)
+    fun handleMediaTypeInvalid(ex: MediaTypeInvalidException, request: WebRequest) =
+        respond(HttpStatus.BAD_REQUEST, errorCodeFor(ex), ex.message.orEmpty(), request)
+
+    @ExceptionHandler(MediaSizeExceededException::class)
+    fun handleMediaSizeExceeded(ex: MediaSizeExceededException, request: WebRequest) =
+        respond(HttpStatus.PAYLOAD_TOO_LARGE, errorCodeFor(ex), ex.message.orEmpty(), request)
+
+    @ExceptionHandler(SalonAccessDeniedException::class, BookingAccessDeniedException::class, CustomerAccessDeniedException::class, BookingRoleNotAllowedException::class)
     fun handleAccessDenied(ex: Exception, request: WebRequest) =
         respond(HttpStatus.FORBIDDEN, errorCodeFor(ex), ex.message.orEmpty(), request)
-
-    @ExceptionHandler(UnsupportedMediaTypeException::class, MediaFileTooLargeException::class)
-    fun handleInvalidMediaInput(ex: Exception, request: WebRequest) =
-        respond(HttpStatus.BAD_REQUEST, errorCodeFor(ex), ex.message.orEmpty(), request)
 
     @ExceptionHandler(
         BookingConflictException::class,
@@ -162,6 +162,7 @@ class GlobalExceptionHandler {
         SalonNotReadyForActivationException::class,
         InvalidMembershipAssignmentException::class,
         SalonNotActiveException::class,
+        MediaTypeMismatchException::class,
     )
     fun handleConflict(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -235,11 +236,12 @@ class GlobalExceptionHandler {
         is CustomerTagNotFoundException -> "CUSTOMER_TAG_NOT_FOUND"
         is SalonInviteNotFoundException -> "SALON_INVITE_NOT_FOUND"
         is MediaAssetNotFoundException -> "MEDIA_ASSET_NOT_FOUND"
+        is MediaTypeInvalidException -> "MEDIA_TYPE_INVALID"
+        is MediaSizeExceededException -> "MEDIA_SIZE_EXCEEDED"
+        is MediaTypeMismatchException -> "MEDIA_TYPE_MISMATCH"
         is NoResourceFoundException -> "RESOURCE_NOT_FOUND"
         is SalonAccessDeniedException, is BookingAccessDeniedException, is CustomerAccessDeniedException -> "ACCESS_DENIED"
-        is MediaAssetTenantMismatchException -> "MEDIA_TENANT_MISMATCH"
-        is UnsupportedMediaTypeException -> "UNSUPPORTED_MEDIA_TYPE"
-        is MediaFileTooLargeException -> "MEDIA_FILE_TOO_LARGE"
+        is BookingRoleNotAllowedException -> "BOOKING_ROLE_NOT_ALLOWED"
         is BookingConflictException -> "BOOKING_CONFLICT"
         is InvalidBookingStateException -> "INVALID_BOOKING_STATE"
         is InvalidCustomerStateException -> "INVALID_CUSTOMER_STATE"

@@ -7,7 +7,7 @@ import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.user.UserId
 
-/** [logoUrl]/[latitude]/[longitude] follow the same "null means leave unchanged" merge semantics as [ai.rojan.backend.application.customer.UpdateCustomerCommand] - there is no way to explicitly clear a previously-set value back to null via this command, the same disclosed tradeoff that one already makes for `company`. */
+/** [latitude]/[longitude] follow the same "null means leave unchanged" merge semantics as [ai.rojan.backend.application.customer.UpdateCustomerCommand] - there is no way to explicitly clear a previously-set value back to null via this command, the same disclosed tradeoff that one already makes for `company`. Logo/cover are no longer part of this command - see `AssignIdentityMediaUseCase`. */
 data class UpdateSalonCommand(
     val salonId: SalonId,
     val callerId: UserId,
@@ -16,7 +16,6 @@ data class UpdateSalonCommand(
     val phone: String,
     val email: String?,
     val address: String,
-    val logoUrl: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
 )
@@ -37,7 +36,6 @@ class UpdateSalonUseCase(
             address = command.address,
         )
         salon.updateProfile(
-            logoUrl = command.logoUrl ?: salon.logoUrl,
             latitude = command.latitude ?: salon.latitude,
             longitude = command.longitude ?: salon.longitude,
         )

@@ -3,9 +3,12 @@ package ai.rojan.backend.api.publicsalon
 import ai.rojan.backend.api.booking.TimeSlotResponse
 import ai.rojan.backend.application.booking.GetAvailableSlotsQuery
 import ai.rojan.backend.application.booking.GetAvailableSlotsUseCase
+import ai.rojan.backend.application.port.MediaStoragePort
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.media.MediaAsset
+import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.media.MediaAssetRepository
+import ai.rojan.backend.domain.media.MediaAssetStatus
 import ai.rojan.backend.domain.media.MediaType
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonOnboardingStatus
@@ -50,6 +53,7 @@ class PublicSalonController(
     private val specialistRepository: SpecialistRepository,
     private val mediaAssetRepository: MediaAssetRepository,
     private val getAvailableSlotsUseCase: GetAvailableSlotsUseCase,
+    private val mediaStoragePort: MediaStoragePort,
 ) {
 
     @GetMapping
@@ -79,13 +83,14 @@ class PublicSalonController(
         return specialistRepository.findBySalonId(salon.id).filter { it.active }.map { it.toResponse() }
     }
 
+    /** Public/portfolio types only, `ACTIVE` status only - status is a `3173d40`-model concept `03a3206`'s original version of this endpoint never had, so filtering on it here is a genuine improvement, not a like-for-like port. */
     @GetMapping("/gallery")
-    @Operation(summary = "Browse a salon's public gallery and portfolio images - Salon Identity Foundation Phase C")
+    @Operation(summary = "Browse a salon's public gallery and portfolio images")
     fun gallery(@PathVariable slug: String): List<PublicMediaAssetResponse> {
         val salon = findSalonOrThrow(slug)
-        val gallery = mediaAssetRepository.findBySalonIdAndMediaType(salon.id, MediaType.GALLERY)
-        val portfolio = mediaAssetRepository.findBySalonIdAndMediaType(salon.id, MediaType.PORTFOLIO)
-        return (gallery + portfolio).map { it.toResponse() }
+        return mediaAssetRepository.findBySalonId(salon.id)
+            .filter { it.mediaType in PUBLIC_GALLERY_TYPES && it.status == MediaAssetStatus.ACTIVE }
+            .map { it.toResponse() }
     }
 
     @GetMapping("/specialists/{specialistId}/available-slots")
@@ -116,12 +121,15 @@ class PublicSalonController(
             ?.takeIf { it.active && it.onboardingStatus == SalonOnboardingStatus.ACTIVE }
             ?: throw SalonNotFoundException(slug)
 
-    /** Same logoMediaId/coverMediaId-wins-over-legacy-string resolution as `SalonController.toResponse` - see that one's doc comment. */
-    private fun Salon.toResponse(): PublicSalonResponse {
-        val resolvedLogoUrl = logoMediaId?.let { mediaAssetRepository.findById(it)?.url } ?: logoUrl
-        val resolvedCoverUrl = coverMediaId?.let { mediaAssetRepository.findById(it)?.url }
-        return PublicSalonResponse(id.value, name, description, phone, address, resolvedLogoUrl, resolvedCoverUrl, latitude, longitude)
-    }
+    private fun Salon.toResponse() = PublicSalonResponse(
+        id.value, name, description, phone, address,
+        logoMediaId?.let { resolveMediaUrl(it) },
+        coverMediaId?.let { resolveMediaUrl(it) },
+        latitude, longitude,
+    )
+
+    private fun Salon.resolveMediaUrl(mediaId: MediaAssetId): String? =
+        mediaAssetRepository.findByIdAndSalonId(mediaId, id)?.let { mediaStoragePort.resolveUrl(it.storageKey) }
 
     private fun ServiceCategory.toResponse() = PublicServiceCategoryResponse(id.value, name, description)
 
@@ -129,5 +137,9 @@ class PublicSalonController(
 
     private fun Specialist.toResponse() = PublicSpecialistResponse(id.value, displayName, bio, photoUrl)
 
-    private fun MediaAsset.toResponse() = PublicMediaAssetResponse(id.value, mediaType, url)
+    private fun MediaAsset.toResponse() = PublicMediaAssetResponse(id.value, mediaType, mediaStoragePort.resolveUrl(storageKey))
+
+    private companion object {
+        val PUBLIC_GALLERY_TYPES = setOf(MediaType.GALLERY, MediaType.PORTFOLIO)
+    }
 }

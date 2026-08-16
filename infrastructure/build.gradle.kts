@@ -27,6 +27,8 @@ dependencies {
     implementation(libs.zxing.core)
     implementation(libs.zxing.javase)
 
+    implementation(libs.aws.s3)
+
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.mockk)
 }

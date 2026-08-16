@@ -102,6 +102,8 @@ class SalonActivationFlowIntegrationTest {
         return base.plusDays(((dayOfWeek.value - base.dayOfWeek.value + 7) % 7).toLong())
     }
 
+    // Not a hardcoded digit count - OtpProperties.codeLength (currently 4) is the
+    // single source of truth for how long a real code is.
     private fun lastCodeSentTo(phoneNumber: String): String =
         logAppender.list
             .last { it.formattedMessage.contains(phoneNumber) }
@@ -208,7 +210,7 @@ class SalonActivationFlowIntegrationTest {
             HttpEntity(
                 UpdateSalonRequest(
                     name = salon.name, description = salon.description, phone = salon.phone, email = salon.email,
-                    address = salon.address, logoUrl = "https://cdn.rojan.ai/logos/rbs.png", latitude = 35.6892, longitude = 51.3890,
+                    address = salon.address, latitude = 35.6892, longitude = 51.3890,
                 ),
                 bearer(ownerToken),
             ),
@@ -228,7 +230,8 @@ class SalonActivationFlowIntegrationTest {
 
         val publicLookup = restTemplate.getForEntity(url("/api/v1/public/salons/${salon.slug}"), PublicSalonResponse::class.java)
         assertEquals(HttpStatus.OK, publicLookup.statusCode)
-        assertEquals("https://cdn.rojan.ai/logos/rbs.png", publicLookup.body!!.logoUrl)
+        // Logo/cover are no longer set via PUT /salons - see SalonMediaFlowIntegrationTest for the real upload+assign path.
+        assertNull(publicLookup.body!!.logoUrl)
         assertEquals(35.6892, publicLookup.body!!.latitude)
         assertEquals(51.3890, publicLookup.body!!.longitude)
     }

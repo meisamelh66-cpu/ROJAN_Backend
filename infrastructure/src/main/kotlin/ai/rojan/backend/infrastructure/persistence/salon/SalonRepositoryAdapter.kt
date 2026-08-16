@@ -29,7 +29,8 @@ class SalonRepositoryAdapter(
                 address = salon.address
                 slug = salon.slug
                 onboardingStatus = salon.onboardingStatus
-                logoUrl = salon.logoUrl
+                logoMediaId = salon.logoMediaId?.value
+                coverMediaId = salon.coverMediaId?.value
                 latitude = salon.latitude
                 longitude = salon.longitude
                 active = salon.active
@@ -46,7 +47,8 @@ class SalonRepositoryAdapter(
                 address = salon.address,
                 slug = salon.slug,
                 onboardingStatus = salon.onboardingStatus,
-                logoUrl = salon.logoUrl,
+                logoMediaId = salon.logoMediaId?.value,
+                coverMediaId = salon.coverMediaId?.value,
                 latitude = salon.latitude,
                 longitude = salon.longitude,
                 active = salon.active,
@@ -94,7 +96,8 @@ class SalonRepositoryAdapter(
         address = address,
         slug = slug,
         onboardingStatus = onboardingStatus,
-        logoUrl = logoUrl,
+        logoMediaId = logoMediaId?.let { MediaAssetId(it) },
+        coverMediaId = coverMediaId?.let { MediaAssetId(it) },
         latitude = latitude,
         longitude = longitude,
         active = active,

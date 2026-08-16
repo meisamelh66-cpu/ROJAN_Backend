@@ -27,6 +27,7 @@ enum class SalonRole {
             Permission.VIEW_CRM,
             Permission.MANAGE_CRM,
             Permission.MANAGE_BOOKINGS,
+            Permission.MANAGE_MEDIA,
         )
         RECEPTIONIST -> setOf(Permission.MANAGE_BOOKINGS)
     }

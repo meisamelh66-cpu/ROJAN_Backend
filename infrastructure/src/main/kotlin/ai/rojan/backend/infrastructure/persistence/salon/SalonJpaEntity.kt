@@ -51,8 +51,11 @@ class SalonJpaEntity(
     @Column(name = "onboarding_status", nullable = false, length = 16)
     var onboardingStatus: SalonOnboardingStatus,
 
-    @Column(name = "logo_url", nullable = true)
-    var logoUrl: String?,
+    @Column(name = "logo_media_id", nullable = true)
+    var logoMediaId: UUID?,
+
+    @Column(name = "cover_media_id", nullable = true)
+    var coverMediaId: UUID?,
 
     @Column(nullable = true)
     var latitude: Double?,

@@ -1,26 +1,22 @@
 package ai.rojan.backend.api.config
 
-import ai.rojan.backend.application.media.AssignSalonIdentityMediaUseCase
+import ai.rojan.backend.application.media.AssignIdentityMediaUseCase
 import ai.rojan.backend.application.media.DeleteMediaUseCase
+import ai.rojan.backend.application.media.ListMediaUseCase
 import ai.rojan.backend.application.media.UploadMediaUseCase
 import ai.rojan.backend.application.port.MediaStoragePort
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.media.MediaAssetRepository
 import ai.rojan.backend.domain.salon.SalonRepository
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
 /**
- * Wires framework-free media-management application use cases as Spring
- * beans — Salon Identity Foundation Phase A. Takes the raw
- * `rojan.media.*` values via `@Value` (not the infrastructure-module
- * `MediaProperties` class) — this `api` module deliberately never depends
- * on `infrastructure` (see `api/build.gradle.kts`; only `bootstrap` pulls
- * every module together), same reasoning
- * `generateSalonQrCodeUseCase`/`generateSalonInviteQrCodeUseCase` already
- * inject `rojan.public.base-url` this same way instead of depending on a
- * properties class.
+ * Wires framework-free Media Foundation (Phase 1) application use cases as
+ * Spring beans, mirroring [SalonUseCaseConfig] for the salon-management
+ * vertical. [salonPermissionResolver] here resolves to the same bean
+ * [SalonUseCaseConfig] already defines - Spring wires by type, not a
+ * second instance.
  */
 @Configuration
 class MediaUseCaseConfig {
@@ -29,30 +25,26 @@ class MediaUseCaseConfig {
     fun uploadMediaUseCase(
         salonRepository: SalonRepository,
         mediaAssetRepository: MediaAssetRepository,
-        mediaStoragePort: MediaStoragePort,
         salonPermissionResolver: SalonPermissionResolver,
-        @Value("\${rojan.media.allowed-mime-types:image/jpeg,image/png,image/webp}") allowedMimeTypes: Set<String>,
-        @Value("\${rojan.media.max-file-size-bytes:5242880}") maxFileSizeBytes: Long,
-    ) = UploadMediaUseCase(
-        salonRepository,
-        mediaAssetRepository,
-        mediaStoragePort,
-        salonPermissionResolver,
-        allowedMimeTypes = allowedMimeTypes,
-        maxFileSizeBytes = maxFileSizeBytes,
-    )
+        mediaStoragePort: MediaStoragePort,
+    ) = UploadMediaUseCase(salonRepository, mediaAssetRepository, salonPermissionResolver, mediaStoragePort)
+
+    @Bean
+    fun listMediaUseCase(salonRepository: SalonRepository, mediaAssetRepository: MediaAssetRepository) =
+        ListMediaUseCase(salonRepository, mediaAssetRepository)
 
     @Bean
     fun deleteMediaUseCase(
-        mediaAssetRepository: MediaAssetRepository,
-        mediaStoragePort: MediaStoragePort,
-        salonPermissionResolver: SalonPermissionResolver,
-    ) = DeleteMediaUseCase(mediaAssetRepository, mediaStoragePort, salonPermissionResolver)
-
-    @Bean
-    fun assignSalonIdentityMediaUseCase(
         salonRepository: SalonRepository,
         mediaAssetRepository: MediaAssetRepository,
         salonPermissionResolver: SalonPermissionResolver,
-    ) = AssignSalonIdentityMediaUseCase(salonRepository, mediaAssetRepository, salonPermissionResolver)
+        mediaStoragePort: MediaStoragePort,
+    ) = DeleteMediaUseCase(salonRepository, mediaAssetRepository, salonPermissionResolver, mediaStoragePort)
+
+    @Bean
+    fun assignIdentityMediaUseCase(
+        salonRepository: SalonRepository,
+        mediaAssetRepository: MediaAssetRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = AssignIdentityMediaUseCase(salonRepository, mediaAssetRepository, salonPermissionResolver)
 }

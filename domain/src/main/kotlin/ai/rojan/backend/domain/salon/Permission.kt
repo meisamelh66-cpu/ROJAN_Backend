@@ -19,4 +19,5 @@ enum class Permission {
     MANAGE_CRM,
     MANAGE_BOOKINGS,
     MANAGE_OWN_BOOKINGS,
+    MANAGE_MEDIA,
 }

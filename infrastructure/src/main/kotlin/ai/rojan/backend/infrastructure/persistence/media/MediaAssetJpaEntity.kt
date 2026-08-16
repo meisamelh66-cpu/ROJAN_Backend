@@ -1,6 +1,6 @@
 package ai.rojan.backend.infrastructure.persistence.media
 
-import ai.rojan.backend.domain.media.MediaOwnerType
+import ai.rojan.backend.domain.media.MediaAssetStatus
 import ai.rojan.backend.domain.media.MediaType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -15,7 +15,12 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener
 import java.time.Instant
 import java.util.UUID
 
-/** Persistence model for [ai.rojan.backend.domain.media.MediaAsset] - deliberately separate from the domain entity, same reasoning as [ai.rojan.backend.infrastructure.persistence.salon.SalonJpaEntity]. */
+/**
+ * Persistence model for [ai.rojan.backend.domain.media.MediaAsset].
+ * Deliberately separate from the domain entity so JPA/Hibernate concerns
+ * never leak into the domain layer; [MediaAssetRepositoryAdapter] maps
+ * between the two.
+ */
 @Entity
 @Table(name = "media_assets")
 @EntityListeners(AuditingEntityListener::class)
@@ -27,21 +32,14 @@ class MediaAssetJpaEntity(
     val salonId: UUID,
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "owner_type", nullable = false, length = 16)
-    val ownerType: MediaOwnerType,
-
-    @Column(name = "owner_id", nullable = false)
-    val ownerId: UUID,
-
-    @Enumerated(EnumType.STRING)
     @Column(name = "media_type", nullable = false, length = 16)
-    val mediaType: MediaType,
+    var mediaType: MediaType,
 
     @Column(name = "storage_key", nullable = false, length = 500)
-    val storageKey: String,
+    var storageKey: String,
 
-    @Column(name = "file_name", nullable = false, length = 255)
-    val fileName: String,
+    @Column(name = "original_name", nullable = false)
+    val originalName: String,
 
     @Column(name = "mime_type", nullable = false, length = 100)
     val mimeType: String,
@@ -49,8 +47,12 @@ class MediaAssetJpaEntity(
     @Column(name = "file_size", nullable = false)
     val fileSize: Long,
 
-    @Column(nullable = false, length = 1000)
-    val url: String,
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    var status: MediaAssetStatus,
+
+    @Column(name = "uploaded_by", nullable = false)
+    val uploadedBy: UUID,
 ) {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
