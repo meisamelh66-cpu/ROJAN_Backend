@@ -39,7 +39,7 @@ class DeleteMediaUseCaseTest {
     @Test
     fun `owner can delete their salon's media - success`() {
         val mediaAsset = uploadUseCase.execute(
-            UploadMediaCommand(salon.id, owner, MediaType.GALLERY, "a.jpg", "image/jpeg", ByteArray(10)),
+            UploadMediaCommand(salon.id, owner, MediaType.GALLERY, "a.jpg", "image/jpeg", jpegBytes()),
         )
 
         deleteUseCase.execute(DeleteMediaCommand(mediaAsset.id, owner))
@@ -51,7 +51,7 @@ class DeleteMediaUseCaseTest {
     @Test
     fun `rejects deletion from a caller who does not own the salon - permission rejection`() {
         val mediaAsset = uploadUseCase.execute(
-            UploadMediaCommand(salon.id, owner, MediaType.GALLERY, "a.jpg", "image/jpeg", ByteArray(10)),
+            UploadMediaCommand(salon.id, owner, MediaType.GALLERY, "a.jpg", "image/jpeg", jpegBytes()),
         )
 
         assertThrows<SalonAccessDeniedException> {

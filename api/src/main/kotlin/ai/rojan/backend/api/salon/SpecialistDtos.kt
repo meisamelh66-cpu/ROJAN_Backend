@@ -11,6 +11,15 @@ import java.util.UUID
 // reference a domain value class's regex directly.
 private const val E164_PATTERN = "^\\+[1-9]\\d{7,14}$"
 
+/**
+ * [mobileNumber]/[specialty] are optional at the API layer (P1 fields, added
+ * after this endpoint already had real callers) - `@NotBlank`-requiring them
+ * would reject every pre-existing client that doesn't send them yet. Bean
+ * Validation's `@Pattern`/`@Size` are no-ops on a null value, so a caller
+ * that omits them entirely skips validation rather than failing it; a caller
+ * that does send them still gets the same format/length checks as before.
+ * New clients are free to keep sending both - nothing here stops that.
+ */
 data class CreateSpecialistRequest(
     val userId: UUID?,
 
@@ -24,15 +33,14 @@ data class CreateSpecialistRequest(
     @field:Size(max = 1000)
     val photoUrl: String?,
 
-    @field:NotBlank
     @field:Pattern(regexp = E164_PATTERN, message = "must be E.164 format, e.g. +989123456789")
-    val mobileNumber: String,
+    val mobileNumber: String?,
 
-    @field:NotBlank
     @field:Size(max = 100)
-    val specialty: String,
+    val specialty: String?,
 )
 
+/** See [CreateSpecialistRequest]'s doc comment - same optional-for-compatibility reasoning applies here. */
 data class UpdateSpecialistRequest(
     @field:NotBlank
     @field:Size(max = 255)
@@ -44,13 +52,11 @@ data class UpdateSpecialistRequest(
     @field:Size(max = 1000)
     val photoUrl: String?,
 
-    @field:NotBlank
     @field:Pattern(regexp = E164_PATTERN, message = "must be E.164 format, e.g. +989123456789")
-    val mobileNumber: String,
+    val mobileNumber: String?,
 
-    @field:NotBlank
     @field:Size(max = 100)
-    val specialty: String,
+    val specialty: String?,
 )
 
 data class SpecialistResponse(

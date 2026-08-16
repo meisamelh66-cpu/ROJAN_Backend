@@ -18,8 +18,8 @@ data class CreateSpecialistCommand(
     val displayName: String,
     val bio: String?,
     val photoUrl: String?,
-    val mobileNumber: PhoneNumber,
-    val specialty: String,
+    val mobileNumber: PhoneNumber?,
+    val specialty: String?,
 )
 
 class CreateSpecialistUseCase(

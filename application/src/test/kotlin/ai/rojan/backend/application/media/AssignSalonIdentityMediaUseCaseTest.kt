@@ -43,7 +43,7 @@ class AssignSalonIdentityMediaUseCaseTest {
 
     private fun uploadFor(salonId: SalonId, mediaType: MediaType = MediaType.LOGO) =
         uploadUseCase.execute(
-            UploadMediaCommand(salonId, owner, mediaType, "logo.jpg", "image/jpeg", ByteArray(10)),
+            UploadMediaCommand(salonId, owner, mediaType, "logo.jpg", "image/jpeg", jpegBytes()),
         )
 
     @Test

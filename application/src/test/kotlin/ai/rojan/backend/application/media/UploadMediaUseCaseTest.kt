@@ -40,13 +40,19 @@ class UploadMediaUseCaseTest {
         maxFileSizeBytes = 1024,
     )
 
-    private fun command(callerId: UserId = owner, mimeType: String = "image/jpeg", sizeBytes: Int = 100) = UploadMediaCommand(
+    private fun command(
+        callerId: UserId = owner,
+        mimeType: String = "image/jpeg",
+        sizeBytes: Int = 100,
+        content: ByteArray = jpegBytes(sizeBytes),
+        fileName: String = "photo.jpg",
+    ) = UploadMediaCommand(
         salonId = salon.id,
         callerId = callerId,
         mediaType = MediaType.GALLERY,
-        fileName = "photo.jpg",
+        fileName = fileName,
         mimeType = mimeType,
-        content = ByteArray(sizeBytes),
+        content = content,
     )
 
     @Test
@@ -82,5 +88,22 @@ class UploadMediaUseCaseTest {
             uploadUseCase.execute(command(sizeBytes = 2048))
         }
         assertTrue(mediaStoragePort.stored.isEmpty())
+    }
+
+    @Test
+    fun `rejects content whose actual bytes do not match the declared mime type - spoofed content-type`() {
+        val notActuallyAnImage = "<script>alert(1)</script>".toByteArray()
+        assertThrows<UnsupportedMediaTypeException> {
+            uploadUseCase.execute(command(mimeType = "image/jpeg", content = notActuallyAnImage))
+        }
+        assertTrue(mediaStoragePort.stored.isEmpty())
+    }
+
+    @Test
+    fun `storage extension is derived from validated content, not the client-supplied filename`() {
+        uploadUseCase.execute(command(fileName = "evil.html"))
+
+        val storageKey = mediaStoragePort.stored.single()
+        assertTrue(storageKey.endsWith(".jpg"), "expected a .jpg storage key derived from the real JPEG bytes, got: $storageKey")
     }
 }

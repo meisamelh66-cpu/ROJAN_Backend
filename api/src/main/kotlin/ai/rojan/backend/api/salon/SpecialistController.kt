@@ -68,7 +68,7 @@ class SpecialistController(
                 displayName = request.displayName,
                 bio = request.bio,
                 photoUrl = request.photoUrl,
-                mobileNumber = PhoneNumber(request.mobileNumber),
+                mobileNumber = request.mobileNumber?.let { PhoneNumber(it) },
                 specialty = request.specialty,
             ),
         )
@@ -102,7 +102,7 @@ class SpecialistController(
                 displayName = request.displayName,
                 bio = request.bio,
                 photoUrl = request.photoUrl,
-                mobileNumber = PhoneNumber(request.mobileNumber),
+                mobileNumber = request.mobileNumber?.let { PhoneNumber(it) },
                 specialty = request.specialty,
             ),
         )
