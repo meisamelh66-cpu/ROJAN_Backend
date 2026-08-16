@@ -37,6 +37,7 @@ import ai.rojan.backend.domain.common.SalonNotActiveException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.SalonNotReadyForActivationException
 import ai.rojan.backend.domain.common.SalonSlugAlreadyTakenException
+import ai.rojan.backend.domain.common.SalonVerificationNotFoundException
 import ai.rojan.backend.domain.common.ScheduleOverrideNotFoundException
 import ai.rojan.backend.domain.common.ServiceCategoryNotFoundException
 import ai.rojan.backend.domain.common.ServiceNotFoundException
@@ -44,7 +45,9 @@ import ai.rojan.backend.domain.common.SpecialistBlockNotFoundException
 import ai.rojan.backend.domain.common.SpecialistLeaveNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotEligibleForServiceException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
+import ai.rojan.backend.domain.common.InvalidVerificationDocumentException
 import ai.rojan.backend.domain.common.UserNotFoundException
+import ai.rojan.backend.domain.common.VerificationAlreadyPendingException
 import ai.rojan.backend.domain.common.WeeklyAvailabilityNotFoundException
 import ai.rojan.backend.domain.common.WorkingHoursNotFoundException
 import org.slf4j.LoggerFactory
@@ -135,13 +138,14 @@ class GlobalExceptionHandler {
         SalonInviteNotFoundException::class,
         MediaAssetNotFoundException::class,
         SalonDocumentNotFoundException::class,
+        SalonVerificationNotFoundException::class,
         NoResourceFoundException::class,
     )
     fun handleNotFound(ex: Exception, request: WebRequest) =
         respond(HttpStatus.NOT_FOUND, errorCodeFor(ex), ex.message.orEmpty(), request)
 
-    @ExceptionHandler(MediaTypeInvalidException::class)
-    fun handleMediaTypeInvalid(ex: MediaTypeInvalidException, request: WebRequest) =
+    @ExceptionHandler(MediaTypeInvalidException::class, InvalidVerificationDocumentException::class)
+    fun handleBadRequestDomainException(ex: Exception, request: WebRequest) =
         respond(HttpStatus.BAD_REQUEST, errorCodeFor(ex), ex.message.orEmpty(), request)
 
     @ExceptionHandler(MediaSizeExceededException::class)
@@ -167,6 +171,7 @@ class GlobalExceptionHandler {
         SalonNotActiveException::class,
         MediaTypeMismatchException::class,
         DocumentAlreadyAttachedException::class,
+        VerificationAlreadyPendingException::class,
     )
     fun handleConflict(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -245,6 +250,9 @@ class GlobalExceptionHandler {
         is MediaTypeMismatchException -> "MEDIA_TYPE_MISMATCH"
         is SalonDocumentNotFoundException -> "SALON_DOCUMENT_NOT_FOUND"
         is DocumentAlreadyAttachedException -> "DOCUMENT_ALREADY_ATTACHED"
+        is SalonVerificationNotFoundException -> "SALON_VERIFICATION_NOT_FOUND"
+        is VerificationAlreadyPendingException -> "VERIFICATION_ALREADY_PENDING"
+        is InvalidVerificationDocumentException -> "INVALID_VERIFICATION_DOCUMENT"
         is NoResourceFoundException -> "RESOURCE_NOT_FOUND"
         is SalonAccessDeniedException, is BookingAccessDeniedException, is CustomerAccessDeniedException -> "ACCESS_DENIED"
         is BookingRoleNotAllowedException -> "BOOKING_ROLE_NOT_ALLOWED"
