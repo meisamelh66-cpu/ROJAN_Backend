@@ -149,17 +149,14 @@ services:
       # domain (app.rojan.ai) that is not owned/live — see
       # ROJAN_Phase0_Merge_PreApproval_Report_v1.md.
       ROJAN_PUBLIC_BASE_URL: ${ROJAN_PUBLIC_BASE_URL:-https://rojanai.ir}
-      # Salon Identity Foundation Phase A - must match the volume mount
-      # below (LocalDiskMediaStorageAdapter writes here directly).
+      # Must match the volume mount below (LocalDiskMediaStorageAdapter
+      # writes here directly).
       MEDIA_STORAGE_ROOT: /app/uploads
-      # Pre-merge hardening fix: these two were documented in .env.example
-      # as operator-configurable but were never actually passed through to
-      # the container, so setting them in .env silently had no effect and
-      # the app always fell back to application.yml's hardcoded defaults
-      # (5MB / image/jpeg,png,webp). Wired through the same way every other
-      # optional var in this block already is.
-      MEDIA_MAX_FILE_SIZE_BYTES: ${MEDIA_MAX_FILE_SIZE_BYTES:-5242880}
-      MEDIA_ALLOWED_MIME_TYPES: ${MEDIA_ALLOWED_MIME_TYPES:-image/jpeg,image/png,image/webp}
+      # The public-facing origin Nginx's /media/ location is actually
+      # reachable at - resolveUrl() builds "$MEDIA_PUBLIC_BASE_URL/media/
+      # $storageKey" links from this. Without it, the default
+      # (localhost:8080) would leak into every media URL this returns.
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-https://api.rojanai.ir}
     volumes:
       - ${ROJAN_DATA_ROOT:-/opt/rojan}/logs:/app/logs
       - ${ROJAN_DATA_ROOT:-/opt/rojan}/uploads:/app/uploads

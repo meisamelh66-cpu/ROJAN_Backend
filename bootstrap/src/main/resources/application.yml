@@ -90,13 +90,15 @@ rojan:
       verify-limit-per-phone-window: ${OTP_VERIFY_LIMIT_PER_PHONE_WINDOW:10}
       verify-window-seconds: ${OTP_VERIFY_WINDOW_SECONDS:600}
 
-  # Salon Identity Foundation Phase A. storage-root must match wherever the
-  # deployment mounts persistent storage - see MediaProperties.kt's own doc
-  # comment and docker-compose.prod.yml's uploads volume.
+  # storage-root must match wherever the deployment mounts persistent
+  # storage - see LocalMediaStorageProperties.kt's own doc comment and
+  # docker-compose.prod.yml's uploads volume. public-base-url is the
+  # public-facing origin Nginx's /media/ location is actually reachable
+  # at - api.rojanai.ir, not the general rojanai.ir site domain
+  # (ROJAN_PUBLIC_BASE_URL, a separate value used elsewhere).
   media:
     storage-root: ${MEDIA_STORAGE_ROOT:/app/uploads}
-    max-file-size-bytes: ${MEDIA_MAX_FILE_SIZE_BYTES:5242880}
-    allowed-mime-types: ${MEDIA_ALLOWED_MIME_TYPES:image/jpeg,image/png,image/webp}
+    public-base-url: ${MEDIA_PUBLIC_BASE_URL:http://localhost:8080}
 
 # SMS Provider Integration: no defaults on purpose, same as JWT_SECRET above
 # - startup must fail loudly if these are unset, rather than silently
