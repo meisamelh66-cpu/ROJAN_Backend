@@ -65,12 +65,6 @@ class SalonJpaEntity(
 
     @Column(nullable = false)
     var active: Boolean,
-
-    @Column(name = "logo_media_id", nullable = true)
-    var logoMediaId: UUID?,
-
-    @Column(name = "cover_media_id", nullable = true)
-    var coverMediaId: UUID?,
 ) {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -34,8 +34,6 @@ class SalonRepositoryAdapter(
                 latitude = salon.latitude
                 longitude = salon.longitude
                 active = salon.active
-                logoMediaId = salon.logoMediaId?.value
-                coverMediaId = salon.coverMediaId?.value
             }
             ?: SalonJpaEntity(
                 id = salon.id.value,
@@ -52,8 +50,6 @@ class SalonRepositoryAdapter(
                 latitude = salon.latitude,
                 longitude = salon.longitude,
                 active = salon.active,
-                logoMediaId = salon.logoMediaId?.value,
-                coverMediaId = salon.coverMediaId?.value,
             )
         return jpaRepository.save(entity).toDomain()
     }
@@ -101,8 +97,6 @@ class SalonRepositoryAdapter(
         latitude = latitude,
         longitude = longitude,
         active = active,
-        logoMediaId = logoMediaId?.let { MediaAssetId(it) },
-        coverMediaId = coverMediaId?.let { MediaAssetId(it) },
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
     )
