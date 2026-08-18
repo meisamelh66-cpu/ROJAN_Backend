@@ -94,6 +94,29 @@ class SpecialistUseCasesTest {
     }
 
     @Test
+    fun `owner can create a specialist without mobile number or specialty - legacy client compatibility`() {
+        val specialist = createUseCase.execute(
+            CreateSpecialistCommand(salon.id, owner, null, "Legacy Stylist", null, null, mobileNumber = null, specialty = null),
+        )
+
+        assertNull(specialist.mobileNumber)
+        assertNull(specialist.specialty)
+    }
+
+    @Test
+    fun `updating without mobile number or specialty leaves the existing values untouched - legacy client compatibility`() {
+        val specialist = createSpecialist()
+
+        val updated = updateUseCase.execute(
+            UpdateSpecialistCommand(specialist.id, owner, "Jamie Senior Stylist", "15 years experience", null, mobileNumber = null, specialty = null),
+        )
+
+        assertEquals("Jamie Senior Stylist", updated.displayName)
+        assertEquals(testMobile, updated.mobileNumber)
+        assertEquals("Hair Stylist", updated.specialty)
+    }
+
+    @Test
     fun `update fails for an unknown specialist`() {
         assertThrows<SpecialistNotFoundException> {
             updateUseCase.execute(UpdateSpecialistCommand(SpecialistId.new(), owner, "Ghost", null, null, testMobile, "Barber"))

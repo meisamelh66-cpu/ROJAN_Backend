@@ -20,6 +20,17 @@ internal class InMemoryMediaAssetRepository : MediaAssetRepository {
     }
 }
 
+/** A minimal, real JPEG signature (FF D8 FF) followed by zero-padding - the actual bytes `UploadMediaUseCase`'s content-sniffing check validates against, independent of whatever mime type/filename a test declares alongside it. */
+internal fun jpegBytes(sizeBytes: Int = 10): ByteArray {
+    val bytes = ByteArray(sizeBytes)
+    if (sizeBytes >= 3) {
+        bytes[0] = 0xFF.toByte()
+        bytes[1] = 0xD8.toByte()
+        bytes[2] = 0xFF.toByte()
+    }
+    return bytes
+}
+
 /** Records every store()/delete() call so tests can assert on them, without touching a real filesystem. */
 internal class FakeMediaStoragePort : MediaStoragePort {
     val stored = mutableListOf<String>()

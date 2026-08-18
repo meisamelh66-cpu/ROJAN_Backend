@@ -16,6 +16,7 @@ import ai.rojan.backend.api.salon.ServiceCategoryResponse
 import ai.rojan.backend.api.salon.ServiceResponse
 import ai.rojan.backend.api.salon.SpecialistResponse
 import ai.rojan.backend.api.salon.UpdateSalonRequest
+import ai.rojan.backend.api.salon.UpdateSpecialistRequest
 import ai.rojan.backend.domain.user.UserRole
 import io.zonky.test.db.AutoConfigureEmbeddedDatabase
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -170,6 +171,47 @@ class SalonManagementFlowIntegrationTest {
         )
         assertEquals(HttpStatus.OK, getAfterDeactivate.statusCode)
         assertFalse(getAfterDeactivate.body!!.active)
+    }
+
+    @Test
+    fun `specialist create and update succeed without mobile number or specialty - legacy client compatibility`() {
+        val ownerToken = registerAndLogin()
+        val salon = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/salons"),
+                HttpMethod.POST,
+                HttpEntity(CreateSalonRequest("Legacy Client Salon", null, "+1 555 0500", null, "9 Old St"), bearer(ownerToken)),
+                SalonResponse::class.java,
+            ).body,
+        )
+
+        // A pre-P1 client's request body, as if `mobileNumber`/`specialty` didn't exist yet.
+        val createSpecialist = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/specialists"),
+            HttpMethod.POST,
+            HttpEntity(
+                CreateSpecialistRequest(userId = null, displayName = "Jamie Stylist", bio = null, photoUrl = null, mobileNumber = null, specialty = null),
+                bearer(ownerToken),
+            ),
+            SpecialistResponse::class.java,
+        )
+        assertEquals(HttpStatus.CREATED, createSpecialist.statusCode)
+        val specialist = requireNotNull(createSpecialist.body)
+        assertEquals(null, specialist.mobileNumber)
+        assertEquals(null, specialist.specialty)
+
+        val updateSpecialist = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/specialists/${specialist.id}"),
+            HttpMethod.PUT,
+            HttpEntity(
+                UpdateSpecialistRequest(displayName = "Jamie Senior Stylist", bio = null, photoUrl = null, mobileNumber = null, specialty = null),
+                bearer(ownerToken),
+            ),
+            SpecialistResponse::class.java,
+        )
+        assertEquals(HttpStatus.OK, updateSpecialist.statusCode)
+        assertEquals("Jamie Senior Stylist", updateSpecialist.body?.displayName)
+        assertEquals(null, updateSpecialist.body?.mobileNumber)
     }
 
     @Test

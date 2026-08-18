@@ -56,19 +56,22 @@ class Specialist private constructor(
         private set
 
     /**
-     * Full-replace update, matching the existing displayName/bio/photoUrl
-     * semantics. mobileNumber/specialty are non-null here (not optional
-     * like bio/photoUrl) so an update can never silently wipe out contact
-     * info a specialist already has.
+     * Full-replace update for displayName/bio/photoUrl - unchanged semantics,
+     * `null` clears. mobileNumber/specialty are different on purpose: `null`
+     * here means "leave whatever this specialist already has, don't touch
+     * it," not "clear it" - callers that don't send these two API-optional
+     * fields (see `CreateSpecialistRequest`'s doc comment) must never
+     * silently wipe out contact info a specialist already has just by
+     * omitting them from an update.
      */
-    fun update(displayName: String, bio: String?, photoUrl: String?, mobileNumber: PhoneNumber, specialty: String) {
+    fun update(displayName: String, bio: String?, photoUrl: String?, mobileNumber: PhoneNumber?, specialty: String?) {
         require(displayName.isNotBlank()) { "Specialist display name must not be blank" }
-        require(specialty.isNotBlank()) { "Specialist specialty must not be blank" }
+        specialty?.let { require(it.isNotBlank()) { "Specialist specialty must not be blank" } }
         this.displayName = displayName.trim()
         this.bio = bio?.trim()?.ifBlank { null }
         this.photoUrl = photoUrl?.trim()?.ifBlank { null }
-        this.mobileNumber = mobileNumber
-        this.specialty = specialty.trim()
+        if (mobileNumber != null) this.mobileNumber = mobileNumber
+        if (specialty != null) this.specialty = specialty.trim()
         this.updatedAt = Instant.now()
     }
 

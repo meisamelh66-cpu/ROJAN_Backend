@@ -122,14 +122,33 @@ class MediaFlowIntegrationTest {
         assertEquals(HttpStatus.OK, activate.statusCode)
     }
 
-    private fun uploadRequestBody(fileName: String = "logo.jpg"): MultiValueMap<String, Any> {
+    /** A minimal, real JPEG signature (FF D8 FF) followed by padding - the actual bytes the content-sniffing check in `UploadMediaUseCase` validates against, independent of [fileName]/declared Content-Type. */
+    private fun jpegBytes(size: Int = 64): ByteArray {
+        val bytes = ByteArray(size) { it.toByte() }
+        bytes[0] = 0xFF.toByte()
+        bytes[1] = 0xD8.toByte()
+        bytes[2] = 0xFF.toByte()
+        return bytes
+    }
+
+    /**
+     * [contentType] defaults to `image/jpeg` explicitly rather than letting
+     * Spring's form converter infer it from [fileName] - real attacker
+     * requests declare a `Content-Type` header independent of whatever
+     * filename they send, which is exactly the spoofing scenario the
+     * content-sniffing checks below defend against.
+     */
+    private fun uploadRequestBody(
+        fileName: String = "logo.jpg",
+        content: ByteArray = jpegBytes(),
+        contentType: MediaType = MediaType.IMAGE_JPEG,
+    ): MultiValueMap<String, Any> {
         val body: MultiValueMap<String, Any> = LinkedMultiValueMap()
-        body.add(
-            "file",
-            object : ByteArrayResource(ByteArray(64) { it.toByte() }) {
-                override fun getFilename() = fileName
-            },
-        )
+        val resource = object : ByteArrayResource(content) {
+            override fun getFilename() = fileName
+        }
+        val partHeaders = HttpHeaders().apply { this.contentType = contentType }
+        body.add("file", HttpEntity(resource, partHeaders))
         return body
     }
 
@@ -163,6 +182,40 @@ class MediaFlowIntegrationTest {
         )
         assertEquals(HttpStatus.OK, list.statusCode)
         assertTrue(list.body!!.any { it.id == mediaAsset.id })
+    }
+
+    @Test
+    fun `storage url extension is derived from real file content, not the client filename - spoofed extension defense`() {
+        val token = registerAndLogin()
+        val salon = createSalon(token)
+
+        val upload = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/media?mediaType=GALLERY"),
+            HttpMethod.POST,
+            HttpEntity(uploadRequestBody(fileName = "evil.html"), uploadHeaders(token)),
+            MediaAssetResponse::class.java,
+        )
+
+        assertEquals(HttpStatus.CREATED, upload.statusCode)
+        val mediaAsset = requireNotNull(upload.body)
+        assertTrue(mediaAsset.url.endsWith(".jpg"), "expected a .jpg url derived from the real JPEG bytes, got: ${mediaAsset.url}")
+    }
+
+    @Test
+    fun `upload is rejected when actual file content does not match the declared type - spoofed content-type`() {
+        val token = registerAndLogin()
+        val salon = createSalon(token)
+        val notActuallyAnImage = "<script>alert(1)</script>".toByteArray()
+
+        val upload = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/media?mediaType=GALLERY"),
+            HttpMethod.POST,
+            HttpEntity(uploadRequestBody(fileName = "evil.html", content = notActuallyAnImage), uploadHeaders(token)),
+            String::class.java,
+        )
+
+        assertEquals(HttpStatus.BAD_REQUEST, upload.statusCode)
+        assertTrue(upload.body!!.contains("UNSUPPORTED_MEDIA_TYPE"))
     }
 
     @Test
