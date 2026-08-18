@@ -50,11 +50,14 @@ class MediaUseCasesTest {
     private val ownerId = UserId.new()
     private val salon = newSalon(ownerId).also { salonRepository.save(it) }
 
+    /** Real PNG magic bytes (padded with zeros) - [ImageContentSniffer] validates actual content now, not just the declared [UploadMediaCommand.mimeType]. */
+    private val REAL_PNG_BYTES = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(92)
+
     private fun uploadCommand(mediaType: MediaType = MediaType.LOGO, caller: UserId = ownerId) = UploadMediaCommand(
         salonId = salon.id,
         callerId = caller,
         mediaType = mediaType,
-        content = ByteArray(100),
+        content = REAL_PNG_BYTES,
         originalName = "logo.png",
         mimeType = "image/png",
     )
@@ -94,6 +97,26 @@ class MediaUseCasesTest {
         assertThrows<MediaSizeExceededException> {
             uploadMediaUseCase.execute(uploadCommand().copy(content = ByteArray(9 * 1024 * 1024)))
         }
+    }
+
+    @Test
+    fun `upload rejects content whose real bytes don't match the declared mime type - spoofed Content-Type`() {
+        val htmlBytes = "<script>alert(1)</script>".toByteArray()
+
+        assertThrows<MediaTypeInvalidException> {
+            uploadMediaUseCase.execute(uploadCommand().copy(content = htmlBytes, mimeType = "image/png"))
+        }
+    }
+
+    @Test
+    fun `upload derives the storage key extension from the detected content, never the client filename`() {
+        val jpegBytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()) + ByteArray(97)
+
+        val asset = uploadMediaUseCase.execute(
+            uploadCommand().copy(content = jpegBytes, mimeType = "image/jpeg", originalName = "evil.html"),
+        )
+
+        assertTrue(asset.storageKey.endsWith(".jpg"))
     }
 
     @Test

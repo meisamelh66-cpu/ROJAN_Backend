@@ -29,6 +29,48 @@ private val ALLOWED_DOCUMENT_MIME_TYPES = setOf("application/pdf", "image/jpeg",
 private const val MAX_IMAGE_BYTES = 8L * 1024 * 1024
 private const val MAX_DOCUMENT_BYTES = 20L * 1024 * 1024
 
+/**
+ * Detects the true image format of [content] from its leading bytes (magic
+ * numbers), independent of whatever the client claimed via the
+ * `Content-Type` header or filename - both are client-controlled and
+ * independently spoofable (e.g. `Content-Type: image/png` on an
+ * `evil.html` payload, which Nginx's `/media/` static location would then
+ * serve as text/html from the API's own origin). Only recognizes the
+ * formats [ALLOWED_IMAGE_MIME_TYPES] allows - a declared type outside this
+ * set fails closed (rejected) rather than being accepted unvalidated.
+ * Scoped to [PUBLIC_IMAGE_TYPES] only (`LOGO`/`COVER`/`GALLERY`/`PORTFOLIO`)
+ * - `DOCUMENT` uploads (PDF or photographed) are Document Archive's own
+ * concern, not extended here.
+ */
+private object ImageContentSniffer {
+
+    /** The only extensions [UploadMediaUseCase] will ever write to disk for a public image - never derived from client input. */
+    val EXTENSIONS_BY_MIME_TYPE = mapOf(
+        "image/jpeg" to "jpg",
+        "image/png" to "png",
+        "image/webp" to "webp",
+    )
+
+    fun detect(content: ByteArray): String? = when {
+        content.size >= 8 &&
+            content[0] == 0x89.toByte() && content[1] == 0x50.toByte() &&
+            content[2] == 0x4E.toByte() && content[3] == 0x47.toByte() &&
+            content[4] == 0x0D.toByte() && content[5] == 0x0A.toByte() &&
+            content[6] == 0x1A.toByte() && content[7] == 0x0A.toByte() -> "image/png"
+
+        content.size >= 3 &&
+            content[0] == 0xFF.toByte() && content[1] == 0xD8.toByte() && content[2] == 0xFF.toByte() -> "image/jpeg"
+
+        content.size >= 12 &&
+            content[0] == 'R'.code.toByte() && content[1] == 'I'.code.toByte() &&
+            content[2] == 'F'.code.toByte() && content[3] == 'F'.code.toByte() &&
+            content[8] == 'W'.code.toByte() && content[9] == 'E'.code.toByte() &&
+            content[10] == 'B'.code.toByte() && content[11] == 'P'.code.toByte() -> "image/webp"
+
+        else -> null
+    }
+}
+
 data class UploadMediaCommand(
     val salonId: SalonId,
     val callerId: UserId,
@@ -72,12 +114,26 @@ class UploadMediaUseCase(
             throw MediaSizeExceededException(actualBytes, maxBytes)
         }
 
+        // The declared Content-Type is client-controlled and independently
+        // spoofable from the actual bytes - only the real leading bytes of
+        // [command.content] decide what a public image really is and what
+        // extension it gets written with. DOCUMENT is untouched here (PDF
+        // magic-byte sniffing is out of this scope).
+        val detectedImageMimeType = if (isPublicImage) ImageContentSniffer.detect(command.content) else null
+        if (isPublicImage && (detectedImageMimeType == null || detectedImageMimeType != command.mimeType)) {
+            throw MediaTypeInvalidException(command.mimeType, command.mediaType.name)
+        }
+
         // Document Archive (Phase 2) Security Gate §10.1: DOCUMENT content
         // lives under a distinct, private-only prefix - never the public
         // media/ prefix, so a bucket policy can grant public read on
         // media/ while denying it entirely on documents/.
         val prefix = if (command.mediaType == MediaType.DOCUMENT) "documents" else "media"
-        val storageKey = "salons/${command.salonId.value}/$prefix/${UUID.randomUUID()}"
+        val extension = detectedImageMimeType?.let { ImageContentSniffer.EXTENSIONS_BY_MIME_TYPE.getValue(it) }
+        val storageKey = buildString {
+            append("salons/").append(command.salonId.value).append('/').append(prefix).append('/').append(UUID.randomUUID())
+            if (extension != null) append('.').append(extension)
+        }
         mediaStoragePort.upload(storageKey, command.content, command.mimeType)
 
         val mediaAsset = MediaAsset.create(
