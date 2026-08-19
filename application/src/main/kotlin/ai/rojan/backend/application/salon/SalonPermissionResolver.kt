@@ -41,6 +41,14 @@ class SalonPermissionResolver(
         }
     }
 
+    /** Like [require], but passes if the caller holds at least one of [anyOfPermissions] - e.g. a narrow Reception permission or the broader CRM one it stands in for. */
+    fun requireAny(salonId: SalonId, callerId: UserId, vararg anyOfPermissions: Permission) {
+        val resolved = resolve(salonId, callerId)
+        if (anyOfPermissions.none { it in resolved }) {
+            throw SalonAccessDeniedException(salonId.value.toString())
+        }
+    }
+
     /**
      * For an action on one specific [specialist]: true if the caller holds
      * [allPermission] at the salon (e.g. [Permission.MANAGE_SCHEDULE_ALL] for

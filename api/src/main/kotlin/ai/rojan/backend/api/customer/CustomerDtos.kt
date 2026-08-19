@@ -27,6 +27,22 @@ data class CreateCustomerRequest(
     val company: String?,
 )
 
+/** Reception-facing counterpart to [CreateCustomerRequest] - no `company` field to even omit; see `ROJAN_Reception_Permission_Contract_Update_ADR_v1.md`. */
+data class CreateCustomerIdentityRequest(
+    @field:NotBlank
+    @field:Size(max = 255)
+    @field:Schema(example = "Jane Doe")
+    val fullName: String,
+
+    @field:Size(max = 20)
+    @field:Schema(example = "+989123456789")
+    val phoneNumber: String?,
+
+    @field:Size(max = 255)
+    @field:Schema(example = "jane.doe@example.com")
+    val email: String?,
+)
+
 /** Every field is optional and means "leave unchanged" when absent - see `UpdateCustomerUseCase`'s own doc comment for the exact PATCH merge semantics. */
 data class UpdateCustomerRequest(
     @field:Size(max = 255)
@@ -72,6 +88,16 @@ data class CustomerResponse(
     val active: Boolean,
     val createdAt: Instant,
     val updatedAt: Instant,
+)
+
+/** Reception-facing counterpart to [CustomerResponse] - structurally omits `company`/`tags`/`lifetimeValue`, not just by convention. See `ROJAN_Reception_Permission_Contract_Update_ADR_v1.md`. */
+data class CustomerIdentityResponse(
+    val id: UUID,
+    val salonId: UUID,
+    val fullName: String,
+    val phoneNumber: String?,
+    val email: String?,
+    val active: Boolean,
 )
 
 data class CustomerTagResponse(val id: UUID, val label: String, val createdAt: Instant)

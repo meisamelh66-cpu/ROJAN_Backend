@@ -5,6 +5,7 @@ import ai.rojan.backend.application.customer.AddCustomerNoteUseCase
 import ai.rojan.backend.application.customer.AddCustomerTagUseCase
 import ai.rojan.backend.application.customer.CalculateCustomerLifetimeValueUseCase
 import ai.rojan.backend.application.customer.CreateBookingForCustomerUseCase
+import ai.rojan.backend.application.customer.CreateCustomerIdentityUseCase
 import ai.rojan.backend.application.customer.CreateCustomerUseCase
 import ai.rojan.backend.application.customer.EnsureCustomerAssociationUseCase
 import ai.rojan.backend.application.customer.GetCustomerBookingsUseCase
@@ -30,6 +31,10 @@ class CustomerUseCaseConfig {
     @Bean
     fun createCustomerUseCase(salonRepository: SalonRepository, customerRepository: CustomerRepository, salonPermissionResolver: SalonPermissionResolver) =
         CreateCustomerUseCase(salonRepository, customerRepository, salonPermissionResolver)
+
+    @Bean
+    fun createCustomerIdentityUseCase(salonRepository: SalonRepository, customerRepository: CustomerRepository, salonPermissionResolver: SalonPermissionResolver) =
+        CreateCustomerIdentityUseCase(salonRepository, customerRepository, salonPermissionResolver)
 
     @Bean
     fun updateCustomerUseCase(

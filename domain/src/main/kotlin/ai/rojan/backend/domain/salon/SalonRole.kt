@@ -27,7 +27,17 @@ enum class SalonRole {
             Permission.VIEW_CRM,
             Permission.MANAGE_CRM,
             Permission.MANAGE_BOOKINGS,
+            Permission.VIEW_CUSTOMER_IDENTITY,
+            Permission.CREATE_CUSTOMER_IDENTITY,
+            Permission.VIEW_CUSTOMER_BOOKING_HISTORY,
         )
-        RECEPTIONIST -> setOf(Permission.MANAGE_BOOKINGS)
+        // Reception Permission Contract Update ADR v1: booking-operational access plus the
+        // three narrow customer-identity permissions - deliberately no VIEW_CRM/MANAGE_CRM.
+        RECEPTIONIST -> setOf(
+            Permission.MANAGE_BOOKINGS,
+            Permission.VIEW_CUSTOMER_IDENTITY,
+            Permission.CREATE_CUSTOMER_IDENTITY,
+            Permission.VIEW_CUSTOMER_BOOKING_HISTORY,
+        )
     }
 }

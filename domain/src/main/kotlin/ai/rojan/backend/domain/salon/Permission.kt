@@ -19,4 +19,13 @@ enum class Permission {
     MANAGE_CRM,
     MANAGE_BOOKINGS,
     MANAGE_OWN_BOOKINGS,
+
+    /** Reception Permission Contract (`ROJAN_Reception_Permission_Contract_Update_ADR_v1.md`): search/select an existing customer by identity fields only - never notes, tags, lifetimeValue, company. */
+    VIEW_CUSTOMER_IDENTITY,
+
+    /** Reception Permission Contract: register a walk-in customer at booking time - fullName/phoneNumber/email only, creation only, never edit of an existing record. */
+    CREATE_CUSTOMER_IDENTITY,
+
+    /** Reception Permission Contract: a customer's own booking history (date/service/status) - never the merged CRM timeline. */
+    VIEW_CUSTOMER_BOOKING_HISTORY,
 }
