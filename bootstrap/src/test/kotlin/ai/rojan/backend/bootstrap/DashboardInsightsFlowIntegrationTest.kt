@@ -5,8 +5,12 @@ import ai.rojan.backend.api.auth.LoginRequest
 import ai.rojan.backend.api.auth.RegisterRequest
 import ai.rojan.backend.api.auth.UserResponse
 import ai.rojan.backend.api.dashboard.DashboardInsightsResponse
+import ai.rojan.backend.api.invite.SalonInviteAcceptedResponse
+import ai.rojan.backend.api.salon.CreateSalonInviteRequest
 import ai.rojan.backend.api.salon.CreateSalonRequest
+import ai.rojan.backend.api.salon.SalonInviteResponse
 import ai.rojan.backend.api.salon.SalonResponse
+import ai.rojan.backend.domain.salon.SalonRole
 import ai.rojan.backend.domain.user.UserRole
 import io.zonky.test.db.AutoConfigureEmbeddedDatabase
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -21,6 +25,7 @@ import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
+import java.util.UUID
 
 /**
  * End-to-end verification of the dashboard-insights vertical: auth-token
@@ -62,6 +67,24 @@ class DashboardInsightsFlowIntegrationTest {
             HttpMethod.POST,
             HttpEntity(CreateSalonRequest(name, null, "+1 555 0100", null, "1 Main St"), bearer(token)),
             SalonResponse::class.java,
+        ).body,
+    )
+
+    private fun createInvite(ownerToken: String, salonId: UUID, role: SalonRole): SalonInviteResponse = requireNotNull(
+        restTemplate.exchange(
+            url("/api/v1/salons/$salonId/invites"),
+            HttpMethod.POST,
+            HttpEntity(CreateSalonInviteRequest(role), bearer(ownerToken)),
+            SalonInviteResponse::class.java,
+        ).body,
+    )
+
+    private fun acceptInvite(token: String, inviteToken: String): SalonInviteAcceptedResponse = requireNotNull(
+        restTemplate.exchange(
+            url("/api/v1/invites/$inviteToken/accept"),
+            HttpMethod.POST,
+            HttpEntity<Void>(bearer(token)),
+            SalonInviteAcceptedResponse::class.java,
         ).body,
     )
 
@@ -119,6 +142,61 @@ class DashboardInsightsFlowIntegrationTest {
             String::class.java,
         )
         assertEquals(HttpStatus.CONFLICT, response.statusCode)
+    }
+
+    @Test
+    fun `a MANAGER member gets 200 via explicit salonId - RBAC, not ownerId equality`() {
+        val ownerToken = registerAndLogin(UserRole.CUSTOMER)
+        val salon = createSalon(ownerToken, "Owner's Salon")
+        val invite = createInvite(ownerToken, salon.id, SalonRole.MANAGER)
+
+        val managerToken = registerAndLogin(UserRole.CUSTOMER)
+        acceptInvite(managerToken, invite.token)
+
+        val response = restTemplate.exchange(
+            url("/api/v1/dashboard/insights?salonId=${salon.id}"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(managerToken)),
+            DashboardInsightsResponse::class.java,
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+    }
+
+    @Test
+    fun `a RECEPTIONIST member is denied - lacks VIEW_CRM`() {
+        val ownerToken = registerAndLogin(UserRole.CUSTOMER)
+        val salon = createSalon(ownerToken, "Owner's Salon")
+        val invite = createInvite(ownerToken, salon.id, SalonRole.RECEPTIONIST)
+
+        val receptionToken = registerAndLogin(UserRole.CUSTOMER)
+        acceptInvite(receptionToken, invite.token)
+
+        val response = restTemplate.exchange(
+            url("/api/v1/dashboard/insights?salonId=${salon.id}"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(receptionToken)),
+            String::class.java,
+        )
+
+        assertEquals(HttpStatus.FORBIDDEN, response.statusCode)
+    }
+
+    @Test
+    fun `an unrelated authenticated user is denied - 403, not 404, so salon existence is never leaked`() {
+        val ownerToken = registerAndLogin(UserRole.CUSTOMER)
+        val salon = createSalon(ownerToken, "Owner's Salon")
+
+        val strangerToken = registerAndLogin(UserRole.CUSTOMER)
+
+        val response = restTemplate.exchange(
+            url("/api/v1/dashboard/insights?salonId=${salon.id}"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(strangerToken)),
+            String::class.java,
+        )
+
+        assertEquals(HttpStatus.FORBIDDEN, response.statusCode)
     }
 
     @Test

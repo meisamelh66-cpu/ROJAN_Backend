@@ -3,9 +3,10 @@ package ai.rojan.backend.application.dashboard
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.booking.BookingStatus
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.common.AmbiguousSalonContextException
-import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
@@ -55,6 +56,7 @@ class GetDashboardInsightsUseCase(
     private val bookingRepository: BookingRepository,
     private val serviceRepository: ServiceRepository,
     private val insightEngine: InsightEngine,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
     fun execute(command: GetDashboardInsightsCommand): DashboardInsights {
         val salon = if (command.salonId != null) {
@@ -140,7 +142,11 @@ class GetDashboardInsightsUseCase(
 
     private fun resolveSalonById(salonId: SalonId, callerId: UserId): Salon {
         val salon = salonRepository.findById(salonId) ?: throw SalonNotFoundException(salonId.value.toString())
-        if (salon.ownerId != callerId) throw SalonAccessDeniedException(salon.id.value.toString())
+        // VIEW_CRM, not a bare ownerId check: dashboard insights are salon-wide business data
+        // (revenue/bookings/customers/services), the same permission GetCustomerTimelineUseCase
+        // already requires for an analogous read. Owner still gets full access implicitly via
+        // SalonPermissionResolver.resolve, so this only widens access, never narrows it.
+        salonPermissionResolver.require(salon.id, callerId, Permission.VIEW_CRM)
         return salon
     }
 

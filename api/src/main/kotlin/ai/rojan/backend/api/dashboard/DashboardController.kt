@@ -31,16 +31,17 @@ class DashboardController(
 
     @GetMapping("/insights")
     @Operation(
-        summary = "Revenue, booking, customer and per-service insights for a salon owned by the authenticated user",
-        description = "salonId is optional - when omitted, resolves the caller's single salon implicitly (fails " +
-            "with 409 if the caller owns more than one). Owners of multiple salons must pass salonId explicitly.",
+        summary = "Revenue, booking, customer and per-service insights for a salon the authenticated user owns or manages",
+        description = "salonId is optional - when omitted, resolves the caller's single *owned* salon implicitly " +
+            "(fails with 409 if the caller owns more than one). A non-owner (e.g. a MANAGER member) must always " +
+            "pass salonId explicitly, and needs Permission.VIEW_CRM at that salon (owners always have it).",
     )
     @ApiResponses(
         ApiResponse(responseCode = "200", description = "Insights computed"),
         ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
         ApiResponse(
             responseCode = "403",
-            description = "salonId was supplied but does not belong to the caller",
+            description = "salonId was supplied but the caller lacks Permission.VIEW_CRM at that salon",
             content = [Content(schema = Schema(implementation = ApiError::class))],
         ),
         ApiResponse(
