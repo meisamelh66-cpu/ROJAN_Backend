@@ -30,14 +30,26 @@ fi
 echo "==> Ensuring persistent host directories exist with correct ownership"
 mkdir -p "$DATA_ROOT"/postgres "$DATA_ROOT"/redis "$DATA_ROOT"/logs "$DATA_ROOT"/backups \
          "$DATA_ROOT"/nginx/webroot "$DATA_ROOT"/nginx/letsencrypt "$DATA_ROOT"/nginx/logs
-# postgres:16-alpine and redis:7-alpine both run internally as uid/gid 999;
 # this repo's Dockerfile runs the app as uid/gid 10001. Bind mounts take on
 # the HOST directory's ownership as-is - the official images' own
 # chown-on-first-boot behavior only kicks in for Docker-managed named
 # volumes, not host bind mounts - so this has to be set explicitly here.
-# Verify with `docker run --rm <image> id` if either image's base UID ever
-# changes.
-chown -R 999:999 "$DATA_ROOT/postgres" "$DATA_ROOT/redis"
+#
+# Previously hardcoded to 999:999 for both, on the (wrong) assumption that
+# postgres:16-alpine and redis:7-alpine both run as uid/gid 999. Confirmed
+# via `docker exec backend-postgres-1 id postgres` that Postgres's real uid
+# is 70 - the 999 guess broke Postgres's ability to read its own data files
+# twice in production (Phase 12.8.5 checkpoint,
+# `FATAL: could not open file "global/pg_filenode.map": Permission denied`),
+# each time worked around live by a manual `chown -R 70:70` but never fixed
+# here until now. Reading each image's real uid directly, every deploy,
+# closes this permanently - it can't drift out of sync with a base image
+# change the way a second hardcoded guess could.
+postgres_uid="$(docker run --rm postgres:16-alpine id -u postgres)"
+redis_uid="$(docker run --rm redis:7-alpine id -u redis)"
+echo "    postgres:16-alpine runs as uid $postgres_uid, redis:7-alpine as uid $redis_uid"
+chown -R "$postgres_uid:$postgres_uid" "$DATA_ROOT/postgres"
+chown -R "$redis_uid:$redis_uid" "$DATA_ROOT/redis"
 chown -R 10001:10001 "$DATA_ROOT/logs"
 
 ROLLBACK_FILE="$DATA_ROOT/backups/last-deployed-commit.txt"

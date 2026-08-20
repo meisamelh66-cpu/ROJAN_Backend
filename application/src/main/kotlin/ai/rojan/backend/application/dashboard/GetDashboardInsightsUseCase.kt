@@ -1,11 +1,12 @@
 package ai.rojan.backend.application.dashboard
 
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.booking.BookingStatus
 import ai.rojan.backend.domain.common.AmbiguousSalonContextException
-import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
@@ -19,11 +20,22 @@ import java.time.LocalDate
 
 /**
  * [salonId] is optional (Production Hardening Phase 1 - tenant isolation
- * fix): when supplied, resolves and ownership-checks that exact salon,
- * mirroring [ai.rojan.backend.api.booking.SalonBookingController]'s own
- * pattern - the only way to disambiguate for an owner with more than one
- * salon. When omitted, behaves exactly as before ([resolveSalonByOwner]) so
- * every existing caller (today's single-salon owner) is unaffected.
+ * fix): when supplied, resolves that exact salon and checks the caller's
+ * [Permission.VIEW_CRM] via [SalonPermissionResolver] (Manager Dashboard
+ * RBAC fix - previously a raw `salon.ownerId != callerId` check, which
+ * incorrectly rejected non-owner [ai.rojan.backend.domain.salon.SalonMembership]
+ * holders; owner still gets every permission via
+ * [SalonPermissionResolver.resolve]'s early return, a `MANAGER` membership
+ * has [Permission.VIEW_CRM] per [ai.rojan.backend.domain.salon.SalonRole.permissions],
+ * a `RECEPTIONIST` membership does not - matching the existing "Reception
+ * has no CRM/financial visibility" boundary
+ * [GetCustomerBookingsUseCase][ai.rojan.backend.application.customer.GetCustomerBookingsUseCase]
+ * already enforces the same way for salon-wide customer/booking insights).
+ * This is the only way to disambiguate for an owner with more than one
+ * salon, mirroring [ai.rojan.backend.api.booking.SalonBookingController]'s
+ * own pattern. When omitted, behaves exactly as before
+ * ([resolveSalonByOwner]) so every existing caller (today's single-salon
+ * owner) is unaffected.
  */
 data class GetDashboardInsightsCommand(val callerId: UserId, val salonId: SalonId? = null)
 
@@ -55,6 +67,7 @@ class GetDashboardInsightsUseCase(
     private val bookingRepository: BookingRepository,
     private val serviceRepository: ServiceRepository,
     private val insightEngine: InsightEngine,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
     fun execute(command: GetDashboardInsightsCommand): DashboardInsights {
         val salon = if (command.salonId != null) {
@@ -140,7 +153,7 @@ class GetDashboardInsightsUseCase(
 
     private fun resolveSalonById(salonId: SalonId, callerId: UserId): Salon {
         val salon = salonRepository.findById(salonId) ?: throw SalonNotFoundException(salonId.value.toString())
-        if (salon.ownerId != callerId) throw SalonAccessDeniedException(salon.id.value.toString())
+        salonPermissionResolver.require(salonId, callerId, Permission.VIEW_CRM)
         return salon
     }
 

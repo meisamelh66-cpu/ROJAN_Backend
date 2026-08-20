@@ -3,6 +3,7 @@ package ai.rojan.backend.api.config
 import ai.rojan.backend.application.dashboard.GetDashboardInsightsUseCase
 import ai.rojan.backend.application.dashboard.InsightEngine
 import ai.rojan.backend.application.dashboard.RuleBasedRecommendationEngine
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.ServiceRepository
@@ -23,5 +24,6 @@ class DashboardUseCaseConfig {
         bookingRepository: BookingRepository,
         serviceRepository: ServiceRepository,
         insightEngine: InsightEngine,
-    ) = GetDashboardInsightsUseCase(salonRepository, bookingRepository, serviceRepository, insightEngine)
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = GetDashboardInsightsUseCase(salonRepository, bookingRepository, serviceRepository, insightEngine, salonPermissionResolver)
 }

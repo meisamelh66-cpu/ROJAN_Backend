@@ -1,15 +1,20 @@
 package ai.rojan.backend.application.dashboard
 
 import ai.rojan.backend.application.booking.InMemoryBookingRepository
+import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
 import ai.rojan.backend.application.salon.InMemoryServiceRepository
+import ai.rojan.backend.application.salon.InMemorySpecialistRepository
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.booking.BookingId
 import ai.rojan.backend.domain.booking.BookingStatus
 import ai.rojan.backend.domain.common.AmbiguousSalonContextException
+import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.salon.SalonRole
 import ai.rojan.backend.domain.salon.Service
 import ai.rojan.backend.domain.salon.ServiceCategoryId
 import ai.rojan.backend.domain.salon.ServiceId
@@ -29,7 +34,16 @@ class GetDashboardInsightsUseCaseTest {
     private val salonRepository = InMemorySalonRepository()
     private val bookingRepository = InMemoryBookingRepository()
     private val serviceRepository = InMemoryServiceRepository()
-    private val useCase = GetDashboardInsightsUseCase(salonRepository, bookingRepository, serviceRepository, RuleBasedRecommendationEngine())
+    private val membershipRepository = InMemorySalonMembershipRepository()
+    private val specialistRepository = InMemorySpecialistRepository()
+    private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
+    private val useCase = GetDashboardInsightsUseCase(
+        salonRepository,
+        bookingRepository,
+        serviceRepository,
+        RuleBasedRecommendationEngine(),
+        salonPermissionResolver,
+    )
 
     private fun salonOwnedBy(ownerId: UserId): Salon =
         Salon.create(ownerId, "Test Salon", null, "+1 555 0100", null, "1 Main St").also { salonRepository.save(it) }
@@ -142,5 +156,50 @@ class GetDashboardInsightsUseCaseTest {
         val insights = useCase.execute(GetDashboardInsightsCommand(ownerId))
 
         assertEquals(BigDecimal("50.00"), insights.revenue.today)
+    }
+
+    @Test
+    fun `owner can access dashboard via an explicit salonId too`() {
+        val ownerId = UserId.new()
+        val salon = salonOwnedBy(ownerId)
+
+        val insights = useCase.execute(GetDashboardInsightsCommand(ownerId, salon.id))
+
+        assertTrue(insights.services.isEmpty())
+    }
+
+    @Test
+    fun `a MANAGER member can access dashboard for the salon they're a member of`() {
+        val ownerId = UserId.new()
+        val salon = salonOwnedBy(ownerId)
+        val managerId = UserId.new()
+        membershipRepository.assign(salon.id, managerId, SalonRole.MANAGER)
+
+        val insights = useCase.execute(GetDashboardInsightsCommand(managerId, salon.id))
+
+        assertTrue(insights.services.isEmpty())
+    }
+
+    @Test
+    fun `a RECEPTIONIST member is denied - dashboard needs VIEW_CRM, which RECEPTIONIST doesn't have`() {
+        val ownerId = UserId.new()
+        val salon = salonOwnedBy(ownerId)
+        val receptionistId = UserId.new()
+        membershipRepository.assign(salon.id, receptionistId, SalonRole.RECEPTIONIST)
+
+        assertThrows(SalonAccessDeniedException::class.java) {
+            useCase.execute(GetDashboardInsightsCommand(receptionistId, salon.id))
+        }
+    }
+
+    @Test
+    fun `a caller with no relationship to the salon is denied, not silently let through`() {
+        val ownerId = UserId.new()
+        val salon = salonOwnedBy(ownerId)
+        val stranger = UserId.new()
+
+        assertThrows(SalonAccessDeniedException::class.java) {
+            useCase.execute(GetDashboardInsightsCommand(stranger, salon.id))
+        }
     }
 }
