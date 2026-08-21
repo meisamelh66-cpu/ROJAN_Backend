@@ -1,15 +1,20 @@
 package ai.rojan.backend.application.media
 
+import ai.rojan.backend.application.salon.InMemoryServiceRepository
 import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
 import ai.rojan.backend.application.salon.InMemorySpecialistRepository
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.common.MediaAssetNotFoundException
+import ai.rojan.backend.domain.common.MediaReorderMismatchException
 import ai.rojan.backend.domain.common.MediaSizeExceededException
+import ai.rojan.backend.domain.common.MediaTargetRequiredException
 import ai.rojan.backend.domain.common.MediaTypeInvalidException
 import ai.rojan.backend.domain.common.MediaTypeMismatchException
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.common.ServiceNotFoundException
+import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.media.MediaAssetStatus
 import ai.rojan.backend.domain.media.MediaType
@@ -17,12 +22,16 @@ import ai.rojan.backend.domain.salon.IdentitySlot
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRole
+import ai.rojan.backend.domain.salon.Service
+import ai.rojan.backend.domain.salon.ServiceCategoryId
+import ai.rojan.backend.domain.salon.Specialist
 import ai.rojan.backend.domain.user.UserId
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import java.math.BigDecimal
 
 private fun newSalon(ownerId: UserId = UserId.new()) = Salon.create(
     ownerId = ownerId,
@@ -38,14 +47,19 @@ class MediaUseCasesTest {
     private val salonRepository = InMemorySalonRepository()
     private val membershipRepository = InMemorySalonMembershipRepository()
     private val specialistRepository = InMemorySpecialistRepository()
+    private val serviceRepository = InMemoryServiceRepository()
     private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
     private val mediaAssetRepository = InMemoryMediaAssetRepository()
     private val mediaStoragePort = InMemoryMediaStoragePort()
 
-    private val uploadMediaUseCase = UploadMediaUseCase(salonRepository, mediaAssetRepository, salonPermissionResolver, mediaStoragePort)
+    private val uploadMediaUseCase = UploadMediaUseCase(
+        salonRepository, mediaAssetRepository, salonPermissionResolver, mediaStoragePort,
+        specialistRepository, serviceRepository,
+    )
     private val listMediaUseCase = ListMediaUseCase(salonRepository, mediaAssetRepository)
     private val deleteMediaUseCase = DeleteMediaUseCase(salonRepository, mediaAssetRepository, salonPermissionResolver, mediaStoragePort)
     private val assignIdentityMediaUseCase = AssignIdentityMediaUseCase(salonRepository, mediaAssetRepository, salonPermissionResolver)
+    private val reorderMediaUseCase = ReorderMediaUseCase(salonRepository, mediaAssetRepository, salonPermissionResolver)
 
     private val ownerId = UserId.new()
     private val salon = newSalon(ownerId).also { salonRepository.save(it) }
@@ -248,5 +262,105 @@ class MediaUseCasesTest {
         assertEquals(1, all.size)
         assertEquals(MediaType.LOGO, all.single().mediaType)
         assertTrue(documentsOnly.isEmpty())
+    }
+
+    // ---------- Media System Evolution v2: targetId (PORTFOLIO/SERVICE_IMAGE), ordering, reorder ----------
+
+    private val specialist = Specialist.create(salon.id, userId = null, displayName = "Ada", bio = null, photoUrl = null)
+        .also { specialistRepository.save(it) }
+    private val service = Service.create(salon.id, ServiceCategoryId.new(), "Haircut", null, 30, BigDecimal("25.00"))
+        .also { serviceRepository.save(it) }
+
+    @Test
+    fun `PORTFOLIO upload with no targetId is rejected`() {
+        assertThrows<MediaTargetRequiredException> {
+            uploadMediaUseCase.execute(uploadCommand(MediaType.PORTFOLIO))
+        }
+    }
+
+    @Test
+    fun `SERVICE_IMAGE upload with no targetId is rejected`() {
+        assertThrows<MediaTargetRequiredException> {
+            uploadMediaUseCase.execute(uploadCommand(MediaType.SERVICE_IMAGE))
+        }
+    }
+
+    @Test
+    fun `PORTFOLIO upload targeting a specialist from a different salon is rejected`() {
+        val otherSalon = newSalon().also { salonRepository.save(it) }
+        val otherSpecialist = Specialist.create(otherSalon.id, userId = null, displayName = "Bea", bio = null, photoUrl = null)
+            .also { specialistRepository.save(it) }
+
+        assertThrows<SpecialistNotFoundException> {
+            uploadMediaUseCase.execute(uploadCommand(MediaType.PORTFOLIO).copy(targetId = otherSpecialist.id.value))
+        }
+    }
+
+    @Test
+    fun `SERVICE_IMAGE upload targeting an unknown service is rejected`() {
+        assertThrows<ServiceNotFoundException> {
+            uploadMediaUseCase.execute(uploadCommand(MediaType.SERVICE_IMAGE).copy(targetId = java.util.UUID.randomUUID()))
+        }
+    }
+
+    @Test
+    fun `SPECIALIST_PHOTO upload with no targetId still succeeds - unaffected by the new requirement`() {
+        val asset = uploadMediaUseCase.execute(uploadCommand(MediaType.SPECIALIST_PHOTO))
+        assertNull(asset.targetId)
+    }
+
+    @Test
+    fun `portfolio uploads for one specialist are isolated from another specialist's and from the salon's plain gallery`() {
+        val otherSpecialist = Specialist.create(salon.id, userId = null, displayName = "Cleo", bio = null, photoUrl = null)
+            .also { specialistRepository.save(it) }
+
+        uploadMediaUseCase.execute(uploadCommand(MediaType.PORTFOLIO).copy(targetId = specialist.id.value))
+        uploadMediaUseCase.execute(uploadCommand(MediaType.PORTFOLIO).copy(targetId = otherSpecialist.id.value))
+        uploadMediaUseCase.execute(uploadCommand(MediaType.GALLERY))
+
+        val mine = listMediaUseCase.execute(ListMediaQuery(salon.id, MediaType.PORTFOLIO, specialist.id.value))
+
+        assertEquals(1, mine.size)
+        assertEquals(specialist.id.value, mine.single().targetId)
+    }
+
+    @Test
+    fun `uploads append with sequentially increasing displayOrder within their group`() {
+        val first = uploadMediaUseCase.execute(uploadCommand(MediaType.SERVICE_IMAGE).copy(targetId = service.id.value))
+        val second = uploadMediaUseCase.execute(uploadCommand(MediaType.SERVICE_IMAGE).copy(targetId = service.id.value))
+
+        assertEquals(0, first.displayOrder)
+        assertEquals(1, second.displayOrder)
+    }
+
+    @Test
+    fun `list returns a group pre-sorted by displayOrder`() {
+        val first = uploadMediaUseCase.execute(uploadCommand(MediaType.GALLERY))
+        val second = uploadMediaUseCase.execute(uploadCommand(MediaType.GALLERY))
+        val third = uploadMediaUseCase.execute(uploadCommand(MediaType.GALLERY))
+
+        reorderMediaUseCase.execute(ReorderMediaCommand(salon.id, ownerId, MediaType.GALLERY, null, listOf(third.id, first.id, second.id)))
+
+        val listed = listMediaUseCase.execute(ListMediaQuery(salon.id, MediaType.GALLERY))
+        assertEquals(listOf(third.id, first.id, second.id), listed.map { it.id })
+    }
+
+    @Test
+    fun `reorder rejects an id from outside the exact group being reordered`() {
+        val inGroup = uploadMediaUseCase.execute(uploadCommand(MediaType.GALLERY))
+        val wrongType = uploadMediaUseCase.execute(uploadCommand(MediaType.LOGO))
+
+        assertThrows<MediaReorderMismatchException> {
+            reorderMediaUseCase.execute(ReorderMediaCommand(salon.id, ownerId, MediaType.GALLERY, null, listOf(inGroup.id, wrongType.id)))
+        }
+    }
+
+    @Test
+    fun `reorder requires MANAGE_MEDIA`() {
+        val asset = uploadMediaUseCase.execute(uploadCommand(MediaType.GALLERY))
+
+        assertThrows<SalonAccessDeniedException> {
+            reorderMediaUseCase.execute(ReorderMediaCommand(salon.id, UserId.new(), MediaType.GALLERY, null, listOf(asset.id)))
+        }
     }
 }

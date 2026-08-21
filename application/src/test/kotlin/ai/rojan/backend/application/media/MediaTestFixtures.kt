@@ -6,6 +6,7 @@ import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.media.MediaAssetRepository
 import ai.rojan.backend.domain.media.MediaType
 import ai.rojan.backend.domain.salon.SalonId
+import java.util.UUID
 
 /** Mirrors [ai.rojan.backend.application.salon.InMemorySalonRepository]'s style. */
 internal class InMemoryMediaAssetRepository : MediaAssetRepository {
@@ -16,8 +17,10 @@ internal class InMemoryMediaAssetRepository : MediaAssetRepository {
     override fun findByIdAndSalonId(id: MediaAssetId, salonId: SalonId): MediaAsset? =
         store[id]?.takeIf { it.salonId == salonId }
 
-    override fun findBySalonId(salonId: SalonId, mediaType: MediaType?): List<MediaAsset> =
-        store.values.filter { it.salonId == salonId && (mediaType == null || it.mediaType == mediaType) }
+    override fun findBySalonId(salonId: SalonId, mediaType: MediaType?, targetId: UUID?): List<MediaAsset> =
+        store.values
+            .filter { it.salonId == salonId && (mediaType == null || it.mediaType == mediaType) && (targetId == null || it.targetId == targetId) }
+            .sortedWith(compareBy({ it.displayOrder }, { it.createdAt }))
 }
 
 /** In-memory - no real bytes stored, just tracks what was uploaded/deleted for assertions. */

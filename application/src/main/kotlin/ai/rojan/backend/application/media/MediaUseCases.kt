@@ -3,24 +3,36 @@ package ai.rojan.backend.application.media
 import ai.rojan.backend.application.port.MediaStoragePort
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.common.MediaAssetNotFoundException
+import ai.rojan.backend.domain.common.MediaReorderMismatchException
 import ai.rojan.backend.domain.common.MediaSizeExceededException
+import ai.rojan.backend.domain.common.MediaTargetRequiredException
 import ai.rojan.backend.domain.common.MediaTypeInvalidException
 import ai.rojan.backend.domain.common.MediaTypeMismatchException
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.common.ServiceNotFoundException
+import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.media.MediaAsset
 import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.media.MediaAssetRepository
 import ai.rojan.backend.domain.media.MediaAssetStatus
 import ai.rojan.backend.domain.media.MediaType
+import ai.rojan.backend.domain.media.TARGET_REQUIRED_MEDIA_TYPES
 import ai.rojan.backend.domain.salon.IdentitySlot
 import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
+import ai.rojan.backend.domain.salon.ServiceId
+import ai.rojan.backend.domain.salon.ServiceRepository
+import ai.rojan.backend.domain.salon.SpecialistId
+import ai.rojan.backend.domain.salon.SpecialistRepository
 import ai.rojan.backend.domain.user.UserId
 import java.util.UUID
 
-private val PUBLIC_IMAGE_TYPES = setOf(MediaType.LOGO, MediaType.COVER, MediaType.GALLERY, MediaType.PORTFOLIO)
+private val PUBLIC_IMAGE_TYPES = setOf(
+    MediaType.LOGO, MediaType.COVER, MediaType.GALLERY, MediaType.PORTFOLIO,
+    MediaType.SPECIALIST_PHOTO, MediaType.SERVICE_IMAGE,
+)
 private val ALLOWED_IMAGE_MIME_TYPES = setOf("image/png", "image/jpeg", "image/webp")
 // Document Archive (Phase 2) Security Gate §10.3: a license/certificate is
 // as often a phone-camera photo as a scanned PDF - PDF-only would reject
@@ -38,9 +50,9 @@ private const val MAX_DOCUMENT_BYTES = 20L * 1024 * 1024
  * serve as text/html from the API's own origin). Only recognizes the
  * formats [ALLOWED_IMAGE_MIME_TYPES] allows - a declared type outside this
  * set fails closed (rejected) rather than being accepted unvalidated.
- * Scoped to [PUBLIC_IMAGE_TYPES] only (`LOGO`/`COVER`/`GALLERY`/`PORTFOLIO`)
- * - `DOCUMENT` uploads (PDF or photographed) are Document Archive's own
- * concern, not extended here.
+ * Scoped to [PUBLIC_IMAGE_TYPES] only (`LOGO`/`COVER`/`GALLERY`/`PORTFOLIO`/
+ * `SPECIALIST_PHOTO`/`SERVICE_IMAGE`) - `DOCUMENT` uploads (PDF or
+ * photographed) are Document Archive's own concern, not extended here.
  */
 private object ImageContentSniffer {
 
@@ -78,6 +90,7 @@ data class UploadMediaCommand(
     val content: ByteArray,
     val originalName: String,
     val mimeType: String,
+    val targetId: UUID? = null,
 )
 
 /**
@@ -85,12 +98,26 @@ data class UploadMediaCommand(
  * [MediaAsset] domain invariant - they're configuration-shaped rules about
  * what this platform currently accepts, not a structural truth about what
  * a media asset *is* (unlike, say, a blank storage key).
+ *
+ * [targetId] validation (Media System Evolution v2):
+ * [ai.rojan.backend.domain.media.TARGET_REQUIRED_MEDIA_TYPES] (`PORTFOLIO`/
+ * `SERVICE_IMAGE`) reject a `null` targetId outright, then verify the id
+ * actually names a [ai.rojan.backend.domain.salon.Specialist]/
+ * [ai.rojan.backend.domain.salon.Service] belonging to *this* salon - the
+ * same tenant-isolation shape every other salon-scoped lookup in this
+ * codebase already enforces (e.g. `ServiceController.findServiceOrThrow`).
+ * Every other [MediaType] ignores whatever `targetId` it's given rather
+ * than rejecting it - `SPECIALIST_PHOTO` in particular stays
+ * targetId-optional so the Media Sprint P0 upload call (which never sent
+ * one) keeps working unchanged.
  */
 class UploadMediaUseCase(
     private val salonRepository: SalonRepository,
     private val mediaAssetRepository: MediaAssetRepository,
     private val salonPermissionResolver: SalonPermissionResolver,
     private val mediaStoragePort: MediaStoragePort,
+    private val specialistRepository: SpecialistRepository,
+    private val serviceRepository: ServiceRepository,
 ) {
     fun execute(command: UploadMediaCommand): MediaAsset {
         salonRepository.findById(command.salonId) ?: throw SalonNotFoundException(command.salonId.value.toString())
@@ -100,6 +127,8 @@ class UploadMediaUseCase(
         // could otherwise upload compliance documents.
         val requiredPermission = if (command.mediaType == MediaType.DOCUMENT) Permission.MANAGE_DOCUMENTS else Permission.MANAGE_MEDIA
         salonPermissionResolver.require(command.salonId, command.callerId, requiredPermission)
+
+        validateTarget(command.salonId, command.mediaType, command.targetId)
 
         val isPublicImage = command.mediaType in PUBLIC_IMAGE_TYPES
         // Every media type is now mime-validated - DOCUMENT previously had
@@ -136,6 +165,14 @@ class UploadMediaUseCase(
         }
         mediaStoragePort.upload(storageKey, command.content, command.mimeType)
 
+        // Append at the end of whatever (salonId, mediaType, targetId) group
+        // this upload lands in - a brand-new gallery/portfolio/service-image
+        // slot always shows up last, never reshuffling what's already there.
+        val nextDisplayOrder = mediaAssetRepository.findBySalonId(command.salonId, command.mediaType, command.targetId)
+            .filter { it.status != MediaAssetStatus.DELETED }
+            .maxOfOrNull { it.displayOrder }
+            ?.plus(1) ?: 0
+
         val mediaAsset = MediaAsset.create(
             salonId = command.salonId,
             mediaType = command.mediaType,
@@ -144,14 +181,37 @@ class UploadMediaUseCase(
             mimeType = command.mimeType,
             fileSize = actualBytes,
             uploadedBy = command.callerId,
+            targetId = command.targetId,
+            displayOrder = nextDisplayOrder,
         )
         return mediaAssetRepository.save(mediaAsset)
+    }
+
+    private fun validateTarget(salonId: SalonId, mediaType: MediaType, targetId: UUID?) {
+        if (mediaType !in TARGET_REQUIRED_MEDIA_TYPES) return
+        if (targetId == null) throw MediaTargetRequiredException(mediaType.name)
+        when (mediaType) {
+            MediaType.PORTFOLIO -> {
+                val specialist = specialistRepository.findById(SpecialistId(targetId))
+                    ?.takeIf { it.salonId == salonId }
+                    ?: throw SpecialistNotFoundException(targetId.toString())
+                specialist
+            }
+            MediaType.SERVICE_IMAGE -> {
+                val service = serviceRepository.findById(ServiceId(targetId))
+                    ?.takeIf { it.salonId == salonId }
+                    ?: throw ServiceNotFoundException(targetId.toString())
+                service
+            }
+            else -> Unit
+        }
     }
 }
 
 data class ListMediaQuery(
     val salonId: SalonId,
     val mediaType: MediaType?,
+    val targetId: UUID? = null,
 )
 
 class ListMediaUseCase(
@@ -160,17 +220,60 @@ class ListMediaUseCase(
 ) {
     /**
      * No permission gate beyond a valid salon - this is the *public* media
-     * surface (logo/cover/gallery/portfolio), intentionally open to any
-     * authenticated caller. Document Archive (Phase 2) Security Gate
-     * §10.1: `DOCUMENT`-typed assets are unconditionally excluded here,
-     * regardless of any `mediaType` filter the caller passes - documents
-     * are discoverable exclusively through the permission-gated
-     * `GET /salons/{salonId}/documents` surface, never this one.
+     * surface (logo/cover/gallery/portfolio/specialist photos/service
+     * images), intentionally open to any authenticated caller. Document
+     * Archive (Phase 2) Security Gate §10.1: `DOCUMENT`-typed assets are
+     * unconditionally excluded here, regardless of any `mediaType` filter
+     * the caller passes - documents are discoverable exclusively through
+     * the permission-gated `GET /salons/{salonId}/documents` surface, never
+     * this one. Results come back pre-sorted by `displayOrder` (the
+     * repository's own contract) - callers never need to re-sort.
      */
     fun execute(query: ListMediaQuery): List<MediaAsset> {
         salonRepository.findById(query.salonId) ?: throw SalonNotFoundException(query.salonId.value.toString())
-        return mediaAssetRepository.findBySalonId(query.salonId, query.mediaType)
+        return mediaAssetRepository.findBySalonId(query.salonId, query.mediaType, query.targetId)
             .filter { it.status != MediaAssetStatus.DELETED && it.mediaType != MediaType.DOCUMENT }
+    }
+}
+
+data class ReorderMediaCommand(
+    val salonId: SalonId,
+    val callerId: UserId,
+    val mediaType: MediaType,
+    val targetId: UUID?,
+    val orderedMediaIds: List<MediaAssetId>,
+)
+
+/**
+ * Complete Salon Gallery UX (Media System Evolution v2): assigns sequential
+ * [MediaAsset.displayOrder] values (`0..n-1`) matching [ReorderMediaCommand.orderedMediaIds]'
+ * position. Every id must already belong to the exact (salonId, mediaType,
+ * targetId) group being reordered - a stray id (wrong salon, wrong type,
+ * wrong target, or simply unknown) fails the whole call rather than
+ * silently reordering a subset, so a caller's local list can never drift
+ * from the server's.
+ */
+class ReorderMediaUseCase(
+    private val salonRepository: SalonRepository,
+    private val mediaAssetRepository: MediaAssetRepository,
+    private val salonPermissionResolver: SalonPermissionResolver,
+) {
+    fun execute(command: ReorderMediaCommand) {
+        salonRepository.findById(command.salonId) ?: throw SalonNotFoundException(command.salonId.value.toString())
+        salonPermissionResolver.require(command.salonId, command.callerId, Permission.MANAGE_MEDIA)
+
+        val group = mediaAssetRepository.findBySalonId(command.salonId, command.mediaType, command.targetId)
+            .filter { it.status != MediaAssetStatus.DELETED }
+            .associateBy { it.id }
+
+        val assets = command.orderedMediaIds.map { id ->
+            group[id] ?: throw MediaReorderMismatchException(id.value.toString())
+        }
+
+        assets.forEachIndexed { index, asset ->
+            asset.reorder(index)
+            mediaAssetRepository.save(asset)
+        }
     }
 }
 
