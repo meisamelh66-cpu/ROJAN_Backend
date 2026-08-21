@@ -5,6 +5,8 @@ import ai.rojan.backend.application.booking.GetAvailableSlotsQuery
 import ai.rojan.backend.application.booking.GetAvailableSlotsUseCase
 import ai.rojan.backend.application.port.MediaStoragePort
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.common.ServiceNotFoundException
+import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.media.MediaAsset
 import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.media.MediaAssetRepository
@@ -85,11 +87,42 @@ class PublicSalonController(
 
     /** Public/portfolio types only, `ACTIVE` status only - status is a `3173d40`-model concept `03a3206`'s original version of this endpoint never had, so filtering on it here is a genuine improvement, not a like-for-like port. */
     @GetMapping("/gallery")
-    @Operation(summary = "Browse a salon's public gallery and portfolio images")
+    @Operation(summary = "Browse a salon's public gallery and untargeted portfolio images")
     fun gallery(@PathVariable slug: String): List<PublicMediaAssetResponse> {
         val salon = findSalonOrThrow(slug)
         return mediaAssetRepository.findBySalonId(salon.id)
             .filter { it.mediaType in PUBLIC_GALLERY_TYPES && it.status == MediaAssetStatus.ACTIVE }
+            // Media System Evolution v2: PORTFOLIO rows targeted at a specific
+            // specialist belong to that specialist's own portfolio endpoint
+            // below, not the salon's general gallery feed - only ever mixed
+            // together before targetId existed. GALLERY is never targeted
+            // (UploadMediaUseCase never assigns it one), so this filter is a
+            // no-op for it.
+            .filter { it.mediaType != MediaType.PORTFOLIO || it.targetId == null }
+            .map { it.toResponse() }
+    }
+
+    @GetMapping("/specialists/{specialistId}/portfolio")
+    @Operation(summary = "Browse one specialist's portfolio images")
+    fun specialistPortfolio(@PathVariable slug: String, @PathVariable specialistId: UUID): List<PublicMediaAssetResponse> {
+        val salon = findSalonOrThrow(slug)
+        specialistRepository.findById(SpecialistId(specialistId))
+            ?.takeIf { it.salonId == salon.id }
+            ?: throw SpecialistNotFoundException(specialistId.toString())
+        return mediaAssetRepository.findBySalonId(salon.id, MediaType.PORTFOLIO, specialistId)
+            .filter { it.status == MediaAssetStatus.ACTIVE }
+            .map { it.toResponse() }
+    }
+
+    @GetMapping("/services/{serviceId}/images")
+    @Operation(summary = "Browse one service's images")
+    fun serviceImages(@PathVariable slug: String, @PathVariable serviceId: UUID): List<PublicMediaAssetResponse> {
+        val salon = findSalonOrThrow(slug)
+        serviceRepository.findById(ServiceId(serviceId))
+            ?.takeIf { it.salonId == salon.id }
+            ?: throw ServiceNotFoundException(serviceId.toString())
+        return mediaAssetRepository.findBySalonId(salon.id, MediaType.SERVICE_IMAGE, serviceId)
+            .filter { it.status == MediaAssetStatus.ACTIVE }
             .map { it.toResponse() }
     }
 

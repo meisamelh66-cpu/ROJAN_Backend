@@ -12,7 +12,26 @@ value class MediaAssetId(val value: UUID) {
     }
 }
 
-enum class MediaType { LOGO, COVER, GALLERY, PORTFOLIO, DOCUMENT }
+/**
+ * [SPECIALIST_PHOTO] (Media Sprint P0): a specialist's avatar. Deliberately
+ * reuses this same salon-scoped `MediaAsset`/upload pipeline rather than a
+ * parallel structure — the association to *which* specialist owns a given
+ * upload is carried by `Specialist.photoUrl` (a URL, set via the existing
+ * `PUT /salons/{salonId}/specialists/{specialistId}` update endpoint after
+ * upload), not by a new column on this table. [targetId] (Media System
+ * Evolution v2) exists for the two genuinely one-to-many cases that
+ * `photoUrl`-on-the-owner can't represent: [PORTFOLIO] (many shots per
+ * specialist) and [SERVICE_IMAGE] (many photos per service, new this
+ * evolution) both require it and are rejected without one
+ * (`UploadMediaUseCase`); [SPECIALIST_PHOTO] stays [targetId]-optional so
+ * every pre-v2 upload call keeps working unchanged. Non-breaking: `media_type`
+ * is a plain `VARCHAR(16)` with no DB-level enum/check constraint, so adding
+ * a case needs no migration.
+ */
+enum class MediaType { LOGO, COVER, GALLERY, PORTFOLIO, DOCUMENT, SPECIALIST_PHOTO, SERVICE_IMAGE }
+
+/** [PORTFOLIO]/[SERVICE_IMAGE] are meaningless without knowing *whose* portfolio or *which* service - `UploadMediaUseCase` rejects an upload of either type with no [ai.rojan.backend.domain.media.MediaAsset.targetId]. */
+val TARGET_REQUIRED_MEDIA_TYPES: Set<MediaType> = setOf(MediaType.PORTFOLIO, MediaType.SERVICE_IMAGE)
 
 /**
  * [PENDING] exists so a future signed-URL upload flow (client uploads
@@ -29,11 +48,28 @@ enum class MediaAssetStatus {
 
 /**
  * The single home for every uploaded file this platform stores - logos,
- * covers, gallery/portfolio images, and the raw files backing
- * `SalonDocument`s (a future aggregate composes this one, never duplicates
- * it). [storageKey] is opaque to every caller above the storage adapter -
- * never a public URL, so the storage provider can change without touching
- * any row.
+ * covers, gallery/portfolio images, service photos, and the raw files
+ * backing `SalonDocument`s (a future aggregate composes this one, never
+ * duplicates it). [storageKey] is opaque to every caller above the storage
+ * adapter - never a public URL, so the storage provider can change without
+ * touching any row.
+ *
+ * [targetId] (Media System Evolution v2, nullable, defaults `null`): which
+ * specialist or service this row belongs to, for [TARGET_REQUIRED_MEDIA_TYPES]
+ * - a raw id, not a typed [ai.rojan.backend.domain.salon.SpecialistId]/
+ * [ai.rojan.backend.domain.salon.ServiceId], since which one it is depends
+ * on [mediaType] and this entity has no reason to know about either
+ * aggregate. Ownership (does this id really belong to a specialist/service
+ * *in this salon*) is verified in `UploadMediaUseCase`, the same layer that
+ * already verifies `salonId` itself - never here, matching this entity's
+ * existing "no cross-aggregate lookups" shape. `null` for every other
+ * [MediaType] (salon-flat, as before this evolution).
+ *
+ * [displayOrder]: caller-controlled sort position within one
+ * (salonId, mediaType, targetId) group, defaulting to "append at the end"
+ * on upload (`UploadMediaUseCase`) and only ever changed explicitly via
+ * [reorder] (`ReorderMediaUseCase`) - never implicitly reshuffled by a
+ * delete or a second upload elsewhere in the group.
  */
 class MediaAsset private constructor(
     val id: MediaAssetId,
@@ -45,6 +81,8 @@ class MediaAsset private constructor(
     val fileSize: Long,
     status: MediaAssetStatus,
     val uploadedBy: UserId,
+    val targetId: UUID?,
+    displayOrder: Int,
     val createdAt: Instant,
     updatedAt: Instant,
 ) {
@@ -55,6 +93,9 @@ class MediaAsset private constructor(
         private set
 
     var status: MediaAssetStatus = status
+        private set
+
+    var displayOrder: Int = displayOrder
         private set
 
     var updatedAt: Instant = updatedAt
@@ -80,6 +121,12 @@ class MediaAsset private constructor(
         touch()
     }
 
+    /** [ReorderMediaUseCase]'s single mutation - a plain position within whatever group [targetId]/[mediaType] already place this row in, never validated here (group membership can't change via reorder, only position within it). */
+    fun reorder(newOrder: Int) {
+        displayOrder = newOrder
+        touch()
+    }
+
     private fun touch() {
         updatedAt = Instant.now()
     }
@@ -93,6 +140,8 @@ class MediaAsset private constructor(
             mimeType: String,
             fileSize: Long,
             uploadedBy: UserId,
+            targetId: UUID? = null,
+            displayOrder: Int = 0,
         ): MediaAsset {
             require(storageKey.isNotBlank()) { "Media asset storage key must not be blank" }
             require(originalName.isNotBlank()) { "Media asset original name must not be blank" }
@@ -109,6 +158,8 @@ class MediaAsset private constructor(
                 fileSize = fileSize,
                 status = MediaAssetStatus.ACTIVE,
                 uploadedBy = uploadedBy,
+                targetId = targetId,
+                displayOrder = displayOrder,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -126,9 +177,11 @@ class MediaAsset private constructor(
             uploadedBy: UserId,
             createdAt: Instant,
             updatedAt: Instant,
+            targetId: UUID? = null,
+            displayOrder: Int = 0,
         ): MediaAsset = MediaAsset(
             id, salonId, mediaType, storageKey, originalName, mimeType, fileSize,
-            status, uploadedBy, createdAt, updatedAt,
+            status, uploadedBy, targetId, displayOrder, createdAt, updatedAt,
         )
     }
 }

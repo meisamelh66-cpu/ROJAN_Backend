@@ -53,6 +53,12 @@ class MediaAssetJpaEntity(
 
     @Column(name = "uploaded_by", nullable = false)
     val uploadedBy: UUID,
+
+    @Column(name = "target_id")
+    var targetId: UUID? = null,
+
+    @Column(name = "display_order", nullable = false)
+    var displayOrder: Int = 0,
 ) {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

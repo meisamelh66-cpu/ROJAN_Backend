@@ -21,7 +21,9 @@ import ai.rojan.backend.domain.common.InvalidOtpException
 import ai.rojan.backend.domain.common.InvalidTokenException
 import ai.rojan.backend.domain.common.LoginRateLimitExceededException
 import ai.rojan.backend.domain.common.MediaAssetNotFoundException
+import ai.rojan.backend.domain.common.MediaReorderMismatchException
 import ai.rojan.backend.domain.common.MediaSizeExceededException
+import ai.rojan.backend.domain.common.MediaTargetRequiredException
 import ai.rojan.backend.domain.common.MediaTypeInvalidException
 import ai.rojan.backend.domain.common.MediaTypeMismatchException
 import ai.rojan.backend.domain.common.OtpRateLimitExceededException
@@ -144,7 +146,12 @@ class GlobalExceptionHandler {
     fun handleNotFound(ex: Exception, request: WebRequest) =
         respond(HttpStatus.NOT_FOUND, errorCodeFor(ex), ex.message.orEmpty(), request)
 
-    @ExceptionHandler(MediaTypeInvalidException::class, InvalidVerificationDocumentException::class)
+    @ExceptionHandler(
+        MediaTypeInvalidException::class,
+        InvalidVerificationDocumentException::class,
+        MediaTargetRequiredException::class,
+        MediaReorderMismatchException::class,
+    )
     fun handleBadRequestDomainException(ex: Exception, request: WebRequest) =
         respond(HttpStatus.BAD_REQUEST, errorCodeFor(ex), ex.message.orEmpty(), request)
 
@@ -248,6 +255,8 @@ class GlobalExceptionHandler {
         is MediaTypeInvalidException -> "MEDIA_TYPE_INVALID"
         is MediaSizeExceededException -> "MEDIA_SIZE_EXCEEDED"
         is MediaTypeMismatchException -> "MEDIA_TYPE_MISMATCH"
+        is MediaTargetRequiredException -> "MEDIA_TARGET_REQUIRED"
+        is MediaReorderMismatchException -> "MEDIA_REORDER_MISMATCH"
         is SalonDocumentNotFoundException -> "SALON_DOCUMENT_NOT_FOUND"
         is DocumentAlreadyAttachedException -> "DOCUMENT_ALREADY_ATTACHED"
         is SalonVerificationNotFoundException -> "SALON_VERIFICATION_NOT_FOUND"
