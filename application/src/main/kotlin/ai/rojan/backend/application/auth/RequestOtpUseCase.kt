@@ -37,7 +37,10 @@ class RequestOtpUseCase(
         val now = Instant.now()
         val otp = OneTimePassword.issue(phone, OtpHashing.hash(code), now, policy.ttlSeconds, policy.maxAttempts)
         otpRepository.save(otp)
-        smsProvider.send(phone, "Your ROJAN verification code is $code. It expires in ${policy.ttlSeconds / 60} minutes.")
+        smsProvider.send(
+            phone,
+            "Your ROJAN verification code is $code. It expires in ${policy.ttlSeconds / 60} minutes.\n@rojanai.ir #$code",
+        )
 
         return OtpIssuedResult(phone.value, policy.ttlSeconds, policy.resendCooldownSeconds)
     }
