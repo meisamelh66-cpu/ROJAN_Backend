@@ -58,6 +58,18 @@ class MeliPayamakSharedPatternProviderTest {
     }
 
     @Test
+    fun `extracts the code correctly when the message includes the trailing Web OTP domain-bound line`() {
+        var capturedBody: String? = null
+        val provider = startStubServerAndCreateProvider(status = 200, responseBody = """{"recId":"1","status":"ok"}""") { exchange ->
+            capturedBody = exchange.requestBody.readBytes().toString(StandardCharsets.UTF_8)
+        }
+
+        provider.send(PhoneNumber("+989123456789"), "Your ROJAN verification code is 4821. It expires in 2 minutes.\n@rojanai.ir #4821")
+
+        assertTrue(capturedBody!!.contains(""""args":["4821"]"""), "expected the code extracted despite the trailing Web OTP line, got: $capturedBody")
+    }
+
+    @Test
     fun `succeeds when the response contains a non-blank recId`() {
         val provider = startStubServerAndCreateProvider(status = 200, responseBody = """{"recId":"1","status":"ok"}""") { }
 

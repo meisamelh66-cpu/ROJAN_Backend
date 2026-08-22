@@ -45,6 +45,24 @@ class RequestOtpUseCaseTest {
     }
 
     @Test
+    fun `sends a message with the normal human-readable text followed by the Web OTP domain-bound line, both carrying the same code`() {
+        useCase().execute(RequestOtpCommand(phoneNumber = "+989123456789", callerIp = "1.2.3.4"))
+
+        val message = smsProvider.sent.single().message
+        val sentCode = smsProvider.lastCodeSentTo(PhoneNumber("+989123456789"))
+
+        assertEquals(4, sentCode.length)
+        assertTrue(
+            message.startsWith("Your ROJAN verification code is $sentCode. It expires in"),
+            "expected the human-readable message first, got: $message",
+        )
+        assertTrue(
+            message.endsWith("\n@rojanai.ir #$sentCode"),
+            "expected the message to end with the exact Web OTP line '@rojanai.ir #$sentCode', got: $message",
+        )
+    }
+
+    @Test
     fun `generated code length always matches the configured OtpPolicy codeLength, for any configured length`() {
         for (configuredLength in listOf(4, 6)) {
             repeat(10) {
