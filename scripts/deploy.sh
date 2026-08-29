@@ -66,12 +66,30 @@ echo "==> Building the application image"
 echo "==> Starting/updating the stack"
 "${COMPOSE[@]}" up -d
 
+# 2026-08-29 deploy hardening: `docker compose up -d` only recreates a container when Compose's
+# own change-detection thinks its resolved config differs from what's already running - a .env
+# value changing (e.g. SMS_API_URL/SMS_API_KEY/SMS_SENDER) with everything else unchanged doesn't
+# reliably trigger that, so `app` can keep running on a stale environment snapshot across deploys
+# indefinitely. Confirmed root cause of a real production incident (2026-08-28): OTP requests
+# failing because backend-app-1 was still running on an environment captured before its .env was
+# fixed, two deploys later. Force it explicitly, every deploy, scoped to just `app` - the
+# whole-stack `up -d` above still handles postgres/redis/nginx/certbot exactly as before, and
+# `--force-recreate` only replaces the container, never the bind-mounted volumes/data underneath it.
+echo "==> Force-recreating app to guarantee it never runs on a stale environment"
+"${COMPOSE[@]}" up -d --force-recreate app
+
 echo "==> Waiting for the app to report healthy (up to 2.5 min)"
 container_id="$("${COMPOSE[@]}" ps -q app)"
 for _ in $(seq 1 30); do
   status="$(docker inspect -f '{{.State.Health.Status}}' "$container_id" 2>/dev/null || echo unknown)"
   if [ "$status" = "healthy" ]; then
     echo "==> App is healthy."
+    # A recreated container gets a new internal Docker network IP; nginx resolves its `proxy_pass`
+    # upstream hostname once at its own startup and won't notice the change on its own - confirmed
+    # live during the same incident (a 502 immediately after a manual force-recreate, until nginx
+    # was restarted). Restarting it here closes that gap on every deploy, not just that one.
+    echo "==> Restarting nginx so it re-resolves the app container's new address"
+    "${COMPOSE[@]}" restart nginx
     "${COMPOSE[@]}" ps
     exit 0
   fi
