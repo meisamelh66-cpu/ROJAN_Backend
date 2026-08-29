@@ -48,17 +48,38 @@ class SalonTest {
     fun `updateProfile sets coordinates`() {
         val salon = newSalon()
 
-        salon.updateProfile(35.6892, 51.3890)
+        salon.updateProfile(35.6892, 51.3890, null)
 
         assertEquals(35.6892, salon.latitude)
         assertEquals(51.3890, salon.longitude)
     }
 
     @Test
+    fun `updateProfile sets city`() {
+        val salon = newSalon()
+        assertNull(salon.city)
+
+        salon.updateProfile(null, null, "Tehran")
+
+        assertEquals("Tehran", salon.city)
+    }
+
+    @Test
+    fun `updateProfile trims city and treats a blank value as null`() {
+        val salon = newSalon()
+
+        salon.updateProfile(null, null, "  Tehran  ")
+        assertEquals("Tehran", salon.city)
+
+        salon.updateProfile(null, null, "   ")
+        assertNull(salon.city)
+    }
+
+    @Test
     fun `updateProfile rejects an out-of-range latitude`() {
         val salon = newSalon()
         assertThrows(IllegalArgumentException::class.java) {
-            salon.updateProfile(90.1, null)
+            salon.updateProfile(90.1, null, null)
         }
     }
 
@@ -66,7 +87,7 @@ class SalonTest {
     fun `updateProfile rejects an out-of-range longitude`() {
         val salon = newSalon()
         assertThrows(IllegalArgumentException::class.java) {
-            salon.updateProfile(null, -180.1)
+            salon.updateProfile(null, -180.1, null)
         }
     }
 

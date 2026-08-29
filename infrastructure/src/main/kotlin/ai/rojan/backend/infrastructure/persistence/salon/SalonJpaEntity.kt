@@ -63,6 +63,9 @@ class SalonJpaEntity(
     @Column(nullable = true)
     var longitude: Double?,
 
+    @Column(nullable = true, length = 120)
+    var city: String?,
+
     @Column(nullable = false)
     var active: Boolean,
 ) {

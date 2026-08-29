@@ -21,6 +21,7 @@ import ai.rojan.backend.domain.salon.SalonInviteRepository
 import ai.rojan.backend.domain.salon.SalonInviteStatus
 import ai.rojan.backend.domain.salon.SalonMembership
 import ai.rojan.backend.domain.salon.SalonMembershipRepository
+import ai.rojan.backend.domain.salon.SalonOnboardingStatus
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.SalonRole
 import ai.rojan.backend.domain.salon.Service
@@ -53,6 +54,28 @@ internal class InMemorySalonRepository : SalonRepository {
     override fun findAllActive(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon> {
         val filtered = store.values
             .filter { it.active }
+            .filter { nameFilter.isNullOrBlank() || it.name.contains(nameFilter, ignoreCase = true) }
+            .sortedBy { it.name }
+            .let { if (sortDirection == SortDirection.DESC) it.reversed() else it }
+        val fromIndex = (pageRequest.page * pageRequest.size).coerceAtMost(filtered.size)
+        val toIndex = (fromIndex + pageRequest.size).coerceAtMost(filtered.size)
+        return PageResult(
+            content = filtered.subList(fromIndex, toIndex),
+            page = pageRequest.page,
+            size = pageRequest.size,
+            totalElements = filtered.size.toLong(),
+        )
+    }
+
+    override fun findAllPubliclyDiscoverable(
+        pageRequest: PageRequest,
+        city: String?,
+        nameFilter: String?,
+        sortDirection: SortDirection,
+    ): PageResult<Salon> {
+        val filtered = store.values
+            .filter { it.active && it.onboardingStatus == SalonOnboardingStatus.ACTIVE }
+            .filter { city.isNullOrBlank() || it.city.equals(city, ignoreCase = true) }
             .filter { nameFilter.isNullOrBlank() || it.name.contains(nameFilter, ignoreCase = true) }
             .sortedBy { it.name }
             .let { if (sortDirection == SortDirection.DESC) it.reversed() else it }

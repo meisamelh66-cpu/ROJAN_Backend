@@ -150,6 +150,7 @@ class SalonController(
                 address = request.address,
                 latitude = request.latitude,
                 longitude = request.longitude,
+                city = request.city,
             ),
         )
         return salon.toResponse()
@@ -258,6 +259,7 @@ class SalonController(
         coverImageUrl = coverMediaId?.let { resolveMediaUrl(it) },
         latitude = latitude,
         longitude = longitude,
+        city = city,
         active = active,
         createdAt = createdAt,
         updatedAt = updatedAt,

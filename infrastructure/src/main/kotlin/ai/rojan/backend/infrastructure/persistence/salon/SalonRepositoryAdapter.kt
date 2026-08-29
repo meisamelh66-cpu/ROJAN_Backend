@@ -6,6 +6,7 @@ import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.salon.SalonOnboardingStatus
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.user.UserId
 import org.springframework.data.domain.Sort
@@ -33,6 +34,7 @@ class SalonRepositoryAdapter(
                 coverMediaId = salon.coverMediaId?.value
                 latitude = salon.latitude
                 longitude = salon.longitude
+                city = salon.city
                 active = salon.active
             }
             ?: SalonJpaEntity(
@@ -49,6 +51,7 @@ class SalonRepositoryAdapter(
                 coverMediaId = salon.coverMediaId?.value,
                 latitude = salon.latitude,
                 longitude = salon.longitude,
+                city = salon.city,
                 active = salon.active,
             )
         return jpaRepository.save(entity).toDomain()
@@ -82,6 +85,34 @@ class SalonRepositoryAdapter(
         )
     }
 
+    override fun findAllPubliclyDiscoverable(
+        pageRequest: PageRequest,
+        city: String?,
+        nameFilter: String?,
+        sortDirection: SortDirection,
+    ): PageResult<Salon> {
+        val direction = if (sortDirection == SortDirection.ASC) Sort.Direction.ASC else Sort.Direction.DESC
+        val pageable = SpringPageRequest.of(pageRequest.page, pageRequest.size, Sort.by(direction, "name"))
+        val hasCity = !city.isNullOrBlank()
+        val hasName = !nameFilter.isNullOrBlank()
+        val page = when {
+            hasCity && hasName -> jpaRepository.findByActiveTrueAndOnboardingStatusAndCityIgnoreCaseAndNameContainingIgnoreCase(
+                SalonOnboardingStatus.ACTIVE, city!!, nameFilter!!, pageable,
+            )
+            hasCity -> jpaRepository.findByActiveTrueAndOnboardingStatusAndCityIgnoreCase(SalonOnboardingStatus.ACTIVE, city!!, pageable)
+            hasName -> jpaRepository.findByActiveTrueAndOnboardingStatusAndNameContainingIgnoreCase(
+                SalonOnboardingStatus.ACTIVE, nameFilter!!, pageable,
+            )
+            else -> jpaRepository.findByActiveTrueAndOnboardingStatus(SalonOnboardingStatus.ACTIVE, pageable)
+        }
+        return PageResult(
+            content = page.content.map { it.toDomain() },
+            page = page.number,
+            size = page.size,
+            totalElements = page.totalElements,
+        )
+    }
+
     private fun SalonJpaEntity.toDomain(): Salon = Salon.reconstitute(
         id = SalonId(id),
         ownerId = UserId(ownerId),
@@ -96,6 +127,7 @@ class SalonRepositoryAdapter(
         coverMediaId = coverMediaId?.let { MediaAssetId(it) },
         latitude = latitude,
         longitude = longitude,
+        city = city,
         active = active,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,

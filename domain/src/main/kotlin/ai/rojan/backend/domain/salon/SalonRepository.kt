@@ -19,4 +19,21 @@ interface SalonRepository {
 
     /** Browses active salons, optionally filtered by a case-insensitive name substring, sorted by name. */
     fun findAllActive(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon>
+
+    /**
+     * Public Salon Marketplace (Phase 1): the public-discoverability query - deliberately not
+     * [findAllActive] (which only checks [Salon.active], never [SalonOnboardingStatus]). A salon
+     * must be both `active` (not soft-deleted) AND `onboardingStatus == ACTIVE` (finished
+     * onboarding - see [SalonOnboardingStatus]'s own doc comment: "gates public discoverability
+     * only") to ever appear here; a still-[SalonOnboardingStatus.DRAFT] salon must never leak into
+     * this listing. [city] is an exact, case-insensitive match (a marketplace city-select filter,
+     * not a free-text search); [nameFilter] stays a case-insensitive substring, same as
+     * [findAllActive]'s own. Sorted by name.
+     */
+    fun findAllPubliclyDiscoverable(
+        pageRequest: PageRequest,
+        city: String?,
+        nameFilter: String?,
+        sortDirection: SortDirection,
+    ): PageResult<Salon>
 }

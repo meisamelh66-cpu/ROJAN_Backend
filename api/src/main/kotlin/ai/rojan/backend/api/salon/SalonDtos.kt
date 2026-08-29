@@ -38,7 +38,7 @@ data class CreateSalonRequest(
     val address: String,
 )
 
-/** [latitude]/[longitude] follow "null means leave unchanged" merge semantics - see `UpdateSalonCommand`'s own doc comment. Logo/cover are set exclusively through `PUT /salons/{salonId}/identity-media`, by `MediaAssetId`, never a URL here - see [SalonResponse.logoMediaId]. */
+/** [latitude]/[longitude]/[city] follow "null means leave unchanged" merge semantics - see `UpdateSalonCommand`'s own doc comment. Logo/cover are set exclusively through `PUT /salons/{salonId}/identity-media`, by `MediaAssetId`, never a URL here - see [SalonResponse.logoMediaId]. */
 data class UpdateSalonRequest(
     @field:NotBlank
     @field:Size(max = 255)
@@ -66,6 +66,10 @@ data class UpdateSalonRequest(
     @field:DecimalMin("-180.0")
     @field:DecimalMax("180.0")
     val longitude: Double? = null,
+
+    @field:Size(max = 120)
+    @field:Schema(example = "Tehran", description = "Public Salon Marketplace (Phase 1): a plain city name - no fixed city list is enforced")
+    val city: String? = null,
 )
 
 /**
@@ -90,6 +94,7 @@ data class SalonResponse(
     val coverImageUrl: String?,
     val latitude: Double?,
     val longitude: Double?,
+    val city: String?,
     val active: Boolean,
     val createdAt: Instant,
     val updatedAt: Instant,

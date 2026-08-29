@@ -50,3 +50,19 @@ data class PublicSpecialistResponse(
     val bio: String?,
     val photoUrl: String?,
 )
+
+/**
+ * Public Salon Marketplace (Phase 1): one marketplace card's worth of data - deliberately
+ * narrower than [PublicSalonResponse] (no `phone`/`address`/`description`, which stay behind the
+ * salon's own already-public single-salon page, and never `ownerId` or any other internal field).
+ * [slug] is the real link target - the marketplace links out to the salon's own tenant site, never
+ * embeds its content.
+ */
+data class PublicSalonListResponse(
+    val id: UUID,
+    val slug: String,
+    val name: String,
+    val logoUrl: String?,
+    val coverUrl: String?,
+    val city: String?,
+)

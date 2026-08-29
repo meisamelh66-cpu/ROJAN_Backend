@@ -32,6 +32,7 @@ class Salon private constructor(
     coverMediaId: MediaAssetId?,
     latitude: Double?,
     longitude: Double?,
+    city: String?,
     active: Boolean,
     val createdAt: Instant,
     updatedAt: Instant,
@@ -69,6 +70,10 @@ class Salon private constructor(
     var longitude: Double? = longitude
         private set
 
+    /** Public Salon Marketplace (Phase 1): a plain, free-typed city name - no structured city/province taxonomy exists yet (confirmed absent anywhere in this codebase during discovery). Deliberately not validated against a fixed list here; the marketplace listing filters on whatever real values salons have actually set. */
+    var city: String? = city
+        private set
+
     var active: Boolean = active
         private set
 
@@ -101,17 +106,20 @@ class Salon private constructor(
     }
 
     /**
-     * Profile completion fields (geo-location) - deliberately separate from
+     * Profile completion fields (geo-location, city) - deliberately separate from
      * [update] (core business fields) so an owner filling in the map
      * presentation details doesn't need to re-submit name/phone/address too.
      * Logo/cover are handled by [assignIdentityMedia], not here - see that
-     * method's own doc comment for why.
+     * method's own doc comment for why. [city] joins this group (Public Salon
+     * Marketplace Phase 1) for the same reason lat/long do - a marketplace
+     * presentation detail, not a core business field.
      */
-    fun updateProfile(latitude: Double?, longitude: Double?) {
+    fun updateProfile(latitude: Double?, longitude: Double?, city: String?) {
         require(latitude == null || latitude in -90.0..90.0) { "Latitude must be between -90 and 90" }
         require(longitude == null || longitude in -180.0..180.0) { "Longitude must be between -180 and 180" }
         this.latitude = latitude
         this.longitude = longitude
+        this.city = city?.trim()?.ifBlank { null }
         this.updatedAt = Instant.now()
     }
 
@@ -201,6 +209,7 @@ class Salon private constructor(
             coverMediaId: MediaAssetId? = null,
             latitude: Double? = null,
             longitude: Double? = null,
+            city: String? = null,
         ): Salon {
             require(name.isNotBlank()) { "Salon name must not be blank" }
             require(phone.isNotBlank()) { "Salon phone must not be blank" }
@@ -224,6 +233,7 @@ class Salon private constructor(
                 coverMediaId = coverMediaId,
                 latitude = latitude,
                 longitude = longitude,
+                city = city?.trim()?.ifBlank { null },
                 active = true,
                 createdAt = now,
                 updatedAt = now,
@@ -244,12 +254,13 @@ class Salon private constructor(
             coverMediaId: MediaAssetId?,
             latitude: Double?,
             longitude: Double?,
+            city: String?,
             active: Boolean,
             createdAt: Instant,
             updatedAt: Instant,
         ): Salon = Salon(
             id, ownerId, name, description, phone, email, address, slug,
-            onboardingStatus, logoMediaId, coverMediaId, latitude, longitude, active, createdAt, updatedAt,
+            onboardingStatus, logoMediaId, coverMediaId, latitude, longitude, city, active, createdAt, updatedAt,
         )
     }
 }
