@@ -55,6 +55,23 @@ services:
       REDIS_PORT: 6379
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set to a random string of at least 32 characters — see README.md}
+    # PASS INFRA-MEDIA-02: LocalMediaStorageProperties.storageRoot defaults to
+    # /app/uploads (application.yml's MEDIA_STORAGE_ROOT default, matched by the
+    # Dockerfile's own mkdir there) - LocalDiskMediaStorageAdapter writes every
+    # real uploaded file there. Without a volume, that path was plain container
+    # filesystem: every `up -d --force-recreate`/rebuild silently discarded all
+    # previously-uploaded files while Postgres rows (MediaAsset, salon.logoMediaId,
+    # etc.) survived untouched via rojan_postgres_data below - a real, confirmed
+    # data loss (PASS MEDIA-PUBLIC-01's section M).
+    #
+    # A named volume, not a host bind mount: production's
+    # ${ROJAN_DATA_ROOT:-/opt/rojan}/uploads bind mount is right for its prepared,
+    # persistent VPS layout, but this is a Windows dev machine with no equivalent
+    # host path - a named volume is the dev-appropriate persistence primitive here,
+    # mirroring rojan_postgres_data's own existing convention one line below. Docker
+    # owns the storage; salon/file count has zero effect on this configuration.
+    volumes:
+      - rojan_uploads_data:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,3 +80,4 @@ services:
 
 volumes:
   rojan_postgres_data:
+  rojan_uploads_data:
