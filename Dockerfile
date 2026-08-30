@@ -24,6 +24,13 @@ RUN chown rojan:rojan app.jar
 # without requiring the container to ever run as root at boot.
 RUN mkdir -p /app/logs && chown rojan:rojan /app/logs
 
+# LocalMediaStorageProperties' real default (MEDIA_STORAGE_ROOT, application.yml)
+# is /app/uploads - same reasoning as /app/logs above: without this, the
+# non-root rojan user hits java.nio.file.AccessDeniedException the first
+# time any real media upload runs, since /app itself is root-owned and a
+# non-root user can't create a new directory under it at runtime.
+RUN mkdir -p /app/uploads && chown rojan:rojan /app/uploads
+
 USER rojan
 EXPOSE 8080
 
