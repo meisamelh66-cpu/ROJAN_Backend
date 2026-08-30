@@ -58,6 +58,21 @@ class SecurityConfig(
                     // unauthenticated confirmation-screen lookup) but never
                     // /api/v1/invites/{token}/accept, which stays authenticated below.
                     .requestMatchers(HttpMethod.GET, "/api/v1/invites/*").permitAll()
+                    // PASS MEDIA-PUBLIC-01: real, publicly-servable salon-identity media only
+                    // (logo/cover/gallery/portfolio/specialist-photo/service-image -
+                    // UploadMediaUseCase's own PUBLIC_IMAGE_TYPES, confirmed by direct source
+                    // read). The middle "media" segment is the load-bearing part of this
+                    // pattern, not decorative - UploadMediaUseCase writes every DOCUMENT-typed
+                    // asset under a sibling "documents" segment instead
+                    // (salons/{id}/documents/{uuid}, "so a bucket policy can grant public read
+                    // on media/ while denying it entirely on documents/" per that use case's own
+                    // comment), which this pattern never matches and which therefore stays
+                    // behind anyRequest().authenticated() below, completely unchanged. In real
+                    // production this route is never reached at all - Nginx serves /media/**
+                    // directly from the shared uploads volume (LocalDiskMediaStorageAdapter's own
+                    // doc comment, docker-compose.prod.yml's nginx service) - this only matters
+                    // for a local/dev topology (no Nginx in front) where the JVM is hit directly.
+                    .requestMatchers(HttpMethod.GET, "/media/salons/*/media/**").permitAll()
                     .anyRequest().authenticated()
             }
             .addFilterBefore(
