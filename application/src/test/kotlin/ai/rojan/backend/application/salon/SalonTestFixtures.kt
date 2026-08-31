@@ -19,11 +19,15 @@ import ai.rojan.backend.domain.salon.SalonInvite
 import ai.rojan.backend.domain.salon.SalonInviteId
 import ai.rojan.backend.domain.salon.SalonInviteRepository
 import ai.rojan.backend.domain.salon.SalonInviteStatus
+import ai.rojan.backend.domain.salon.NearbySalonResult
 import ai.rojan.backend.domain.salon.SalonMembership
 import ai.rojan.backend.domain.salon.SalonMembershipRepository
 import ai.rojan.backend.domain.salon.SalonOnboardingStatus
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.SalonRole
+import kotlin.math.acos
+import kotlin.math.cos
+import kotlin.math.sin
 import ai.rojan.backend.domain.salon.Service
 import ai.rojan.backend.domain.salon.ServiceCategory
 import ai.rojan.backend.domain.salon.ServiceCategoryId
@@ -79,6 +83,36 @@ internal class InMemorySalonRepository : SalonRepository {
             .filter { nameFilter.isNullOrBlank() || it.name.contains(nameFilter, ignoreCase = true) }
             .sortedBy { it.name }
             .let { if (sortDirection == SortDirection.DESC) it.reversed() else it }
+        val fromIndex = (pageRequest.page * pageRequest.size).coerceAtMost(filtered.size)
+        val toIndex = (fromIndex + pageRequest.size).coerceAtMost(filtered.size)
+        return PageResult(
+            content = filtered.subList(fromIndex, toIndex),
+            page = pageRequest.page,
+            size = pageRequest.size,
+            totalElements = filtered.size.toLong(),
+        )
+    }
+
+    /**
+     * LBS Architecture (Phase 5): mirrors `SalonRepositoryAdapter.findNearby`'s real behavior
+     * in-memory (same Haversine formula, same public-discoverability gate, same "no coordinates ->
+     * excluded, never a fabricated distance" rule, same ascending-distance sort) - a genuine fake,
+     * not a stub, so use-case tests exercising this path get real, correct results.
+     */
+    override fun findNearby(lat: Double, lng: Double, radiusKm: Double, pageRequest: PageRequest): PageResult<NearbySalonResult> {
+        fun haversineKm(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+            val toRad = { d: Double -> d * Math.PI / 180 }
+            val clamp = (cos(toRad(lat1)) * cos(toRad(lat2)) * cos(toRad(lng2) - toRad(lng1)) + sin(toRad(lat1)) * sin(toRad(lat2)))
+                .coerceIn(-1.0, 1.0)
+            return 6371 * acos(clamp)
+        }
+
+        val filtered = store.values
+            .filter { it.active && it.onboardingStatus == SalonOnboardingStatus.ACTIVE }
+            .filter { it.latitude != null && it.longitude != null }
+            .map { NearbySalonResult(it, haversineKm(lat, lng, it.latitude!!, it.longitude!!)) }
+            .filter { it.distanceKm <= radiusKm }
+            .sortedBy { it.distanceKm }
         val fromIndex = (pageRequest.page * pageRequest.size).coerceAtMost(filtered.size)
         val toIndex = (fromIndex + pageRequest.size).coerceAtMost(filtered.size)
         return PageResult(
