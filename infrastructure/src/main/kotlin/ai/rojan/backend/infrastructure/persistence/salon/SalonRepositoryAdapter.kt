@@ -4,6 +4,7 @@ import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.media.MediaAssetId
+import ai.rojan.backend.domain.salon.NearbySalonResult
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonOnboardingStatus
@@ -111,6 +112,21 @@ class SalonRepositoryAdapter(
             size = page.size,
             totalElements = page.totalElements,
         )
+    }
+
+    override fun findNearby(lat: Double, lng: Double, radiusKm: Double, pageRequest: PageRequest): PageResult<NearbySalonResult> {
+        val pageable = SpringPageRequest.of(pageRequest.page, pageRequest.size)
+        val rows = jpaRepository.findNearbyIdsWithDistance(lat, lng, radiusKm, SalonOnboardingStatus.ACTIVE.name, pageable)
+
+        // Hydrates the real, full entities for exactly the paged-and-distance-sorted ids the native
+        // query returned, reusing the same `toDomain()` mapping every other finder already uses -
+        // never a hand-rolled second mapping for this one query. `findAllById` does not preserve the
+        // native query's own distance-ascending order, so the real order (and each row's own real
+        // distance) comes from `rows.content` itself, not from re-deriving it.
+        val entityById = jpaRepository.findAllById(rows.content.map { it.getId() }).associateBy { it.id }
+        val content = rows.content.mapNotNull { row -> entityById[row.getId()]?.let { NearbySalonResult(it.toDomain(), row.getDistanceKm()) } }
+
+        return PageResult(content = content, page = rows.number, size = rows.size, totalElements = rows.totalElements)
     }
 
     private fun SalonJpaEntity.toDomain(): Salon = Salon.reconstitute(

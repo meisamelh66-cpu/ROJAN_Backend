@@ -30,6 +30,14 @@ import org.springframework.web.bind.annotation.RestController
  * salon must never leak here), enforced by the dedicated
  * [SalonRepository.findAllPubliclyDiscoverable]. Lives under the already-`permitAll`
  * `/api/v1/public` wildcard prefix (`SecurityConfig`) - no security-configuration change needed.
+ *
+ * LBS Architecture (Phase 5): `list` additionally accepts optional `lat`/`lng`/`radiusKm` - when
+ * both `lat` and `lng` are supplied it switches to [SalonRepository.findNearby] (real, computed
+ * Haversine distance, radius-bounded, distance-sorted) instead of the name-sorted
+ * [SalonRepository.findAllPubliclyDiscoverable] path; `city`/`search`/`sortDirection` are ignored in
+ * that mode (a "nearby" query is inherently its own sort). Every existing caller that never sends
+ * `lat`/`lng` is completely unaffected - same query, same response shape plus one new, always-`null`
+ * field ([PublicSalonListResponse.distanceKm]).
  */
 @RestController
 @RequestMapping("/api/v1/public/salons")
@@ -41,14 +49,25 @@ class PublicSalonDirectoryController(
 ) {
 
     @GetMapping
-    @Operation(summary = "Browse publicly discoverable salons, paginated and optionally filtered by city and/or name")
+    @Operation(
+        summary = "Browse publicly discoverable salons, paginated and optionally filtered by city and/or name",
+        description = "Supplying both lat and lng switches to a real, distance-sorted \"nearby\" query within radiusKm " +
+            "(city/search/sortDirection are ignored in that mode) - see this controller's own doc comment.",
+    )
     fun list(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
         @RequestParam(required = false) city: String?,
         @RequestParam(required = false) search: String?,
         @RequestParam(defaultValue = "ASC") sortDirection: String,
+        @RequestParam(required = false) lat: Double?,
+        @RequestParam(required = false) lng: Double?,
+        @RequestParam(defaultValue = "20.0") radiusKm: Double,
     ): PagedResponse<PublicSalonListResponse> {
+        if (lat != null && lng != null) {
+            return listNearby(page, size, lat, lng, radiusKm)
+        }
+
         val result = salonRepository.findAllPubliclyDiscoverable(
             PageRequest(page, size),
             city,
@@ -58,13 +77,31 @@ class PublicSalonDirectoryController(
         return result.toPagedResponse { it.toResponse() }
     }
 
-    private fun Salon.toResponse() = PublicSalonListResponse(
+    /**
+     * LBS Architecture (Phase 5): real, computed distance - never fabricated. Validates `lat`/`lng`
+     * against the exact same real-world ranges [ai.rojan.backend.domain.salon.Salon.updateProfile]
+     * already enforces when an owner sets a salon's own coordinates (so "a coordinate this API
+     * accepts" and "a coordinate a salon can be given" stay the same real range), and `radiusKm` to a
+     * sane, positive, bounded window - both via `require`, mapped to `400 INVALID_ARGUMENT` by the
+     * existing `GlobalExceptionHandler`, same as every other validated input in this codebase.
+     */
+    private fun listNearby(page: Int, size: Int, lat: Double, lng: Double, radiusKm: Double): PagedResponse<PublicSalonListResponse> {
+        require(lat in -90.0..90.0) { "lat must be between -90 and 90" }
+        require(lng in -180.0..180.0) { "lng must be between -180 and 180" }
+        require(radiusKm in 0.1..500.0) { "radiusKm must be between 0.1 and 500" }
+
+        val result = salonRepository.findNearby(lat, lng, radiusKm, PageRequest(page, size))
+        return result.toPagedResponse { it.salon.toResponse(distanceKm = it.distanceKm) }
+    }
+
+    private fun Salon.toResponse(distanceKm: Double? = null) = PublicSalonListResponse(
         id = id.value,
         slug = slug,
         name = name,
         logoUrl = logoMediaId?.let { resolveMediaUrl(it) },
         coverUrl = coverMediaId?.let { resolveMediaUrl(it) },
         city = city,
+        distanceKm = distanceKm,
     )
 
     private fun Salon.resolveMediaUrl(mediaId: MediaAssetId): String? =
