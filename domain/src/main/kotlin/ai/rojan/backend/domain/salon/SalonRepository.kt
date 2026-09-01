@@ -36,4 +36,18 @@ interface SalonRepository {
         nameFilter: String?,
         sortDirection: SortDirection,
     ): PageResult<Salon>
+
+    /**
+     * LBS Architecture (Phase 5): the public "nearby salons" query - same public-discoverability
+     * gate as [findAllPubliclyDiscoverable] (`active` AND `onboardingStatus == ACTIVE`), further
+     * restricted to salons that have actually completed location profile setup (real, non-null
+     * [Salon.latitude]/[Salon.longitude] - a salon without one is honestly absent from "nearby"
+     * results, never assigned a fabricated distance). [NearbySalonResult.distanceKm] is a real,
+     * computed great-circle (Haversine) distance in kilometers, sorted ascending - the entire point
+     * of a "nearby" query. [radiusKm] is a hard cutoff, not a soft ranking signal.
+     */
+    fun findNearby(lat: Double, lng: Double, radiusKm: Double, pageRequest: PageRequest): PageResult<NearbySalonResult>
 }
+
+/** One [findNearby] result row - the real [Salon] paired with its real, computed distance from the query point. */
+data class NearbySalonResult(val salon: Salon, val distanceKm: Double)

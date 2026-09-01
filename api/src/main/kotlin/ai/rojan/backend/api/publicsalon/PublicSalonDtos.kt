@@ -65,4 +65,11 @@ data class PublicSalonListResponse(
     val logoUrl: String?,
     val coverUrl: String?,
     val city: String?,
+    /**
+     * LBS Architecture (Phase 5): the real, computed distance in kilometers from the caller's
+     * supplied `lat`/`lng`, present only on a "nearby" query - `null` for every existing/default call
+     * shape (additive, backward compatible: an old client that never sent `lat`/`lng` sees an
+     * identical response shape to before, just with one new field it can safely ignore).
+     */
+    val distanceKm: Double? = null,
 )

@@ -76,7 +76,11 @@ class PublicSalonDirectoryFlowIntegrationTest {
     }
 
     /** Creates a salon with one active service, one active specialist, and one working-hours day - the real minimum `ActivateSalonUseCase` requires - then activates it and (optionally) sets its city. Returns the real, saved `SalonResponse` (post-activation, post-city-update). */
-    private fun createAndActivateSalon(name: String, city: String?): SalonResponse {
+    private fun createAndActivateSalon(name: String, city: String?): SalonResponse =
+        createAndActivateSalon(name, city, latitude = null, longitude = null)
+
+    /** LBS Architecture (Phase 5): the same real setup as [createAndActivateSalon], with real coordinates set via the existing, unchanged `UpdateSalonRequest`/`Salon.updateProfile` path - never a second, parallel way of setting a salon's location. */
+    private fun createAndActivateSalon(name: String, city: String?, latitude: Double?, longitude: Double?): SalonResponse {
         val ownerToken = registerAndLogin()
 
         val salon = requireNotNull(
@@ -119,7 +123,7 @@ class PublicSalonDirectoryFlowIntegrationTest {
             restTemplate.exchange(
                 url("/api/v1/salons/${salon.id}"),
                 HttpMethod.PUT,
-                HttpEntity(UpdateSalonRequest(name, null, "+1 555 0100", null, "1 Main St", null, null, city), bearer(ownerToken)),
+                HttpEntity(UpdateSalonRequest(name, null, "+1 555 0100", null, "1 Main St", latitude, longitude, city), bearer(ownerToken)),
                 SalonResponse::class.java,
             ).body,
         )
@@ -270,5 +274,120 @@ class PublicSalonDirectoryFlowIntegrationTest {
 
         val entry = requireNotNull(result.content.find { it.id == salon.id })
         assertNull(entry.city)
+    }
+
+    @Test
+    fun `distanceKm is null on a real, ordinary (non-nearby) listing call, never fabricated`() {
+        val salon = createAndActivateSalon("Ordinary Listing Salon ${System.nanoTime()}", "Tehran")
+
+        val result = listPublicSalons()
+
+        val entry = requireNotNull(result.content.find { it.id == salon.id })
+        assertNull(entry.distanceKm)
+    }
+
+    // LBS Architecture (Phase 5): Tehran (35.7219, 51.3347) and Isfahan (32.6546, 51.6680) are ~350km
+    // apart - real, well-known coordinates, not invented ones, chosen so a modest radius cleanly
+    // separates "nearby" from "not nearby" without depending on exact Haversine precision.
+    private val tehranLat = 35.7219
+    private val tehranLng = 51.3347
+    private val isfahanLat = 32.6546
+    private val isfahanLng = 51.6680
+
+    @Test
+    fun `finds a real nearby salon within radius, with a real computed distance close to zero`() {
+        val salon = createAndActivateSalon("Nearby Salon ${System.nanoTime()}", "Tehran", tehranLat, tehranLng)
+
+        val result = listPublicSalons("?lat=$tehranLat&lng=$tehranLng&radiusKm=5")
+
+        val entry = requireNotNull(result.content.find { it.id == salon.id })
+        assertTrue(entry.distanceKm != null && entry.distanceKm!! < 1.0, "A salon at the exact query point must show a real, near-zero distance, got ${entry.distanceKm}")
+    }
+
+    @Test
+    fun `excludes a real salon outside the requested radius`() {
+        val farSalon = createAndActivateSalon("Far Salon ${System.nanoTime()}", "Isfahan", isfahanLat, isfahanLng)
+
+        val result = listPublicSalons("?lat=$tehranLat&lng=$tehranLng&radiusKm=50")
+
+        assertFalse(result.content.any { it.id == farSalon.id }, "A salon ~350km away must not appear within a 50km radius")
+    }
+
+    @Test
+    fun `includes a farther salon once the radius is widened enough to real-world cover it`() {
+        val farSalon = createAndActivateSalon("Wide Radius Salon ${System.nanoTime()}", "Isfahan", isfahanLat, isfahanLng)
+
+        val result = listPublicSalons("?lat=$tehranLat&lng=$tehranLng&radiusKm=400")
+
+        val entry = result.content.find { it.id == farSalon.id }
+        assertTrue(entry != null, "A salon ~350km away must appear within a 400km radius")
+        assertTrue(entry!!.distanceKm != null && entry.distanceKm!! in 300.0..400.0, "Real Tehran-Isfahan distance should be roughly 300-400km, got ${entry.distanceKm}")
+    }
+
+    @Test
+    fun `sorts real nearby results by ascending distance`() {
+        val near = createAndActivateSalon("Closer Salon ${System.nanoTime()}", "Tehran", tehranLat, tehranLng)
+        val far = createAndActivateSalon("Farther Salon ${System.nanoTime()}", "Isfahan", isfahanLat, isfahanLng)
+
+        val result = listPublicSalons("?lat=$tehranLat&lng=$tehranLng&radiusKm=400")
+
+        val nearIndex = result.content.indexOfFirst { it.id == near.id }
+        val farIndex = result.content.indexOfFirst { it.id == far.id }
+        assertTrue(nearIndex in result.content.indices && farIndex in result.content.indices)
+        assertTrue(nearIndex < farIndex, "The closer salon must be sorted before the farther one")
+    }
+
+    @Test
+    fun `never assigns a fabricated distance to a salon with no location set - it is honestly absent from nearby results`() {
+        val noLocationSalon = createAndActivateSalon("No Location Salon ${System.nanoTime()}", "Tehran", null, null)
+
+        val result = listPublicSalons("?lat=$tehranLat&lng=$tehranLng&radiusKm=400")
+
+        assertFalse(result.content.any { it.id == noLocationSalon.id }, "A salon with no real coordinates must never appear in nearby results with a guessed distance")
+    }
+
+    @Test
+    fun `excludes a DRAFT salon from nearby results too, same public-discoverability gate`() {
+        val ownerToken = registerAndLogin()
+        val draftSalon = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/salons"),
+                HttpMethod.POST,
+                HttpEntity(CreateSalonRequest("Draft Nearby Salon ${System.nanoTime()}", null, "+1 555 0100", null, "1 Main St"), bearer(ownerToken)),
+                SalonResponse::class.java,
+            ).body,
+        )
+        restTemplate.exchange(
+            url("/api/v1/salons/${draftSalon.id}"),
+            HttpMethod.PUT,
+            HttpEntity(UpdateSalonRequest(draftSalon.name, null, "+1 555 0100", null, "1 Main St", tehranLat, tehranLng, "Tehran"), bearer(ownerToken)),
+            SalonResponse::class.java,
+        )
+
+        val result = listPublicSalons("?lat=$tehranLat&lng=$tehranLng&radiusKm=400")
+
+        assertFalse(result.content.any { it.id == draftSalon.id }, "A still-DRAFT salon must never appear in nearby results, real coordinates or not")
+    }
+
+    @Test
+    fun `rejects an out-of-range latitude with a real 400, never silently clamping or ignoring it`() {
+        val response = restTemplate.exchange(
+            url("/api/v1/public/salons?lat=999&lng=$tehranLng"),
+            HttpMethod.GET,
+            HttpEntity<Void>(HttpHeaders()),
+            String::class.java,
+        )
+        assertEquals(HttpStatus.BAD_REQUEST, response.statusCode)
+    }
+
+    @Test
+    fun `rejects a zero or negative radiusKm with a real 400`() {
+        val response = restTemplate.exchange(
+            url("/api/v1/public/salons?lat=$tehranLat&lng=$tehranLng&radiusKm=0"),
+            HttpMethod.GET,
+            HttpEntity<Void>(HttpHeaders()),
+            String::class.java,
+        )
+        assertEquals(HttpStatus.BAD_REQUEST, response.statusCode)
     }
 }
