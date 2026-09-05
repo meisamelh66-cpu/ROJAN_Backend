@@ -46,4 +46,7 @@ interface BookingSpringDataRepository : JpaRepository<BookingJpaEntity, UUID> {
         @Param("excludeId") excludeId: UUID?,
         @Param("statuses") statuses: List<BookingStatus>,
     ): List<BookingJpaEntity>
+
+    @Query("SELECT DISTINCT b.customerId FROM BookingJpaEntity b WHERE b.salonId = :salonId")
+    fun findDistinctCustomerIdsBySalonId(@Param("salonId") salonId: UUID): List<UUID>
 }

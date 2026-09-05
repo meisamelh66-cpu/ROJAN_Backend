@@ -24,13 +24,17 @@ import ai.rojan.backend.domain.booking.BookingStatus
 import ai.rojan.backend.domain.common.BookingAccessDeniedException
 import ai.rojan.backend.domain.common.BookingNotFoundException
 import ai.rojan.backend.domain.common.PageRequest
+import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.SortDirection
+import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.ServiceId
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.user.UserId
+import ai.rojan.backend.domain.user.UserRepository
+import ai.rojan.backend.domain.user.UserRole
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
@@ -63,6 +67,7 @@ private const val IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
 class BookingController(
     private val bookingRepository: BookingRepository,
     private val salonRepository: SalonRepository,
+    private val userRepository: UserRepository,
     private val createBookingUseCase: CreateBookingUseCase,
     private val confirmBookingUseCase: ConfirmBookingUseCase,
     private val cancelBookingUseCase: CancelBookingUseCase,
@@ -74,13 +79,19 @@ class BookingController(
 
     @PostMapping
     @Operation(
-        summary = "Create a booking as the authenticated customer",
+        summary = "Create a booking as the authenticated customer, or on a customer's behalf as their salon's owner",
         description = "Supports an optional `Idempotency-Key` request header: replaying the same key with an " +
             "identical body returns the original 201 response instead of creating a duplicate booking; replaying " +
-            "it with a different body returns 409.",
+            "it with a different body returns 409. When `customerId` is supplied, the caller must own " +
+            "`salonId` and `customerId` must be a real, existing customer account - see `CreateBookingRequest.customerId`.",
     )
     @ApiResponses(
         ApiResponse(responseCode = "201", description = "Booking created (status PENDING)"),
+        ApiResponse(
+            responseCode = "403",
+            description = "`customerId` was supplied but the caller does not own `salonId`",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
         ApiResponse(
             responseCode = "409",
             description = "The specialist already has an active booking overlapping this time, or the " +
@@ -89,7 +100,7 @@ class BookingController(
         ),
         ApiResponse(
             responseCode = "404",
-            description = "The salon, service, or specialist does not exist",
+            description = "The salon, service, specialist, or (when supplied) customerId does not exist",
             content = [Content(schema = Schema(implementation = ApiError::class))],
         ),
     )
@@ -98,7 +109,8 @@ class BookingController(
         @RequestHeader(IDEMPOTENCY_KEY_HEADER, required = false) idempotencyKey: String?,
         @AuthenticationPrincipal principal: UserDetails,
     ): ResponseEntity<BookingResponse> {
-        val customerId = currentUserResolver.resolve(principal)
+        val callerId = currentUserResolver.resolve(principal)
+        val customerId = resolveBookingCustomerId(request, callerId)
         val fingerprint = idempotencyKey?.let { fingerprintOf(customerId, request) }
 
         if (idempotencyKey != null) {
@@ -124,6 +136,29 @@ class BookingController(
             idempotencyPort.store(idempotencyKey, fingerprint!!, HttpStatus.CREATED.value(), response)
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(response)
+    }
+
+    /**
+     * Manager Booking Creation Integrity follow-up. `request.customerId`
+     * absent (the normal case): the booking is for the caller themselves,
+     * exactly as before this change - [callerId] is returned unchanged.
+     * Present: the caller must own `request.salonId` (never let an
+     * arbitrary authenticated account attribute a booking to someone
+     * else), and the given id must resolve to a real, existing `CUSTOMER`
+     * account (never silently fall back to the caller's own id, and never
+     * accept a non-customer account here).
+     */
+    private fun resolveBookingCustomerId(request: CreateBookingRequest, callerId: UserId): UserId {
+        val requestedCustomerId = request.customerId ?: return callerId
+
+        val salon = salonRepository.findById(SalonId(request.salonId))
+            ?: throw SalonNotFoundException(request.salonId.toString())
+        if (salon.ownerId != callerId) throw SalonAccessDeniedException(salon.id.value.toString())
+
+        val customer = userRepository.findById(UserId(requestedCustomerId))
+            ?.takeIf { it.role == UserRole.CUSTOMER }
+            ?: throw UserNotFoundException(requestedCustomerId.toString())
+        return customer.id
     }
 
     @GetMapping("/mine")

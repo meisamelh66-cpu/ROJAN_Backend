@@ -26,7 +26,15 @@ data class CreateBookingRequest(
 
     @field:Size(max = 1000)
     @field:Schema(example = "First visit, prefers a quiet chair")
-    val notes: String?,
+    val notes: String? = null,
+
+    @field:Schema(
+        description = "Manager Booking Creation Integrity follow-up: the customer this booking is for, when a " +
+            "salon owner is creating it on a customer's behalf (must be a customer returned by " +
+            "GET .../salons/{salonId}/customers for this salon). Omit for the normal case of a customer " +
+            "booking for themselves - the authenticated caller is used instead.",
+    )
+    val customerId: UUID? = null,
 )
 
 data class RescheduleBookingRequest(

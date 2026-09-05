@@ -73,4 +73,7 @@ internal class InMemoryBookingRepository : BookingRepository {
         store.values.filter {
             it.specialistId == specialistId && it.isActive && it.startTime < to && it.endTime > from
         }
+
+    override fun findDistinctCustomerIdsBySalonId(salonId: SalonId): List<UserId> =
+        store.values.filter { it.salonId == salonId }.map { it.customerId }.distinct()
 }

@@ -46,4 +46,13 @@ interface BookingRepository {
         from: LocalDateTime,
         to: LocalDateTime,
     ): List<Booking>
+
+    /**
+     * Every distinct customer who has at least one booking with [salonId]
+     * — the salon-scoped customer roster a receptionist/manager creating
+     * a booking on someone's behalf searches against. Regardless of
+     * booking status: a cancelled booking still means the person is a
+     * real, known customer of this salon.
+     */
+    fun findDistinctCustomerIdsBySalonId(salonId: SalonId): List<UserId>
 }

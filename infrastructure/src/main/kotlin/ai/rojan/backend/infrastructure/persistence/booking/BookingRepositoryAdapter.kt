@@ -114,6 +114,9 @@ class BookingRepositoryAdapter(
     ): List<Booking> = jpaRepository.findActiveBySpecialistIdAndDateRange(specialistId.value, from, to, ACTIVE_STATUSES)
         .map { it.toDomain() }
 
+    override fun findDistinctCustomerIdsBySalonId(salonId: SalonId): List<UserId> =
+        jpaRepository.findDistinctCustomerIdsBySalonId(salonId.value).map { UserId(it) }
+
     private fun persist(booking: Booking): Booking {
         val entity = jpaRepository.findById(booking.id.value).orElse(null)
             ?.apply {
