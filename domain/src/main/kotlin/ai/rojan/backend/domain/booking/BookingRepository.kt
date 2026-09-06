@@ -40,6 +40,22 @@ interface BookingRepository {
         sortDirection: SortDirection,
     ): PageResult<Booking>
 
+    /**
+     * A customer's bookings at **one specific salon only**, optionally
+     * filtered by status, sorted by start time. Use this, never
+     * [findByCustomerId], for any salon-owner-facing view of a specific
+     * customer (booking history, lifetime value, timeline) - a linked
+     * customer may have bookings at other salons too, and those must never
+     * be visible to a salon that isn't theirs.
+     */
+    fun findByCustomerIdAndSalonId(
+        customerId: UserId,
+        salonId: SalonId,
+        pageRequest: PageRequest,
+        statusFilter: BookingStatus?,
+        sortDirection: SortDirection,
+    ): PageResult<Booking>
+
     /** Active (pending/confirmed) bookings for [specialistId] overlapping [from]..[to], used by the slot engine. */
     fun findActiveBySpecialistIdAndDateRange(
         specialistId: SpecialistId,
@@ -47,12 +63,18 @@ interface BookingRepository {
         to: LocalDateTime,
     ): List<Booking>
 
+    /** A salon's bookings (any status) starting in [from] (inclusive)..[to] (exclusive), used for dashboard analytics. */
+    fun findBySalonIdAndStartTimeRange(salonId: SalonId, from: LocalDateTime, to: LocalDateTime): List<Booking>
+
+    /** Which of [customerIds] have a booking with [salonId] starting before [before] — used to classify new vs. returning customers. */
+    fun findCustomerIdsWithBookingBefore(salonId: SalonId, customerIds: Set<UserId>, before: LocalDateTime): Set<UserId>
+
     /**
-     * Every distinct customer who has at least one booking with [salonId]
-     * — the salon-scoped customer roster a receptionist/manager creating
-     * a booking on someone's behalf searches against. Regardless of
-     * booking status: a cancelled booking still means the person is a
-     * real, known customer of this salon.
+     * Production Hardening Phase 1: batched sibling of [findByCustomerIdAndSalonId],
+     * completed bookings only, for every [customerIds] on a paginated customer-list
+     * page in one query - powers [ai.rojan.backend.application.customer.CalculateCustomerLifetimeValueUseCase]'s
+     * per-customer computation without querying per row. Same salon-scoping
+     * requirement as [findByCustomerIdAndSalonId] - never platform-wide.
      */
-    fun findDistinctCustomerIdsBySalonId(salonId: SalonId): List<UserId>
+    fun findCompletedBySalonIdAndCustomerIdIn(salonId: SalonId, customerIds: Collection<UserId>): List<Booking>
 }

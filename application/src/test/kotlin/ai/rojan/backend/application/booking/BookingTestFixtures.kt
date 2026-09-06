@@ -49,6 +49,22 @@ internal class InMemoryBookingRepository : BookingRepository {
         sortDirection: SortDirection,
     ): PageResult<Booking> = paginate(store.values.filter { it.customerId == customerId }, pageRequest, statusFilter, sortDirection)
 
+    override fun findByCustomerIdAndSalonId(
+        customerId: UserId,
+        salonId: SalonId,
+        pageRequest: PageRequest,
+        statusFilter: BookingStatus?,
+        sortDirection: SortDirection,
+    ): PageResult<Booking> = paginate(
+        store.values.filter { it.customerId == customerId && it.salonId == salonId },
+        pageRequest,
+        statusFilter,
+        sortDirection,
+    )
+
+    override fun findCompletedBySalonIdAndCustomerIdIn(salonId: SalonId, customerIds: Collection<UserId>): List<Booking> =
+        store.values.filter { it.salonId == salonId && it.customerId in customerIds && it.status == BookingStatus.COMPLETED }
+
     private fun paginate(
         bookings: Collection<Booking>,
         pageRequest: PageRequest,
@@ -74,6 +90,12 @@ internal class InMemoryBookingRepository : BookingRepository {
             it.specialistId == specialistId && it.isActive && it.startTime < to && it.endTime > from
         }
 
-    override fun findDistinctCustomerIdsBySalonId(salonId: SalonId): List<UserId> =
-        store.values.filter { it.salonId == salonId }.map { it.customerId }.distinct()
+    override fun findBySalonIdAndStartTimeRange(salonId: SalonId, from: LocalDateTime, to: LocalDateTime): List<Booking> =
+        store.values.filter { it.salonId == salonId && it.startTime >= from && it.startTime < to }
+
+    override fun findCustomerIdsWithBookingBefore(salonId: SalonId, customerIds: Set<UserId>, before: LocalDateTime): Set<UserId> =
+        store.values
+            .filter { it.salonId == salonId && it.customerId in customerIds && it.startTime < before }
+            .map { it.customerId }
+            .toSet()
 }

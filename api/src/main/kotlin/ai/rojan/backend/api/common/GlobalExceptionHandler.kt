@@ -4,10 +4,16 @@ import ai.rojan.backend.domain.common.BookingAccessDeniedException
 import ai.rojan.backend.domain.common.BookingConflictException
 import ai.rojan.backend.domain.common.BookingNotFoundException
 import ai.rojan.backend.domain.common.BranchNotFoundException
+import ai.rojan.backend.domain.common.CustomerAccessDeniedException
+import ai.rojan.backend.domain.common.CustomerAlreadyExistsException
+import ai.rojan.backend.domain.common.CustomerNotFoundException
+import ai.rojan.backend.domain.common.CustomerNotLinkedToAccountException
+import ai.rojan.backend.domain.common.CustomerTagNotFoundException
 import ai.rojan.backend.domain.common.EmailAlreadyRegisteredException
 import ai.rojan.backend.domain.common.InactiveUserException
 import ai.rojan.backend.domain.common.InvalidBookingStateException
 import ai.rojan.backend.domain.common.InvalidCredentialsException
+import ai.rojan.backend.domain.common.InvalidCustomerStateException
 import ai.rojan.backend.domain.common.InvalidTokenException
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
@@ -87,16 +93,25 @@ class GlobalExceptionHandler {
         SpecialistLeaveNotFoundException::class,
         SpecialistBlockNotFoundException::class,
         BookingNotFoundException::class,
+        CustomerNotFoundException::class,
+        CustomerTagNotFoundException::class,
         NoResourceFoundException::class,
     )
     fun handleNotFound(ex: Exception, request: WebRequest) =
         respond(HttpStatus.NOT_FOUND, ex.message.orEmpty(), request)
 
-    @ExceptionHandler(SalonAccessDeniedException::class, BookingAccessDeniedException::class)
+    @ExceptionHandler(SalonAccessDeniedException::class, BookingAccessDeniedException::class, CustomerAccessDeniedException::class)
     fun handleAccessDenied(ex: Exception, request: WebRequest) =
         respond(HttpStatus.FORBIDDEN, ex.message.orEmpty(), request)
 
-    @ExceptionHandler(BookingConflictException::class, InvalidBookingStateException::class, IdempotencyKeyConflictException::class)
+    @ExceptionHandler(
+        BookingConflictException::class,
+        InvalidBookingStateException::class,
+        IdempotencyKeyConflictException::class,
+        InvalidCustomerStateException::class,
+        CustomerAlreadyExistsException::class,
+        CustomerNotLinkedToAccountException::class,
+    )
     fun handleConflict(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, ex.message.orEmpty(), request)
 
