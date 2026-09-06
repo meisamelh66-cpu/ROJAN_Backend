@@ -95,6 +95,22 @@ class BookingRepositoryAdapter(
         return page.toPageResult()
     }
 
+    override fun findByCustomerIdAndSalonId(
+        customerId: UserId,
+        salonId: SalonId,
+        pageRequest: PageRequest,
+        statusFilter: BookingStatus?,
+        sortDirection: SortDirection,
+    ): PageResult<Booking> {
+        val pageable = pageableSortedByStartTime(pageRequest, sortDirection)
+        val page = if (statusFilter == null) {
+            jpaRepository.findByCustomerIdAndSalonId(customerId.value, salonId.value, pageable)
+        } else {
+            jpaRepository.findByCustomerIdAndSalonIdAndStatus(customerId.value, salonId.value, statusFilter, pageable)
+        }
+        return page.toPageResult()
+    }
+
     private fun pageableSortedByStartTime(pageRequest: PageRequest, sortDirection: SortDirection): SpringPageRequest {
         val direction = if (sortDirection == SortDirection.ASC) Sort.Direction.ASC else Sort.Direction.DESC
         return SpringPageRequest.of(pageRequest.page, pageRequest.size, Sort.by(direction, "startTime"))
@@ -114,8 +130,21 @@ class BookingRepositoryAdapter(
     ): List<Booking> = jpaRepository.findActiveBySpecialistIdAndDateRange(specialistId.value, from, to, ACTIVE_STATUSES)
         .map { it.toDomain() }
 
-    override fun findDistinctCustomerIdsBySalonId(salonId: SalonId): List<UserId> =
-        jpaRepository.findDistinctCustomerIdsBySalonId(salonId.value).map { UserId(it) }
+    override fun findBySalonIdAndStartTimeRange(salonId: SalonId, from: LocalDateTime, to: LocalDateTime): List<Booking> =
+        jpaRepository.findBySalonIdAndStartTimeGreaterThanEqualAndStartTimeLessThan(salonId.value, from, to)
+            .map { it.toDomain() }
+
+    override fun findCustomerIdsWithBookingBefore(salonId: SalonId, customerIds: Set<UserId>, before: LocalDateTime): Set<UserId> =
+        jpaRepository.findCustomerIdsWithBookingBefore(salonId.value, customerIds.map { it.value }, before)
+            .map { UserId(it) }
+            .toSet()
+
+    override fun findCompletedBySalonIdAndCustomerIdIn(salonId: SalonId, customerIds: Collection<UserId>): List<Booking> {
+        if (customerIds.isEmpty()) return emptyList()
+        return jpaRepository
+            .findBySalonIdAndCustomerIdInAndStatus(salonId.value, customerIds.map { it.value }, BookingStatus.COMPLETED)
+            .map { it.toDomain() }
+    }
 
     private fun persist(booking: Booking): Booking {
         val entity = jpaRepository.findById(booking.id.value).orElse(null)

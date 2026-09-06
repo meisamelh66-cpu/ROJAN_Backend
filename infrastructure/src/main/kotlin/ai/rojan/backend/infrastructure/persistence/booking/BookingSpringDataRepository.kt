@@ -14,6 +14,8 @@ interface BookingSpringDataRepository : JpaRepository<BookingJpaEntity, UUID> {
     fun findBySalonIdAndStatus(salonId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
     fun findByCustomerId(customerId: UUID, pageable: Pageable): Page<BookingJpaEntity>
     fun findByCustomerIdAndStatus(customerId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
+    fun findByCustomerIdAndSalonId(customerId: UUID, salonId: UUID, pageable: Pageable): Page<BookingJpaEntity>
+    fun findByCustomerIdAndSalonIdAndStatus(customerId: UUID, salonId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
 
     @Query(
         """
@@ -47,6 +49,30 @@ interface BookingSpringDataRepository : JpaRepository<BookingJpaEntity, UUID> {
         @Param("statuses") statuses: List<BookingStatus>,
     ): List<BookingJpaEntity>
 
-    @Query("SELECT DISTINCT b.customerId FROM BookingJpaEntity b WHERE b.salonId = :salonId")
-    fun findDistinctCustomerIdsBySalonId(@Param("salonId") salonId: UUID): List<UUID>
+    fun findBySalonIdAndStartTimeGreaterThanEqualAndStartTimeLessThan(
+        salonId: UUID,
+        from: LocalDateTime,
+        to: LocalDateTime,
+    ): List<BookingJpaEntity>
+
+    @Query(
+        """
+        SELECT DISTINCT b.customerId FROM BookingJpaEntity b
+        WHERE b.salonId = :salonId
+        AND b.customerId IN :customerIds
+        AND b.startTime < :before
+        """,
+    )
+    fun findCustomerIdsWithBookingBefore(
+        @Param("salonId") salonId: UUID,
+        @Param("customerIds") customerIds: Collection<UUID>,
+        @Param("before") before: LocalDateTime,
+    ): List<UUID>
+
+    fun findBySalonIdAndCustomerIdInAndStatus(
+        salonId: UUID,
+        customerIds: Collection<UUID>,
+        status: BookingStatus,
+    ): List<BookingJpaEntity>
+
 }
