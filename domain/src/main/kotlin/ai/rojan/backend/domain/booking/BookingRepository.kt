@@ -77,4 +77,15 @@ interface BookingRepository {
      * requirement as [findByCustomerIdAndSalonId] - never platform-wide.
      */
     fun findCompletedBySalonIdAndCustomerIdIn(salonId: SalonId, customerIds: Collection<UserId>): List<Booking>
+
+    /**
+     * Every distinct customer who has at least one booking with [salonId]
+     * — the salon-scoped customer roster the legacy
+     * `GET /api/v1/salons/{salonId}/customers` endpoint
+     * ([ai.rojan.backend.api.salon.SalonCustomerController]) searches
+     * against. Regardless of booking status. Restored by
+     * POST-MERGE-API-COMPATIBILITY-FIX-001 (the CRM recovery dropped it
+     * together with that controller; both are back, unchanged).
+     */
+    fun findDistinctCustomerIdsBySalonId(salonId: SalonId): List<UserId>
 }

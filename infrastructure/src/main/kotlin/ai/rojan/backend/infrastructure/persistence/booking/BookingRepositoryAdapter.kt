@@ -146,6 +146,10 @@ class BookingRepositoryAdapter(
             .map { it.toDomain() }
     }
 
+    // POST-MERGE-API-COMPATIBILITY-FIX-001: restored for the legacy SalonCustomerController.
+    override fun findDistinctCustomerIdsBySalonId(salonId: SalonId): List<UserId> =
+        jpaRepository.findDistinctCustomerIdsBySalonId(salonId.value).map { UserId(it) }
+
     private fun persist(booking: Booking): Booking {
         val entity = jpaRepository.findById(booking.id.value).orElse(null)
             ?.apply {

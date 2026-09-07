@@ -75,4 +75,7 @@ interface BookingSpringDataRepository : JpaRepository<BookingJpaEntity, UUID> {
         status: BookingStatus,
     ): List<BookingJpaEntity>
 
+    // POST-MERGE-API-COMPATIBILITY-FIX-001: restored for the legacy SalonCustomerController.
+    @Query("SELECT DISTINCT b.customerId FROM BookingJpaEntity b WHERE b.salonId = :salonId")
+    fun findDistinctCustomerIdsBySalonId(@Param("salonId") salonId: UUID): List<UUID>
 }

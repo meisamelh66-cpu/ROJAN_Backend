@@ -64,10 +64,20 @@ import java.util.UUID
  * [Customer]'s linked account has no read access to their own CRM record
  * via these endpoints (a note like "chargeback risk" must never be
  * customer-visible). See `ROJAN_Customer_CRM_Architecture_Plan_v1.md` §4.
+ *
+ * **POST-MERGE-API-COMPATIBILITY-FIX-001:** base path is
+ * `/api/v1/salons/{salonId}/customer-records`, NOT
+ * `/api/v1/salons/{salonId}/customers`. The latter is the legacy
+ * booking-scoped customer *search*
+ * ([ai.rojan.backend.api.salon.SalonCustomerController], `?query=` ->
+ * `List<UserResponse>`) that the shipped Android clients and
+ * `ManagerBookingCreationIntegrationTest` depend on. The CRM recovery
+ * merge briefly took that path; this fix moves the CRM controller off it.
+ * No CRM behaviour, DTO shape, or tenant isolation changed.
  */
 @RestController
-@RequestMapping("/api/v1/salons/{salonId}/customers")
-@Tag(name = "Customers")
+@RequestMapping("/api/v1/salons/{salonId}/customer-records")
+@Tag(name = "Customer Records (CRM)")
 class CustomerController(
     private val customerRepository: CustomerRepository,
     private val customerTagRepository: CustomerTagRepository,

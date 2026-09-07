@@ -98,4 +98,8 @@ internal class InMemoryBookingRepository : BookingRepository {
             .filter { it.salonId == salonId && it.customerId in customerIds && it.startTime < before }
             .map { it.customerId }
             .toSet()
+
+    // POST-MERGE-API-COMPATIBILITY-FIX-001: restored for the legacy SalonCustomerController.
+    override fun findDistinctCustomerIdsBySalonId(salonId: SalonId): List<UserId> =
+        store.values.filter { it.salonId == salonId }.map { it.customerId }.distinct()
 }
