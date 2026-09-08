@@ -16,6 +16,7 @@ import ai.rojan.backend.domain.customer.CustomerTag
 import ai.rojan.backend.domain.customer.CustomerTagId
 import ai.rojan.backend.domain.customer.CustomerTagRepository
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.user.UserId
 
 /** Shared in-memory fakes for the Customer CRM use case tests, mirroring `salon.SalonTestFixtures`/`booking.BookingTestFixtures`'s style. */
 internal class InMemoryCustomerRepository : CustomerRepository {
@@ -24,6 +25,9 @@ internal class InMemoryCustomerRepository : CustomerRepository {
     override fun save(customer: Customer): Customer = customer.also { store[it.id] = it }
 
     override fun findById(id: CustomerId): Customer? = store[id]
+
+    override fun findBySalonIdAndUserId(salonId: SalonId, userId: UserId): Customer? =
+        store.values.firstOrNull { it.salonId == salonId && it.userId == userId }
 
     override fun findBySalonId(
         salonId: SalonId,

@@ -34,6 +34,11 @@ class BookingJpaEntity(
     @Column(name = "customer_id", nullable = false)
     var customerId: UUID,
 
+    // BACKEND-CRM-CUSTOMER-IDENTITY-001: nullable link to the salon's CRM
+    // record. Null only for bookings created before V7 / not yet backfilled.
+    @Column(name = "salon_customer_id", nullable = true)
+    var salonCustomerId: UUID?,
+
     @Column(name = "start_time", nullable = false)
     var startTime: LocalDateTime,
 

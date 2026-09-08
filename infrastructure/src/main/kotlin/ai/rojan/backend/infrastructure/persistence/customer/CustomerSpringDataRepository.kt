@@ -61,4 +61,7 @@ interface CustomerSpringDataRepository : JpaRepository<CustomerJpaEntity, UUID> 
     ): Page<CustomerJpaEntity>
 
     fun existsBySalonIdAndPhoneNumber(salonId: UUID, phoneNumber: String): Boolean
+
+    /** BACKEND-CRM-CUSTOMER-IDENTITY-001: the salon's linked record for one account - at most one, by the `uq_customers_salon_user` partial unique index. */
+    fun findBySalonIdAndUserId(salonId: UUID, userId: UUID): CustomerJpaEntity?
 }

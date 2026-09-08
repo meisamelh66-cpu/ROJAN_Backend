@@ -8,6 +8,7 @@ import ai.rojan.backend.domain.common.BookingNotFoundException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.ServiceNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
+import ai.rojan.backend.domain.customer.CustomerId
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.ServiceId
@@ -24,6 +25,16 @@ data class CreateBookingCommand(
     val customerId: UserId,
     val startTime: LocalDateTime,
     val notes: String?,
+    /**
+     * BACKEND-CRM-CUSTOMER-IDENTITY-001: the salon's CRM record this booking
+     * belongs to. Resolved by the orchestration layer before the command is
+     * built - `BookingController` (self-service, via
+     * `ResolveOrCreateSalonCustomerUseCase`) and `CreateBookingForCustomerUseCase`
+     * (owner-on-behalf, from the already-loaded customer). `null` only for
+     * internal/legacy call paths that predate the CRM anchor; such bookings
+     * simply carry no `salonCustomerId` until the backfill runs.
+     */
+    val salonCustomerId: CustomerId? = null,
 )
 
 class CreateBookingUseCase(
@@ -51,6 +62,7 @@ class CreateBookingUseCase(
             startTime = command.startTime,
             endTime = endTime,
             notes = command.notes,
+            salonCustomerId = command.salonCustomerId,
         )
         return bookingRepository.reserve(booking)
     }

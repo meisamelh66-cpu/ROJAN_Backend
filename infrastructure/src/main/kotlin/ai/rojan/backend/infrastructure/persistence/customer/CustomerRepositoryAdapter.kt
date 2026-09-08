@@ -49,6 +49,9 @@ class CustomerRepositoryAdapter(
     override fun findById(id: CustomerId): Customer? =
         jpaRepository.findById(id.value).orElse(null)?.toDomain()
 
+    override fun findBySalonIdAndUserId(salonId: SalonId, userId: UserId): Customer? =
+        jpaRepository.findBySalonIdAndUserId(salonId.value, userId.value)?.toDomain()
+
     override fun findBySalonId(
         salonId: SalonId,
         pageRequest: PageRequest,

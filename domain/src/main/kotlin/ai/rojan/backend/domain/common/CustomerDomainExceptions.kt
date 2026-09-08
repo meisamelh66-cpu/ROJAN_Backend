@@ -8,9 +8,22 @@ class CustomerAccessDeniedException(customerId: String) :
 
 class InvalidCustomerStateException(message: String) : DomainException(message)
 
-/** A customer with this phone number already exists within this salon (see `CustomerRepository.existsBySalonIdAndPhoneNumber`). */
-class CustomerAlreadyExistsException(phoneNumber: String) :
-    DomainException("A customer with phone number $phoneNumber already exists for this salon")
+/**
+ * A customer record that would collide with an existing one in the same
+ * salon - either the same phone number
+ * (`CustomerRepository.existsBySalonIdAndPhoneNumber`) or the same linked
+ * account (`CustomerRepository.findBySalonIdAndUserId`, guarded by the
+ * `uq_customers_salon_user` partial unique index). Maps to HTTP 409.
+ */
+class CustomerAlreadyExistsException(message: String) : DomainException(message) {
+    companion object {
+        fun forPhoneNumber(phoneNumber: String) =
+            CustomerAlreadyExistsException("A customer with phone number $phoneNumber already exists for this salon")
+
+        fun forLinkedAccount(userId: String) =
+            CustomerAlreadyExistsException("This salon already has a customer record linked to account $userId")
+    }
+}
 
 class CustomerTagNotFoundException(identifier: String) :
     DomainException("Customer tag not found: $identifier")

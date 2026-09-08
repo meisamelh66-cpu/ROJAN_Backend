@@ -18,15 +18,22 @@ data class CreateCustomerCommand(
     val phoneNumber: String?,
     val email: String?,
     val company: String?,
+    /**
+     * BACKEND-CRM-CUSTOMER-IDENTITY-001: optional link to a real backend
+     * account. `null` keeps the original walk-in/manual behaviour (the
+     * common owner-adds-a-customer path). When non-null the new record is
+     * linked, and the salon must not already have a record for that account.
+     */
+    val userId: UserId? = null,
 )
 
 /**
- * Creates a CRM record with no linked account (owner adds a walk-in/manual
- * customer) - see [Customer]'s own doc comment for why that is a first-class
- * case, not a workaround. [Customer.userId] stays null; a future
- * reconciliation step (out of Phase 1 scope, see
- * `ROJAN_Customer_CRM_Architecture_Plan_v1.md` §6.4) is the only way to
- * link it to a real account later.
+ * Creates a salon's CRM record for a person. [CreateCustomerCommand.userId]
+ * is normally `null` - a walk-in/manual customer with no app account (see
+ * [Customer]'s own doc comment for why that is a first-class case, not a
+ * workaround). BACKEND-CRM-CUSTOMER-IDENTITY-001 additionally allows an
+ * explicit account link at creation time; `ResolveOrCreateSalonCustomerUseCase`
+ * is the automatic path the booking flow uses.
  */
 class CreateCustomerUseCase(
     private val salonRepository: SalonRepository,
@@ -43,12 +50,15 @@ class CreateCustomerUseCase(
         val email = command.email?.let { Email(it) }
 
         if (phoneNumber != null && customerRepository.existsBySalonIdAndPhoneNumber(salon.id, phoneNumber)) {
-            throw CustomerAlreadyExistsException(phoneNumber.value)
+            throw CustomerAlreadyExistsException.forPhoneNumber(phoneNumber.value)
+        }
+        if (command.userId != null && customerRepository.findBySalonIdAndUserId(salon.id, command.userId) != null) {
+            throw CustomerAlreadyExistsException.forLinkedAccount(command.userId.value.toString())
         }
 
         val customer = Customer.create(
             salonId = salon.id,
-            userId = null,
+            userId = command.userId,
             fullName = command.fullName,
             phoneNumber = phoneNumber,
             email = email,

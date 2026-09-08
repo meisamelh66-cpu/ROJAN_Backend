@@ -1,6 +1,7 @@
 package ai.rojan.backend.domain.booking
 
 import ai.rojan.backend.domain.common.InvalidBookingStateException
+import ai.rojan.backend.domain.customer.CustomerId
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.ServiceId
 import ai.rojan.backend.domain.salon.SpecialistId
@@ -29,6 +30,15 @@ value class BookingId(val value: UUID) {
  * [BookingStatus.CONFIRMED] by the salon; conflict-freedom is enforced by
  * the persistence layer (see [BookingRepository.reserve]), not here — this
  * aggregate only guards its own state-transition invariants.
+ *
+ * BACKEND-CRM-CUSTOMER-IDENTITY-001 (Phase 1, additive): [customerId] is
+ * unchanged - it is still the account the booking is attributed to (self-app
+ * queries, the double-booking conflict key, and caller-vs-owner access all
+ * key on it). [salonCustomerId] is the new, nullable link to the salon's CRM
+ * record ([ai.rojan.backend.domain.customer.Customer]). It is `null` only on
+ * bookings created before this reference existed (until the one-time backfill
+ * runs); every booking created through the use cases now carries it. Making
+ * it non-null / the primary anchor is a later, migration-gated phase.
  */
 class Booking private constructor(
     val id: BookingId,
@@ -36,6 +46,7 @@ class Booking private constructor(
     val serviceId: ServiceId,
     val specialistId: SpecialistId,
     val customerId: UserId,
+    val salonCustomerId: CustomerId?,
     startTime: LocalDateTime,
     endTime: LocalDateTime,
     status: BookingStatus,
@@ -103,6 +114,7 @@ class Booking private constructor(
             startTime: LocalDateTime,
             endTime: LocalDateTime,
             notes: String?,
+            salonCustomerId: CustomerId? = null,
         ): Booking {
             require(startTime < endTime) { "Booking start must be before end" }
             val now = Instant.now()
@@ -112,6 +124,7 @@ class Booking private constructor(
                 serviceId = serviceId,
                 specialistId = specialistId,
                 customerId = customerId,
+                salonCustomerId = salonCustomerId,
                 startTime = startTime,
                 endTime = endTime,
                 status = BookingStatus.PENDING,
@@ -133,8 +146,10 @@ class Booking private constructor(
             notes: String?,
             createdAt: Instant,
             updatedAt: Instant,
+            salonCustomerId: CustomerId? = null,
         ): Booking = Booking(
-            id, salonId, serviceId, specialistId, customerId, startTime, endTime, status, notes, createdAt, updatedAt,
+            id, salonId, serviceId, specialistId, customerId, salonCustomerId,
+            startTime, endTime, status, notes, createdAt, updatedAt,
         )
     }
 }

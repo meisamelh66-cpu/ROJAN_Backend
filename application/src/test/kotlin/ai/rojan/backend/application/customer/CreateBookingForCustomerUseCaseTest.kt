@@ -61,6 +61,9 @@ class CreateBookingForCustomerUseCaseTest {
 
         assertEquals(linkedUserId, booking.customerId)
         assertEquals(salon.id, booking.salonId)
+        // BACKEND-CRM-CUSTOMER-IDENTITY-001: the booking is anchored to the
+        // owner-selected CRM record, no second resolve-or-create.
+        assertEquals(customer.id, booking.salonCustomerId)
         assertEquals(bookingRepository.findById(booking.id), booking)
     }
 

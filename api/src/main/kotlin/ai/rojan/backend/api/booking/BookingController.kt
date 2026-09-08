@@ -15,6 +15,8 @@ import ai.rojan.backend.application.booking.CreateBookingCommand
 import ai.rojan.backend.application.booking.CreateBookingUseCase
 import ai.rojan.backend.application.booking.RescheduleBookingCommand
 import ai.rojan.backend.application.booking.RescheduleBookingUseCase
+import ai.rojan.backend.application.customer.ResolveOrCreateSalonCustomerCommand
+import ai.rojan.backend.application.customer.ResolveOrCreateSalonCustomerUseCase
 import ai.rojan.backend.application.port.IdempotencyLookup
 import ai.rojan.backend.application.port.IdempotencyPort
 import ai.rojan.backend.domain.booking.Booking
@@ -69,6 +71,7 @@ class BookingController(
     private val salonRepository: SalonRepository,
     private val userRepository: UserRepository,
     private val createBookingUseCase: CreateBookingUseCase,
+    private val resolveOrCreateSalonCustomerUseCase: ResolveOrCreateSalonCustomerUseCase,
     private val confirmBookingUseCase: ConfirmBookingUseCase,
     private val cancelBookingUseCase: CancelBookingUseCase,
     private val completeBookingUseCase: CompleteBookingUseCase,
@@ -121,6 +124,14 @@ class BookingController(
             }
         }
 
+        // BACKEND-CRM-CUSTOMER-IDENTITY-001: anchor the booking to the
+        // salon's CRM record for this account, creating a linked one from
+        // the account's profile if the salon has none yet. Done after the
+        // idempotency replay short-circuit so a replay never creates a row.
+        val salonCustomerId = resolveOrCreateSalonCustomerUseCase.execute(
+            ResolveOrCreateSalonCustomerCommand(SalonId(request.salonId), customerId),
+        ).id
+
         val booking = createBookingUseCase.execute(
             CreateBookingCommand(
                 salonId = SalonId(request.salonId),
@@ -129,6 +140,7 @@ class BookingController(
                 customerId = customerId,
                 startTime = request.startTime,
                 notes = request.notes,
+                salonCustomerId = salonCustomerId,
             ),
         )
         val response = booking.toResponse()

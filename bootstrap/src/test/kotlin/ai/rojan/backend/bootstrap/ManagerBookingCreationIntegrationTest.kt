@@ -168,6 +168,19 @@ class ManagerBookingCreationIntegrationTest {
         assertEquals(HttpStatus.CREATED, selfBooking.statusCode)
         assertEquals(customerId, selfBooking.body?.customerId)
 
+        // BACKEND-CRM-CUSTOMER-IDENTITY-001: the self-service booking also
+        // anchored the customer to a first-class, linked CRM record for this
+        // salon (auto-created from the account profile).
+        val crmRecords = restTemplate.exchange(
+            url("/api/v1/salons/${setup.salon.id}/customer-records"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(managerToken)),
+            String::class.java,
+        )
+        assertEquals(HttpStatus.OK, crmRecords.statusCode)
+        assertTrue(requireNotNull(crmRecords.body).contains("\"userId\":\"$customerId\""))
+        assertTrue(requireNotNull(crmRecords.body).contains("Alex Customer"))
+
         // Now the salon owner's search finds them by a partial, case-insensitive name match.
         val search = restTemplate.exchange(
             url("/api/v1/salons/${setup.salon.id}/customers?query=alex"),
