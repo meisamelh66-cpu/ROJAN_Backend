@@ -25,10 +25,10 @@ data class TimelineEntry(val type: String, val description: String, val occurred
  * Merges the timeline at read time - [ai.rojan.backend.domain.customer.CustomerActivityRepository]
  * (status changes, tag add/remove), [CustomerNoteRepository] (every note is
  * itself a timeline entry), and booking lifecycle events read directly from
- * [BookingRepository] via [BookingRepository.findByCustomerIdAndSalonId]
- * (only when [ai.rojan.backend.domain.customer.Customer.userId] is linked -
- * empty otherwise, not an error; salon-scoped so a linked account's booking
- * events at other salons never appear in this salon's timeline) - rather
+ * [BookingRepository] via [BookingRepository.findBySalonCustomerId] (keyed
+ * on the CRM [CustomerId] the booking is anchored to; salon-scoped, so a
+ * person's booking events at other salons never appear in this salon's
+ * timeline; empty for a customer with no bookings, not an error) - rather
  * than writing a
  * physical row from every booking-status-transition use case, which would
  * couple the Booking module to Customer and risk a silently missed write.
@@ -69,12 +69,10 @@ class GetCustomerTimelineUseCase(
         val noteEntries = customerNoteRepository.findByCustomerId(customer.id)
             .map { TimelineEntry("NOTE", it.text, it.createdAt) }
 
-        val bookingEntries = customer.userId?.let { userId ->
-            bookingRepository
-                .findByCustomerIdAndSalonId(userId, customer.salonId, PageRequest(0, PageRequest.MAX_SIZE), statusFilter = null, SortDirection.DESC)
-                .content
-                .flatMap { bookingTimelineEntriesFor(it) }
-        }.orEmpty()
+        val bookingEntries = bookingRepository
+            .findBySalonCustomerId(customer.id, customer.salonId, PageRequest(0, PageRequest.MAX_SIZE), statusFilter = null, SortDirection.DESC)
+            .content
+            .flatMap { bookingTimelineEntriesFor(it) }
 
         val merged = (activityEntries + noteEntries + bookingEntries).sortedByDescending { it.occurredAt }
         return paginate(merged, command.pageRequest)

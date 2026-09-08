@@ -56,6 +56,30 @@ class CreateCustomerUseCaseTest {
     }
 
     @Test
+    fun `links the new record to an account when userId is supplied`() {
+        val accountId = UserId.new()
+
+        val customer = useCase.execute(
+            CreateCustomerCommand(salon.id, ownerId, "Jane Doe", "+989123456789", null, null, userId = accountId),
+        )
+
+        assertEquals(accountId, customer.userId)
+        assertEquals(customer.id, customerRepository.findBySalonIdAndUserId(salon.id, accountId)?.id)
+    }
+
+    @Test
+    fun `rejects a second linked record for the same account in the same salon`() {
+        val accountId = UserId.new()
+        useCase.execute(CreateCustomerCommand(salon.id, ownerId, "Jane Doe", "+989123456789", null, null, userId = accountId))
+
+        assertThrows<CustomerAlreadyExistsException> {
+            useCase.execute(
+                CreateCustomerCommand(salon.id, ownerId, "Jane Again", "+989123450000", null, null, userId = accountId),
+            )
+        }
+    }
+
+    @Test
     fun `allows the same phone number across two different salons`() {
         val otherSalon = Salon.create(ownerId, "Other Salon", null, "0912", null, "Address").also { salonRepository.save(it) }
 

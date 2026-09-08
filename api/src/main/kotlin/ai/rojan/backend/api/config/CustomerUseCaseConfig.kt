@@ -9,6 +9,7 @@ import ai.rojan.backend.application.customer.CreateCustomerUseCase
 import ai.rojan.backend.application.customer.GetCustomerBookingsUseCase
 import ai.rojan.backend.application.customer.GetCustomerTimelineUseCase
 import ai.rojan.backend.application.customer.RemoveCustomerTagUseCase
+import ai.rojan.backend.application.customer.ResolveOrCreateSalonCustomerUseCase
 import ai.rojan.backend.application.customer.UpdateCustomerUseCase
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.customer.CustomerActivityRepository
@@ -17,6 +18,7 @@ import ai.rojan.backend.domain.customer.CustomerRepository
 import ai.rojan.backend.domain.customer.CustomerTagRepository
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.ServiceRepository
+import ai.rojan.backend.domain.user.UserRepository
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
@@ -27,6 +29,13 @@ class CustomerUseCaseConfig {
     @Bean
     fun createCustomerUseCase(salonRepository: SalonRepository, customerRepository: CustomerRepository) =
         CreateCustomerUseCase(salonRepository, customerRepository)
+
+    @Bean
+    fun resolveOrCreateSalonCustomerUseCase(
+        salonRepository: SalonRepository,
+        customerRepository: CustomerRepository,
+        userRepository: UserRepository,
+    ) = ResolveOrCreateSalonCustomerUseCase(salonRepository, customerRepository, userRepository)
 
     @Bean
     fun updateCustomerUseCase(

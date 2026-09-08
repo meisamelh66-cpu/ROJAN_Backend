@@ -41,12 +41,17 @@ data class CreateBookingForCustomerCommand(
  * guarantees. Only the caller-authorization and customer-resolution steps
  * are new.
  *
- * A customer with no linked [ai.rojan.backend.domain.user.UserId] cannot be
- * booked through this path - [Booking.customerId] is a real, non-null
- * `UserId`, so there is nothing to attribute the booking to. Full walk-in
- * (unlinked) booking support is a separate, larger domain decision -
- * deliberately not attempted here (see
+ * A customer with no linked [ai.rojan.backend.domain.user.UserId] still
+ * cannot be booked through this path: [Booking.customerId] remains a real,
+ * non-null `UserId` (BACKEND-CRM-CUSTOMER-IDENTITY-001 Phase 1 is additive -
+ * it adds [Booking.salonCustomerId] but does not re-anchor the booking).
+ * Enabling walk-in (unlinked) booking needs `bookings.customer_id` to become
+ * nullable and is a separate, migration-gated phase (see
  * `ROJAN_Reception_Booking_Flow_Plan_v1.md` §4/§7/§8).
+ *
+ * The already-resolved [ai.rojan.backend.domain.customer.CustomerId] is
+ * passed through as [CreateBookingCommand.salonCustomerId], so the delegated
+ * [CreateBookingUseCase] does not run a second resolve-or-create.
  */
 class CreateBookingForCustomerUseCase(
     private val salonRepository: SalonRepository,
@@ -75,6 +80,7 @@ class CreateBookingForCustomerUseCase(
                 customerId = linkedUserId,
                 startTime = command.startTime,
                 notes = command.notes,
+                salonCustomerId = customer.id,
             ),
         )
     }

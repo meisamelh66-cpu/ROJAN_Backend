@@ -14,8 +14,8 @@ interface BookingSpringDataRepository : JpaRepository<BookingJpaEntity, UUID> {
     fun findBySalonIdAndStatus(salonId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
     fun findByCustomerId(customerId: UUID, pageable: Pageable): Page<BookingJpaEntity>
     fun findByCustomerIdAndStatus(customerId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
-    fun findByCustomerIdAndSalonId(customerId: UUID, salonId: UUID, pageable: Pageable): Page<BookingJpaEntity>
-    fun findByCustomerIdAndSalonIdAndStatus(customerId: UUID, salonId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
+    fun findBySalonCustomerIdAndSalonId(salonCustomerId: UUID, salonId: UUID, pageable: Pageable): Page<BookingJpaEntity>
+    fun findBySalonCustomerIdAndSalonIdAndStatus(salonCustomerId: UUID, salonId: UUID, status: BookingStatus, pageable: Pageable): Page<BookingJpaEntity>
 
     @Query(
         """
@@ -69,9 +69,9 @@ interface BookingSpringDataRepository : JpaRepository<BookingJpaEntity, UUID> {
         @Param("before") before: LocalDateTime,
     ): List<UUID>
 
-    fun findBySalonIdAndCustomerIdInAndStatus(
+    fun findBySalonIdAndSalonCustomerIdInAndStatus(
         salonId: UUID,
-        customerIds: Collection<UUID>,
+        salonCustomerIds: Collection<UUID>,
         status: BookingStatus,
     ): List<BookingJpaEntity>
 

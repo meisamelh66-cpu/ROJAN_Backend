@@ -405,6 +405,64 @@ class CustomerCrmFlowIntegrationTest {
         assertEquals(1, timelineOfA.body!!.content.count { it.type == "BOOKING_CREATED" })
     }
 
+    /**
+     * BACKEND-CRM-READ-MIGRATION-001: a linked customer's completed booking
+     * drives a non-zero lifetime value in both the list and detail views,
+     * resolved through `Booking.salonCustomerId` (not `Customer.userId`).
+     */
+    @Test
+    fun `a linked customer's completed booking shows as lifetime value and booking history`() {
+        val ownerToken = registerAndLogin()
+        val (customerToken, customerUserId) = registerAndLoginWithId(UserRole.CUSTOMER)
+        val salon = createSalon(ownerToken, "LTV Salon")
+        val (service, specialist) = createServiceAndSpecialist(ownerToken, salon.id)
+        val customer = linkedCustomer(salon.id, customerUserId, "+989166700001")
+
+        val booking = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/bookings"),
+                HttpMethod.POST,
+                HttpEntity(
+                    CreateBookingRequest(salon.id, service.id, specialist.id, LocalDateTime.now().plusDays(1), null),
+                    bearer(customerToken),
+                ),
+                BookingResponse::class.java,
+            ).body,
+        )
+        restTemplate.exchange(
+            url("/api/v1/bookings/${booking.id}/confirm"), HttpMethod.PATCH,
+            HttpEntity<Void>(bearer(ownerToken)), BookingResponse::class.java,
+        )
+        restTemplate.exchange(
+            url("/api/v1/bookings/${booking.id}/complete"), HttpMethod.PATCH,
+            HttpEntity<Void>(bearer(ownerToken)), BookingResponse::class.java,
+        )
+
+        val detail = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/salons/${salon.id}/customer-records/${customer.id.value}"),
+                HttpMethod.GET, HttpEntity<Void>(bearer(ownerToken)), CustomerResponse::class.java,
+            ).body,
+        )
+        assertEquals(0, BigDecimal("25.00").compareTo(detail.lifetimeValue))
+
+        val list = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customer-records"),
+            HttpMethod.GET, HttpEntity<Void>(bearer(ownerToken)),
+            object : ParameterizedTypeReference<PagedResponse<CustomerResponse>>() {},
+        )
+        val listed = requireNotNull(list.body!!.content.firstOrNull { it.id == customer.id.value })
+        assertEquals(0, BigDecimal("25.00").compareTo(listed.lifetimeValue))
+
+        val bookings = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customer-records/${customer.id.value}/bookings"),
+            HttpMethod.GET, HttpEntity<Void>(bearer(ownerToken)),
+            object : ParameterizedTypeReference<PagedResponse<BookingResponse>>() {},
+        )
+        assertEquals(1, bookings.body!!.content.size)
+        assertEquals(booking.id, bookings.body!!.content[0].id)
+    }
+
     @Test
     fun `rejects a caller who does not own the salon`() {
         val ownerToken = registerAndLogin()

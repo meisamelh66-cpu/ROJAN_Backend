@@ -8,6 +8,7 @@ import ai.rojan.backend.domain.common.BookingConflictException
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.SortDirection
+import ai.rojan.backend.domain.customer.CustomerId
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.ServiceId
 import ai.rojan.backend.domain.salon.SpecialistId
@@ -95,8 +96,8 @@ class BookingRepositoryAdapter(
         return page.toPageResult()
     }
 
-    override fun findByCustomerIdAndSalonId(
-        customerId: UserId,
+    override fun findBySalonCustomerId(
+        salonCustomerId: CustomerId,
         salonId: SalonId,
         pageRequest: PageRequest,
         statusFilter: BookingStatus?,
@@ -104,9 +105,9 @@ class BookingRepositoryAdapter(
     ): PageResult<Booking> {
         val pageable = pageableSortedByStartTime(pageRequest, sortDirection)
         val page = if (statusFilter == null) {
-            jpaRepository.findByCustomerIdAndSalonId(customerId.value, salonId.value, pageable)
+            jpaRepository.findBySalonCustomerIdAndSalonId(salonCustomerId.value, salonId.value, pageable)
         } else {
-            jpaRepository.findByCustomerIdAndSalonIdAndStatus(customerId.value, salonId.value, statusFilter, pageable)
+            jpaRepository.findBySalonCustomerIdAndSalonIdAndStatus(salonCustomerId.value, salonId.value, statusFilter, pageable)
         }
         return page.toPageResult()
     }
@@ -139,10 +140,13 @@ class BookingRepositoryAdapter(
             .map { UserId(it) }
             .toSet()
 
-    override fun findCompletedBySalonIdAndCustomerIdIn(salonId: SalonId, customerIds: Collection<UserId>): List<Booking> {
-        if (customerIds.isEmpty()) return emptyList()
+    override fun findCompletedBySalonIdAndSalonCustomerIdIn(
+        salonId: SalonId,
+        salonCustomerIds: Collection<CustomerId>,
+    ): List<Booking> {
+        if (salonCustomerIds.isEmpty()) return emptyList()
         return jpaRepository
-            .findBySalonIdAndCustomerIdInAndStatus(salonId.value, customerIds.map { it.value }, BookingStatus.COMPLETED)
+            .findBySalonIdAndSalonCustomerIdInAndStatus(salonId.value, salonCustomerIds.map { it.value }, BookingStatus.COMPLETED)
             .map { it.toDomain() }
     }
 
@@ -164,6 +168,7 @@ class BookingRepositoryAdapter(
                 serviceId = booking.serviceId.value,
                 specialistId = booking.specialistId.value,
                 customerId = booking.customerId.value,
+                salonCustomerId = booking.salonCustomerId?.value,
                 startTime = booking.startTime,
                 endTime = booking.endTime,
                 status = booking.status,
@@ -184,5 +189,6 @@ class BookingRepositoryAdapter(
         notes = notes,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
+        salonCustomerId = salonCustomerId?.let { CustomerId(it) },
     )
 }
