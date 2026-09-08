@@ -3,6 +3,7 @@ package ai.rojan.backend.domain.booking
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.SortDirection
+import ai.rojan.backend.domain.customer.CustomerId
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.user.UserId
@@ -41,15 +42,18 @@ interface BookingRepository {
     ): PageResult<Booking>
 
     /**
-     * A customer's bookings at **one specific salon only**, optionally
-     * filtered by status, sorted by start time. Use this, never
-     * [findByCustomerId], for any salon-owner-facing view of a specific
-     * customer (booking history, lifetime value, timeline) - a linked
-     * customer may have bookings at other salons too, and those must never
-     * be visible to a salon that isn't theirs.
+     * A CRM customer's bookings, by the salon-scoped
+     * [ai.rojan.backend.domain.customer.CustomerId] the booking is anchored
+     * to ([Booking.salonCustomerId], BACKEND-CRM-CUSTOMER-IDENTITY-001).
+     * Use this, never [findByCustomerId], for any salon-owner-facing view of
+     * a specific customer (booking history, lifetime value, timeline): a
+     * `CustomerId` belongs to exactly one salon, and a person's bookings at
+     * other salons carry a different `salonCustomerId`, so they can never
+     * leak into this salon's view. [salonId] is retained as a
+     * defense-in-depth filter.
      */
-    fun findByCustomerIdAndSalonId(
-        customerId: UserId,
+    fun findBySalonCustomerId(
+        salonCustomerId: CustomerId,
         salonId: SalonId,
         pageRequest: PageRequest,
         statusFilter: BookingStatus?,
@@ -70,13 +74,14 @@ interface BookingRepository {
     fun findCustomerIdsWithBookingBefore(salonId: SalonId, customerIds: Set<UserId>, before: LocalDateTime): Set<UserId>
 
     /**
-     * Production Hardening Phase 1: batched sibling of [findByCustomerIdAndSalonId],
-     * completed bookings only, for every [customerIds] on a paginated customer-list
-     * page in one query - powers [ai.rojan.backend.application.customer.CalculateCustomerLifetimeValueUseCase]'s
+     * Production Hardening Phase 1: batched sibling of [findBySalonCustomerId],
+     * completed bookings only, for every CRM [salonCustomerIds] on a paginated
+     * customer-list page in one query - powers
+     * [ai.rojan.backend.application.customer.CalculateCustomerLifetimeValueUseCase]'s
      * per-customer computation without querying per row. Same salon-scoping
-     * requirement as [findByCustomerIdAndSalonId] - never platform-wide.
+     * requirement as [findBySalonCustomerId] - never platform-wide.
      */
-    fun findCompletedBySalonIdAndCustomerIdIn(salonId: SalonId, customerIds: Collection<UserId>): List<Booking>
+    fun findCompletedBySalonIdAndSalonCustomerIdIn(salonId: SalonId, salonCustomerIds: Collection<CustomerId>): List<Booking>
 
     /**
      * Every distinct customer who has at least one booking with [salonId]

@@ -8,8 +8,10 @@ import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.customer.Customer
 import ai.rojan.backend.domain.customer.CustomerActivity
 import ai.rojan.backend.domain.customer.CustomerActivityType
+import ai.rojan.backend.domain.customer.CustomerId
 import ai.rojan.backend.domain.customer.CustomerNote
 import ai.rojan.backend.domain.salon.Salon
+import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.ServiceId
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.user.UserId
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.LocalDateTime
 
+/** BACKEND-CRM-READ-MIGRATION-001: booking timeline events are keyed on Booking.salonCustomerId, not Customer.userId. */
 class GetCustomerTimelineUseCaseTest {
 
     private val salonRepository = InMemorySalonRepository()
@@ -32,24 +35,25 @@ class GetCustomerTimelineUseCaseTest {
     private val ownerId = UserId.new()
     private val salon = Salon.create(ownerId, "Test Salon", null, "0912", null, "Address").also { salonRepository.save(it) }
 
+    private fun seedBooking(salonId: SalonId, salonCustomerId: CustomerId, day: Int = 10, confirm: Boolean = false): Booking =
+        Booking.create(
+            salonId, ServiceId.new(), SpecialistId.new(), UserId.new(),
+            LocalDateTime.of(2026, 8, day, 9, 0), LocalDateTime.of(2026, 8, day, 9, 30), null,
+            salonCustomerId = salonCustomerId,
+        ).also { if (confirm) it.confirm(); bookingRepository.reserve(it) }
+
     @Test
     fun `merges activities, notes, and booking events into one sorted feed`() {
-        val linkedUserId = UserId.new()
-        val customer = Customer.create(salon.id, linkedUserId, "Jane Doe", PhoneNumber("+989123456789"), null, null)
+        val customer = Customer.create(salon.id, UserId.new(), "Jane Doe", PhoneNumber("+989123456789"), null, null)
             .also { customerRepository.save(it) }
 
         customerActivityRepository.save(CustomerActivity.create(customer.id, CustomerActivityType.TAG_ADDED, "Tag added: VIP"))
         customerNoteRepository.save(CustomerNote.create(customer.id, ownerId, "Prefers morning appointments"))
-        val booking = Booking.create(
-            salon.id, ServiceId.new(), SpecialistId.new(), linkedUserId,
-            LocalDateTime.of(2026, 8, 10, 9, 0), LocalDateTime.of(2026, 8, 10, 9, 30), null,
-        )
-        bookingRepository.reserve(booking)
+        seedBooking(salon.id, customer.id)
 
         val result = useCase.execute(GetCustomerTimelineCommand(customer.id, ownerId, PageRequest(0, 20)))
 
-        // 1 activity + 1 note + 1 "booking created" event (booking is still PENDING, so no second status entry)
-        assertEquals(3, result.totalElements)
+        assertEquals(3, result.totalElements) // 1 activity + 1 note + 1 "booking created" (still PENDING)
         assertTrue(result.content.any { it.type == "TAG_ADDED" })
         assertTrue(result.content.any { it.type == "NOTE" })
         assertTrue(result.content.any { it.type == "BOOKING_CREATED" })
@@ -57,15 +61,9 @@ class GetCustomerTimelineUseCaseTest {
 
     @Test
     fun `a confirmed booking contributes both a created and a confirmed entry`() {
-        val linkedUserId = UserId.new()
-        val customer = Customer.create(salon.id, linkedUserId, "Jane Doe", PhoneNumber("+989123456789"), null, null)
+        val customer = Customer.create(salon.id, UserId.new(), "Jane Doe", PhoneNumber("+989123456789"), null, null)
             .also { customerRepository.save(it) }
-        val booking = Booking.create(
-            salon.id, ServiceId.new(), SpecialistId.new(), linkedUserId,
-            LocalDateTime.of(2026, 8, 10, 9, 0), LocalDateTime.of(2026, 8, 10, 9, 30), null,
-        )
-        booking.confirm()
-        bookingRepository.reserve(booking)
+        seedBooking(salon.id, customer.id, confirm = true)
 
         val result = useCase.execute(GetCustomerTimelineCommand(customer.id, ownerId, PageRequest(0, 20)))
 
@@ -75,33 +73,23 @@ class GetCustomerTimelineUseCaseTest {
     }
 
     @Test
-    fun `does not include booking events from a different salon`() {
-        val linkedUserId = UserId.new()
-        val customer = Customer.create(salon.id, linkedUserId, "Jane Doe", PhoneNumber("+989123456789"), null, null)
+    fun `does not include booking events from the same person's record at another salon`() {
+        val customer = Customer.create(salon.id, UserId.new(), "Jane Doe", PhoneNumber("+989123456789"), null, null)
             .also { customerRepository.save(it) }
-        val ownBooking = Booking.create(
-            salon.id, ServiceId.new(), SpecialistId.new(), linkedUserId,
-            LocalDateTime.of(2026, 8, 10, 9, 0), LocalDateTime.of(2026, 8, 10, 9, 30), null,
-        )
-        bookingRepository.reserve(ownBooking)
+        seedBooking(salon.id, customer.id, day = 10)
 
         val otherSalon = Salon.create(UserId.new(), "Other Salon", null, "0913", null, "Other Address")
             .also { salonRepository.save(it) }
-        val bookingAtOtherSalon = Booking.create(
-            otherSalon.id, ServiceId.new(), SpecialistId.new(), linkedUserId,
-            LocalDateTime.of(2026, 8, 11, 9, 0), LocalDateTime.of(2026, 8, 11, 9, 30), null,
-        )
-        bookingRepository.reserve(bookingAtOtherSalon)
+        seedBooking(otherSalon.id, CustomerId.new(), day = 11)
 
         val result = useCase.execute(GetCustomerTimelineCommand(customer.id, ownerId, PageRequest(0, 20)))
 
-        // only the own-salon booking's "created" event - the other salon's booking must not appear
         assertEquals(1, result.totalElements)
         assertEquals("BOOKING_CREATED", result.content[0].type)
     }
 
     @Test
-    fun `an unlinked customer's timeline has no booking events, only CRM ones`() {
+    fun `a customer with no bookings has only CRM timeline entries`() {
         val customer = Customer.create(salon.id, null, "Jane Doe", PhoneNumber("+989123456789"), null, null)
             .also { customerRepository.save(it) }
         customerNoteRepository.save(CustomerNote.create(customer.id, ownerId, "A note"))

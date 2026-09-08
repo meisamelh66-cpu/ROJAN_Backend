@@ -8,7 +8,9 @@ import ai.rojan.backend.domain.common.CustomerAccessDeniedException
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.customer.Customer
+import ai.rojan.backend.domain.customer.CustomerId
 import ai.rojan.backend.domain.salon.Salon
+import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.ServiceId
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.user.UserId
@@ -18,6 +20,10 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.time.LocalDateTime
 
+/**
+ * BACKEND-CRM-READ-MIGRATION-001: booking history is keyed on
+ * [Booking.salonCustomerId] (the CRM [CustomerId]), never [Customer.userId].
+ */
 class GetCustomerBookingsUseCaseTest {
 
     private val salonRepository = InMemorySalonRepository()
@@ -28,8 +34,14 @@ class GetCustomerBookingsUseCaseTest {
     private val ownerId = UserId.new()
     private val salon = Salon.create(ownerId, "Test Salon", null, "0912", null, "Address").also { salonRepository.save(it) }
 
+    private fun seedBooking(salonId: SalonId, salonCustomerId: CustomerId, day: Int = 10): Booking = Booking.create(
+        salonId, ServiceId.new(), SpecialistId.new(), UserId.new(),
+        LocalDateTime.of(2026, 8, day, 9, 0), LocalDateTime.of(2026, 8, day, 9, 30), null,
+        salonCustomerId = salonCustomerId,
+    ).also { bookingRepository.reserve(it) }
+
     @Test
-    fun `returns an empty page for a customer with no linked account, not an error`() {
+    fun `returns an empty page for a customer with no bookings, not an error`() {
         val customer = Customer.create(salon.id, null, "Jane Doe", PhoneNumber("+989123456789"), null, null)
             .also { customerRepository.save(it) }
 
@@ -42,15 +54,10 @@ class GetCustomerBookingsUseCaseTest {
     }
 
     @Test
-    fun `returns the linked account's bookings`() {
-        val linkedUserId = UserId.new()
-        val customer = Customer.create(salon.id, linkedUserId, "Jane Doe", PhoneNumber("+989123456789"), null, null)
+    fun `returns the customer's bookings, keyed on the CRM customer id`() {
+        val customer = Customer.create(salon.id, UserId.new(), "Jane Doe", PhoneNumber("+989123456789"), null, null)
             .also { customerRepository.save(it) }
-        val booking = Booking.create(
-            salon.id, ServiceId.new(), SpecialistId.new(), linkedUserId,
-            LocalDateTime.of(2026, 8, 10, 9, 0), LocalDateTime.of(2026, 8, 10, 9, 30), null,
-        )
-        bookingRepository.reserve(booking)
+        val booking = seedBooking(salon.id, customer.id)
 
         val result = useCase.execute(
             GetCustomerBookingsCommand(customer.id, ownerId, PageRequest(0, 20), null, SortDirection.DESC),
@@ -61,23 +68,15 @@ class GetCustomerBookingsUseCaseTest {
     }
 
     @Test
-    fun `does not leak the linked account's bookings from a different salon`() {
-        val linkedUserId = UserId.new()
-        val customer = Customer.create(salon.id, linkedUserId, "Jane Doe", PhoneNumber("+989123456789"), null, null)
+    fun `does not leak the same person's bookings from a different salon`() {
+        val customer = Customer.create(salon.id, UserId.new(), "Jane Doe", PhoneNumber("+989123456789"), null, null)
             .also { customerRepository.save(it) }
-        val ownBooking = Booking.create(
-            salon.id, ServiceId.new(), SpecialistId.new(), linkedUserId,
-            LocalDateTime.of(2026, 8, 10, 9, 0), LocalDateTime.of(2026, 8, 10, 9, 30), null,
-        )
-        bookingRepository.reserve(ownBooking)
+        val ownBooking = seedBooking(salon.id, customer.id, day = 10)
 
+        // the same person's record at another salon has a different CustomerId
         val otherSalon = Salon.create(UserId.new(), "Other Salon", null, "0913", null, "Other Address")
             .also { salonRepository.save(it) }
-        val bookingAtOtherSalon = Booking.create(
-            otherSalon.id, ServiceId.new(), SpecialistId.new(), linkedUserId,
-            LocalDateTime.of(2026, 8, 11, 9, 0), LocalDateTime.of(2026, 8, 11, 9, 30), null,
-        )
-        bookingRepository.reserve(bookingAtOtherSalon)
+        val bookingAtOtherSalon = seedBooking(otherSalon.id, CustomerId.new(), day = 11)
 
         val result = useCase.execute(
             GetCustomerBookingsCommand(customer.id, ownerId, PageRequest(0, 20), null, SortDirection.DESC),

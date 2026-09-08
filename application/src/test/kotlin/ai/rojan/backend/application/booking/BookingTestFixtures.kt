@@ -8,6 +8,7 @@ import ai.rojan.backend.domain.common.BookingConflictException
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.SortDirection
+import ai.rojan.backend.domain.customer.CustomerId
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.user.UserId
@@ -49,21 +50,24 @@ internal class InMemoryBookingRepository : BookingRepository {
         sortDirection: SortDirection,
     ): PageResult<Booking> = paginate(store.values.filter { it.customerId == customerId }, pageRequest, statusFilter, sortDirection)
 
-    override fun findByCustomerIdAndSalonId(
-        customerId: UserId,
+    override fun findBySalonCustomerId(
+        salonCustomerId: CustomerId,
         salonId: SalonId,
         pageRequest: PageRequest,
         statusFilter: BookingStatus?,
         sortDirection: SortDirection,
     ): PageResult<Booking> = paginate(
-        store.values.filter { it.customerId == customerId && it.salonId == salonId },
+        store.values.filter { it.salonCustomerId == salonCustomerId && it.salonId == salonId },
         pageRequest,
         statusFilter,
         sortDirection,
     )
 
-    override fun findCompletedBySalonIdAndCustomerIdIn(salonId: SalonId, customerIds: Collection<UserId>): List<Booking> =
-        store.values.filter { it.salonId == salonId && it.customerId in customerIds && it.status == BookingStatus.COMPLETED }
+    override fun findCompletedBySalonIdAndSalonCustomerIdIn(
+        salonId: SalonId,
+        salonCustomerIds: Collection<CustomerId>,
+    ): List<Booking> =
+        store.values.filter { it.salonId == salonId && it.salonCustomerId in salonCustomerIds && it.status == BookingStatus.COMPLETED }
 
     private fun paginate(
         bookings: Collection<Booking>,

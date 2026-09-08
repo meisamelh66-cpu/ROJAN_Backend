@@ -25,15 +25,17 @@ data class GetCustomerBookingsCommand(
 /**
  * The owner-facing "bookings for this specific customer" capability
  * flagged as missing in `ROJAN_Booking_CRM_Integration_Plan_v1.md` (blocker
- * #3) - resolved here via [BookingRepository.findByCustomerIdAndSalonId]
- * against the customer's linked [ai.rojan.backend.domain.user.UserId],
+ * #3) - resolved here via [BookingRepository.findBySalonCustomerId] against
+ * the CRM [ai.rojan.backend.domain.customer.CustomerId] the booking is
+ * anchored to ([ai.rojan.backend.domain.booking.Booking.salonCustomerId]),
  * scoped to this customer's own [ai.rojan.backend.domain.salon.SalonId] -
  * never the platform-wide [BookingRepository.findByCustomerId] that powers
- * the self-service `GET /bookings/mine`, since a linked customer may have
- * bookings at other salons that must not leak into this salon's view of
- * them (`ROJAN_Customer_Booking_History_Tenant_Isolation_Fix_Report_v1.md`).
- * An empty page (not an error) for a customer with no linked account - see
- * `ROJAN_Customer_CRM_Architecture_Plan_v1.md` Risk #1.
+ * the self-service `GET /bookings/mine`. A person's bookings at other salons
+ * carry a different `salonCustomerId`, so they can never leak into this
+ * salon's view (`ROJAN_Customer_Booking_History_Tenant_Isolation_Fix_Report_v1.md`).
+ * BACKEND-CRM-READ-MIGRATION-001: no more `Customer.userId` dependency - a
+ * customer with no bookings (walk-in or otherwise) returns an empty page
+ * naturally.
  */
 class GetCustomerBookingsUseCase(
     private val salonRepository: SalonRepository,
@@ -49,9 +51,12 @@ class GetCustomerBookingsUseCase(
             throw CustomerAccessDeniedException(customer.id.value.toString())
         }
 
-        val userId = customer.userId
-            ?: return PageResult(content = emptyList(), page = command.pageRequest.page, size = command.pageRequest.size, totalElements = 0)
-
-        return bookingRepository.findByCustomerIdAndSalonId(userId, customer.salonId, command.pageRequest, command.statusFilter, command.sortDirection)
+        return bookingRepository.findBySalonCustomerId(
+            customer.id,
+            customer.salonId,
+            command.pageRequest,
+            command.statusFilter,
+            command.sortDirection,
+        )
     }
 }

@@ -14,11 +14,12 @@ import java.math.BigDecimal
  * invalidation risk, correct by construction, at the cost of re-summing on
  * every call (acceptable at Phase 1's expected data volumes; a cached,
  * recompute-on-completion column is a contained future optimization if it
- * ever isn't). Zero for a customer with no linked account - there is no
- * booking data to sum (see [Customer.userId]'s own doc comment). Scoped to
- * this customer's own [Customer.salonId] - a linked account's completed
- * bookings at other salons must not inflate the lifetime value this
- * salon's owner sees (`ROJAN_Customer_Booking_History_Tenant_Isolation_Fix_Report_v1.md`).
+ * ever isn't). Zero for a customer with no completed bookings. Scoped to
+ * this customer's own [Customer.salonId] via the CRM
+ * [ai.rojan.backend.domain.customer.CustomerId] the booking is anchored to
+ * (BACKEND-CRM-READ-MIGRATION-001) - a person's completed bookings at other
+ * salons carry a different `salonCustomerId` and never inflate the lifetime
+ * value this salon's owner sees (`ROJAN_Customer_Booking_History_Tenant_Isolation_Fix_Report_v1.md`).
  *
  * Takes an already-resolved, already-authorized [Customer] directly rather
  * than a Command with raw ids - this is a pure computation reused by both
@@ -30,12 +31,14 @@ class CalculateCustomerLifetimeValueUseCase(
     private val serviceRepository: ServiceRepository,
 ) {
     fun execute(customer: Customer): BigDecimal {
-        val userId = customer.userId ?: return BigDecimal.ZERO
-
         val completedBookings = bookingRepository
-            .findByCustomerIdAndSalonId(userId, customer.salonId, PageRequest(0, PageRequest.MAX_SIZE), BookingStatus.COMPLETED, SortDirection.DESC)
+            .findBySalonCustomerId(customer.id, customer.salonId, PageRequest(0, PageRequest.MAX_SIZE), BookingStatus.COMPLETED, SortDirection.DESC)
             .content
+        if (completedBookings.isEmpty()) return BigDecimal.ZERO
 
-        return completedBookings.sumOf { booking -> serviceRepository.findById(booking.serviceId)?.price ?: BigDecimal.ZERO }
+        // BACKEND-CRM-READ-MIGRATION-001: one services-for-the-salon query + local lookup,
+        // never a per-booking serviceRepository.findById (the list path already does this).
+        val priceByServiceId = serviceRepository.findBySalonId(customer.salonId).associate { it.id to it.price }
+        return completedBookings.sumOf { priceByServiceId[it.serviceId] ?: BigDecimal.ZERO }
     }
 }

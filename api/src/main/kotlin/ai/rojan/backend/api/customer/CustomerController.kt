@@ -124,18 +124,19 @@ class CustomerController(
         // query, and one services-for-the-salon query (reusing the same "load once, associateBy,
         // look up locally" pattern GetDashboardInsightsUseCase already established), instead of the
         // ~20 x (2 + N bookings) queries this page used to issue.
+        // BACKEND-CRM-READ-MIGRATION-001: keyed on the CRM CustomerId (Booking.salonCustomerId),
+        // not Customer.userId - covers every row on the page, including walk-ins.
         val pageCustomerIds = result.content.map { it.id }
         val tagsByCustomerId = customerTagRepository.findByCustomerIdIn(pageCustomerIds).groupBy { it.customerId }
-        val linkedUserIds = result.content.mapNotNull { it.userId }
         val servicesById = serviceRepository.findBySalonId(salon.id).associateBy { it.id }
-        val lifetimeValueByUserId = bookingRepository
-            .findCompletedBySalonIdAndCustomerIdIn(salon.id, linkedUserIds)
-            .groupBy { it.customerId }
+        val lifetimeValueByCustomerId = bookingRepository
+            .findCompletedBySalonIdAndSalonCustomerIdIn(salon.id, pageCustomerIds)
+            .groupBy { it.salonCustomerId }
             .mapValues { (_, bookings) -> bookings.sumOf { booking -> servicesById[booking.serviceId]?.price ?: BigDecimal.ZERO } }
 
         return result.toPagedResponse { customer ->
             customer.toResponse(
-                lifetimeValue = customer.userId?.let { lifetimeValueByUserId[it] } ?: BigDecimal.ZERO,
+                lifetimeValue = lifetimeValueByCustomerId[customer.id] ?: BigDecimal.ZERO,
                 tags = tagsByCustomerId[customer.id].orEmpty().map { it.label },
             )
         }

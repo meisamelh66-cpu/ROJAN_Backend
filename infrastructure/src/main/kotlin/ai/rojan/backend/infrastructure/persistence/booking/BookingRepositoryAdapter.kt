@@ -96,8 +96,8 @@ class BookingRepositoryAdapter(
         return page.toPageResult()
     }
 
-    override fun findByCustomerIdAndSalonId(
-        customerId: UserId,
+    override fun findBySalonCustomerId(
+        salonCustomerId: CustomerId,
         salonId: SalonId,
         pageRequest: PageRequest,
         statusFilter: BookingStatus?,
@@ -105,9 +105,9 @@ class BookingRepositoryAdapter(
     ): PageResult<Booking> {
         val pageable = pageableSortedByStartTime(pageRequest, sortDirection)
         val page = if (statusFilter == null) {
-            jpaRepository.findByCustomerIdAndSalonId(customerId.value, salonId.value, pageable)
+            jpaRepository.findBySalonCustomerIdAndSalonId(salonCustomerId.value, salonId.value, pageable)
         } else {
-            jpaRepository.findByCustomerIdAndSalonIdAndStatus(customerId.value, salonId.value, statusFilter, pageable)
+            jpaRepository.findBySalonCustomerIdAndSalonIdAndStatus(salonCustomerId.value, salonId.value, statusFilter, pageable)
         }
         return page.toPageResult()
     }
@@ -140,10 +140,13 @@ class BookingRepositoryAdapter(
             .map { UserId(it) }
             .toSet()
 
-    override fun findCompletedBySalonIdAndCustomerIdIn(salonId: SalonId, customerIds: Collection<UserId>): List<Booking> {
-        if (customerIds.isEmpty()) return emptyList()
+    override fun findCompletedBySalonIdAndSalonCustomerIdIn(
+        salonId: SalonId,
+        salonCustomerIds: Collection<CustomerId>,
+    ): List<Booking> {
+        if (salonCustomerIds.isEmpty()) return emptyList()
         return jpaRepository
-            .findBySalonIdAndCustomerIdInAndStatus(salonId.value, customerIds.map { it.value }, BookingStatus.COMPLETED)
+            .findBySalonIdAndSalonCustomerIdInAndStatus(salonId.value, salonCustomerIds.map { it.value }, BookingStatus.COMPLETED)
             .map { it.toDomain() }
     }
 
