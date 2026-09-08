@@ -1,5 +1,6 @@
 package ai.rojan.backend.application.customer
 
+import ai.rojan.backend.domain.common.CustomerAlreadyExistsException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.customer.Customer
@@ -28,7 +29,11 @@ data class ResolveOrCreateSalonCustomerCommand(
  * enforced here and by the `uq_customers_salon_user` partial unique index.
  *
  * Idempotent: calling it again for the same `(salonId, userId)` returns the
- * same record, creating nothing.
+ * same record, creating nothing. Concurrency-safe: if two callers race past
+ * the initial lookup, the `uq_customers_salon_user` unique index lets only
+ * one insert through; the loser catches
+ * [ai.rojan.backend.domain.common.CustomerAlreadyExistsException], re-reads,
+ * and returns the winner.
  */
 class ResolveOrCreateSalonCustomerUseCase(
     private val salonRepository: SalonRepository,
@@ -54,6 +59,11 @@ class ResolveOrCreateSalonCustomerUseCase(
             email = user.email,
             company = null,
         )
-        return customerRepository.save(customer)
+        return try {
+            customerRepository.save(customer)
+        } catch (e: CustomerAlreadyExistsException) {
+            // Lost a create race - the winning row now exists for this (salon, user).
+            customerRepository.findBySalonIdAndUserId(salon.id, command.userId) ?: throw e
+        }
     }
 }

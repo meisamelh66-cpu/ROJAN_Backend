@@ -1,6 +1,7 @@
 package ai.rojan.backend.infrastructure.persistence.customer
 
 import ai.rojan.backend.domain.auth.PhoneNumber
+import ai.rojan.backend.domain.common.CustomerAlreadyExistsException
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.SortDirection
@@ -11,6 +12,7 @@ import ai.rojan.backend.domain.customer.CustomerStatus
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.UserId
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Repository
 import java.time.Instant
@@ -43,7 +45,19 @@ class CustomerRepositoryAdapter(
                 status = customer.status,
                 active = customer.active,
             )
-        return jpaRepository.save(entity).toDomain()
+        return try {
+            // saveAndFlush so a same-salon uniqueness violation (uq_customers_salon_user /
+            // uq_customers_salon_phone) surfaces here as a translatable exception rather than
+            // later at an opaque flush/commit boundary.
+            jpaRepository.saveAndFlush(entity).toDomain()
+        } catch (_: DataIntegrityViolationException) {
+            // BACKEND-CRM-CUSTOMER-IDENTITY-001: a concurrent request already created the
+            // conflicting record. Translate to the domain conflict signal; callers that can
+            // recover (ResolveOrCreateSalonCustomerUseCase) re-read and return the winner.
+            throw customer.userId?.let { CustomerAlreadyExistsException.forLinkedAccount(it.value.toString()) }
+                ?: customer.phoneNumber?.let { CustomerAlreadyExistsException.forPhoneNumber(it.value) }
+                ?: CustomerAlreadyExistsException("A conflicting customer record already exists for this salon")
+        }
     }
 
     override fun findById(id: CustomerId): Customer? =

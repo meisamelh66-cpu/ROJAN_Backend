@@ -2,11 +2,17 @@ package ai.rojan.backend.application.customer
 
 import ai.rojan.backend.application.salon.InMemorySalonRepository
 import ai.rojan.backend.application.salon.InMemorySalonUserRepository
+import ai.rojan.backend.domain.auth.PhoneNumber
+import ai.rojan.backend.domain.common.CustomerAlreadyExistsException
 import ai.rojan.backend.domain.common.PageRequest
+import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.customer.Customer
+import ai.rojan.backend.domain.customer.CustomerId
+import ai.rojan.backend.domain.customer.CustomerRepository
+import ai.rojan.backend.domain.customer.CustomerStatus
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.user.Email
@@ -96,4 +102,49 @@ class ResolveOrCreateSalonCustomerUseCaseTest {
     fun `rejects an unknown account`() {
         assertThrows<UserNotFoundException> { useCase.execute(command(userId = UserId.new())) }
     }
+
+    @Test
+    fun `on a lost create race, catches the conflict, re-reads, and returns the winning record`() {
+        val winner = Customer.create(salon.id, account.id, "Dana Client", null, Email("dana@example.com"), null)
+        val racing = LosingRaceCustomerRepository(winner)
+        val racingUseCase = ResolveOrCreateSalonCustomerUseCase(salonRepository, racing, userRepository)
+
+        val resolved = racingUseCase.execute(command())
+
+        assertEquals(winner.id, resolved.id)
+        assertEquals(1, racing.saveAttempts)
+        assertEquals(2, racing.lookups) // initial miss, then the post-conflict re-read
+    }
+}
+
+/**
+ * Simulates the concurrency window: the first `(salonId, userId)` lookup misses,
+ * `save` then fails as if another request already inserted the row (the DB
+ * `uq_customers_salon_user` index rejected this one), and the re-read finds the
+ * winner.
+ */
+private class LosingRaceCustomerRepository(private val winner: Customer) : CustomerRepository {
+    var lookups = 0
+    var saveAttempts = 0
+
+    override fun findBySalonIdAndUserId(salonId: SalonId, userId: UserId): Customer? {
+        lookups++
+        return if (lookups == 1) null else winner
+    }
+
+    override fun save(customer: Customer): Customer {
+        saveAttempts++
+        throw CustomerAlreadyExistsException.forLinkedAccount(customer.userId!!.value.toString())
+    }
+
+    override fun findById(id: CustomerId): Customer? = null
+    override fun existsBySalonIdAndPhoneNumber(salonId: SalonId, phoneNumber: PhoneNumber): Boolean = false
+    override fun findBySalonId(
+        salonId: SalonId,
+        pageRequest: PageRequest,
+        statusFilter: CustomerStatus?,
+        tagFilter: String?,
+        search: String?,
+        sortDirection: SortDirection,
+    ): PageResult<Customer> = PageResult(emptyList(), pageRequest.page, pageRequest.size, 0)
 }

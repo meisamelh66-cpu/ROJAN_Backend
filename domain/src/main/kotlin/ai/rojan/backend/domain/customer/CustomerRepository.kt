@@ -8,7 +8,16 @@ import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.user.UserId
 
 interface CustomerRepository {
+    /**
+     * Persists a new or existing customer. Throws
+     * [ai.rojan.backend.domain.common.CustomerAlreadyExistsException] when a
+     * concurrent write already created a record that collides on a
+     * same-salon uniqueness rule (`(salonId, userId)` or
+     * `(salonId, phoneNumber)`) - callers that resolve-or-create should
+     * catch it, re-read, and use the winner.
+     */
     fun save(customer: Customer): Customer
+
     fun findById(id: CustomerId): Customer?
 
     /**
