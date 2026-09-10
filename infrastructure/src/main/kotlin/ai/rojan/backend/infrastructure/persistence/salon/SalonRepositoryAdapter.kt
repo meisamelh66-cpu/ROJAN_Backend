@@ -73,10 +73,17 @@ class SalonRepositoryAdapter(
     override fun findAllActive(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon> {
         val direction = if (sortDirection == SortDirection.ASC) Sort.Direction.ASC else Sort.Direction.DESC
         val pageable = SpringPageRequest.of(pageRequest.page, pageRequest.size, Sort.by(direction, "name"))
+        // Customer-facing discovery: a salon is browsable only when it is both not soft-deleted
+        // (active) AND has finished onboarding (onboardingStatus == ACTIVE) - the same rule the
+        // public website surface (PublicSalonController) already enforces. A DRAFT salon can be
+        // fully managed by its owner but must not appear here, otherwise a customer can walk a
+        // booking flow that Salon.requireActivated() then rejects with 409 SALON_NOT_ACTIVE.
         val page = if (nameFilter.isNullOrBlank()) {
-            jpaRepository.findByActiveTrue(pageable)
+            jpaRepository.findByActiveTrueAndOnboardingStatus(SalonOnboardingStatus.ACTIVE, pageable)
         } else {
-            jpaRepository.findByActiveTrueAndNameContainingIgnoreCase(nameFilter, pageable)
+            jpaRepository.findByActiveTrueAndOnboardingStatusAndNameContainingIgnoreCase(
+                SalonOnboardingStatus.ACTIVE, nameFilter, pageable,
+            )
         }
         return PageResult(
             content = page.content.map { it.toDomain() },

@@ -10,6 +10,7 @@ import ai.rojan.backend.api.booking.BookingResponse
 import ai.rojan.backend.api.booking.CreateBookingForCustomerRequest
 import ai.rojan.backend.api.booking.CreateBookingRequest
 import ai.rojan.backend.api.booking.TimeSlotResponse
+import ai.rojan.backend.api.common.PagedResponse
 import ai.rojan.backend.api.publicsalon.PublicSalonResponse
 import ai.rojan.backend.api.salon.AssignMembershipRequest
 import ai.rojan.backend.api.salon.CreateSalonRequest
@@ -48,6 +49,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.client.TestRestTemplate
 import org.springframework.boot.test.web.server.LocalServerPort
+import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
@@ -368,6 +370,43 @@ class SalonActivationFlowIntegrationTest {
 
         assertEquals(HttpStatus.CONFLICT, response.statusCode)
         assertTrue(response.body!!.contains("SALON_NOT_ACTIVE"))
+    }
+
+    @Test
+    fun `a DRAFT salon is excluded from the customer directory GET api v1 salons, and appears once activated`() {
+        val (ownerToken, _) = registerAndLogin("Sara Ahmadi")
+        val name = "Directory Gate Salon ${System.nanoTime()}"
+        val fixture = setUpDraftButBookableSalon(ownerToken, name)
+        assertEquals(SalonOnboardingStatus.DRAFT, fixture.salon.onboardingStatus)
+
+        // Any authenticated user browses the same directory the customer app consumes.
+        val (customerToken, _, _) = otpRegisterAndLogin("Parisa Customer")
+        val listType = object : ParameterizedTypeReference<PagedResponse<SalonResponse>>() {}
+
+        val whileDraft = restTemplate.exchange(
+            url("/api/v1/salons?size=100&name=${name.substringAfterLast(' ')}"),
+            HttpMethod.GET, HttpEntity<Void>(bearer(customerToken)), listType,
+        )
+        assertEquals(HttpStatus.OK, whileDraft.statusCode)
+        assertTrue(
+            whileDraft.body!!.content.none { it.id == fixture.salon.id },
+            "a DRAFT salon must not appear in GET /api/v1/salons",
+        )
+
+        restTemplate.exchange(
+            url("/api/v1/salons/${fixture.salon.id}/activate"), HttpMethod.POST,
+            HttpEntity<Void>(bearer(ownerToken)), SalonResponse::class.java,
+        ).also { assertEquals(HttpStatus.OK, it.statusCode) }
+
+        val afterActivation = restTemplate.exchange(
+            url("/api/v1/salons?size=100&name=${name.substringAfterLast(' ')}"),
+            HttpMethod.GET, HttpEntity<Void>(bearer(customerToken)), listType,
+        )
+        assertEquals(HttpStatus.OK, afterActivation.statusCode)
+        assertTrue(
+            afterActivation.body!!.content.any { it.id == fixture.salon.id },
+            "an ACTIVE salon must appear in GET /api/v1/salons",
+        )
     }
 
     @Test

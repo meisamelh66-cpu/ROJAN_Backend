@@ -57,7 +57,7 @@ internal class InMemorySalonRepository : SalonRepository {
 
     override fun findAllActive(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon> {
         val filtered = store.values
-            .filter { it.active }
+            .filter { it.active && it.onboardingStatus == SalonOnboardingStatus.ACTIVE }
             .filter { nameFilter.isNullOrBlank() || it.name.contains(nameFilter, ignoreCase = true) }
             .sortedBy { it.name }
             .let { if (sortDirection == SortDirection.DESC) it.reversed() else it }

@@ -86,6 +86,11 @@ class SalonManagementFlowIntegrationTest {
         val salon = requireNotNull(createSalon.body)
         assertTrue(salon.active)
 
+        // The customer-facing directory (GET /api/v1/salons) only lists salons that have finished
+        // onboarding (onboardingStatus == ACTIVE) - a brand-new salon is still DRAFT, fully
+        // manageable by its owner but not yet publicly browsable. The owner still sees it via the
+        // detail endpoint (checked below). Activation and post-activation browsing are covered by
+        // SalonActivationFlowIntegrationTest.
         val listSalons = restTemplate.exchange(
             url("/api/v1/salons"),
             HttpMethod.GET,
@@ -93,7 +98,16 @@ class SalonManagementFlowIntegrationTest {
             object : ParameterizedTypeReference<PagedResponse<SalonResponse>>() {},
         )
         assertEquals(HttpStatus.OK, listSalons.statusCode)
-        assertTrue(listSalons.body!!.content.any { it.id == salon.id })
+        assertFalse(listSalons.body!!.content.any { it.id == salon.id })
+
+        val getOwnDraft = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)),
+            SalonResponse::class.java,
+        )
+        assertEquals(HttpStatus.OK, getOwnDraft.statusCode)
+        assertEquals(salon.id, getOwnDraft.body!!.id)
 
         val createBranch = restTemplate.exchange(
             url("/api/v1/salons/${salon.id}/branches"),

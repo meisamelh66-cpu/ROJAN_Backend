@@ -71,6 +71,28 @@ class ApiHardeningIntegrationTest {
         restTemplate.exchange(url("/api/v1/salons/$salonId/activate"), HttpMethod.POST, HttpEntity<Void>(bearer(ownerToken)), SalonResponse::class.java)
     }
 
+    /** Full activation from a bare salon: activation requires >=1 active service, >=1 active specialist, and >=1 working-hours day. */
+    private fun fullyActivateSalon(ownerToken: String, salonId: java.util.UUID) {
+        val category = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/salons/$salonId/categories"), HttpMethod.POST,
+                HttpEntity(CreateServiceCategoryRequest("Hair", null), bearer(ownerToken)),
+                ServiceCategoryResponse::class.java,
+            ).body,
+        )
+        restTemplate.exchange(
+            url("/api/v1/salons/$salonId/categories/${category.id}/services"), HttpMethod.POST,
+            HttpEntity(CreateServiceRequest("Haircut", null, 30, BigDecimal("25.00")), bearer(ownerToken)),
+            ServiceResponse::class.java,
+        )
+        restTemplate.exchange(
+            url("/api/v1/salons/$salonId/specialists"), HttpMethod.POST,
+            HttpEntity(CreateSpecialistRequest(null, "Browse Stylist", null, null, "+989120009000", "Stylist"), bearer(ownerToken)),
+            SpecialistResponse::class.java,
+        )
+        activateSalon(ownerToken, salonId)
+    }
+
     private fun registerAndLogin(role: UserRole): String {
         val email = "hardening.${System.nanoTime()}@example.com"
         restTemplate.postForEntity(
@@ -92,12 +114,17 @@ class ApiHardeningIntegrationTest {
         val suffix = System.nanoTime()
         val names = listOf("Aardvark Salon $suffix", "Bumblebee Salon $suffix", "Cactus Salon $suffix")
         names.forEach { name ->
-            restTemplate.exchange(
-                url("/api/v1/salons"),
-                HttpMethod.POST,
-                HttpEntity(CreateSalonRequest(name, null, "+1 555 0100", null, "1 Main St"), bearer(ownerToken)),
-                SalonResponse::class.java,
+            val created = requireNotNull(
+                restTemplate.exchange(
+                    url("/api/v1/salons"),
+                    HttpMethod.POST,
+                    HttpEntity(CreateSalonRequest(name, null, "+1 555 0100", null, "1 Main St"), bearer(ownerToken)),
+                    SalonResponse::class.java,
+                ).body,
             )
+            // GET /api/v1/salons only lists ACTIVE-onboarding salons - activate each so this test
+            // exercises real pagination/filter/sort, not the empty result a DRAFT salon now returns.
+            fullyActivateSalon(ownerToken, created.id)
         }
 
         val firstPage = restTemplate.exchange(
