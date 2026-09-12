@@ -1,6 +1,7 @@
 package ai.rojan.backend.domain.user
 
 import ai.rojan.backend.domain.auth.PhoneNumber
+import ai.rojan.backend.domain.media.MediaAssetId
 import java.time.Instant
 import java.util.UUID
 
@@ -39,6 +40,12 @@ data class Email(val value: String) {
  * one identity anchor exists" is enforced in both factories (and mirrored as
  * a DB-level CHECK constraint - see `V5__mobile_authentication.sql`), never
  * relaxed to "both may be null."
+ *
+ * [avatarMediaId] / [coverMediaId] (Phase 5A.2, User Profile Media)
+ * reference a USER-owned [ai.rojan.backend.domain.media.MediaAsset]; `null`
+ * means "not set." Mirrors the `salons.logo_media_id` / `cover_media_id`
+ * identity-slot pattern on [ai.rojan.backend.domain.salon.Salon] - the
+ * reference lives here, the media's URL/bytes do not.
  */
 class User private constructor(
     val id: UserId,
@@ -50,6 +57,8 @@ class User private constructor(
     active: Boolean,
     val createdAt: Instant,
     updatedAt: Instant,
+    avatarMediaId: MediaAssetId?,
+    coverMediaId: MediaAssetId?,
 ) {
     var email: Email? = email
         private set
@@ -69,9 +78,29 @@ class User private constructor(
     var updatedAt: Instant = updatedAt
         private set
 
+    var avatarMediaId: MediaAssetId? = avatarMediaId
+        private set
+
+    var coverMediaId: MediaAssetId? = coverMediaId
+        private set
+
     fun rename(newFullName: String) {
         require(newFullName.isNotBlank()) { "Full name must not be blank" }
         fullName = newFullName.trim()
+        updatedAt = Instant.now()
+    }
+
+    /** Point the avatar slot at an already-stored [MediaAssetId], or `null` to clear it. Phase 5A.2. */
+    fun assignAvatarMedia(mediaId: MediaAssetId?) {
+        if (avatarMediaId == mediaId) return
+        avatarMediaId = mediaId
+        updatedAt = Instant.now()
+    }
+
+    /** Point the profile-cover slot at an already-stored [MediaAssetId], or `null` to clear it. Phase 5A.2. */
+    fun assignCoverMedia(mediaId: MediaAssetId?) {
+        if (coverMediaId == mediaId) return
+        coverMediaId = mediaId
         updatedAt = Instant.now()
     }
 
@@ -107,6 +136,8 @@ class User private constructor(
                 active = true,
                 createdAt = now,
                 updatedAt = now,
+                avatarMediaId = null,
+                coverMediaId = null,
             )
         }
 
@@ -128,6 +159,8 @@ class User private constructor(
                 active = true,
                 createdAt = now,
                 updatedAt = now,
+                avatarMediaId = null,
+                coverMediaId = null,
             )
         }
 
@@ -141,6 +174,10 @@ class User private constructor(
             active: Boolean,
             createdAt: Instant,
             updatedAt: Instant,
-        ): User = User(id, email, passwordHash, phoneNumber, fullName, role, active, createdAt, updatedAt)
+            avatarMediaId: MediaAssetId? = null,
+            coverMediaId: MediaAssetId? = null,
+        ): User = User(
+            id, email, passwordHash, phoneNumber, fullName, role, active, createdAt, updatedAt, avatarMediaId, coverMediaId,
+        )
     }
 }

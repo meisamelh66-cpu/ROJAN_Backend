@@ -53,8 +53,11 @@ private const val MAX_DOCUMENT_BYTES = 20L * 1024 * 1024
  * Scoped to [PUBLIC_IMAGE_TYPES] only (`LOGO`/`COVER`/`GALLERY`/`PORTFOLIO`/
  * `SPECIALIST_PHOTO`/`SERVICE_IMAGE`) - `DOCUMENT` uploads (PDF or
  * photographed) are Document Archive's own concern, not extended here.
+ * `internal`, not `private` (Phase 5A.2): reused as-is by
+ * `UserProfileMediaUseCases.kt` for AVATAR/PROFILE_COVER uploads - the
+ * same reasoning, not a second sniffer.
  */
-private object ImageContentSniffer {
+internal object ImageContentSniffer {
 
     /** The only extensions [UploadMediaUseCase] will ever write to disk for a public image - never derived from client input. */
     val EXTENSIONS_BY_MIME_TYPE = mapOf(

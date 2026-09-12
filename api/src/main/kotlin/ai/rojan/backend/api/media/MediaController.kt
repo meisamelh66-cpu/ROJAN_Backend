@@ -159,7 +159,10 @@ class MediaController(
 
     private fun MediaAsset.toResponse() = MediaAssetResponse(
         id = id.value,
-        salonId = salonId.value,
+        // Every asset this controller handles is SALON-owned - salonId is
+        // non-null here (Phase 5A.2 made the field nullable for USER media,
+        // which is served only via UserController).
+        salonId = requireNotNull(salonId) { "Salon media asset ${id.value} has no salonId" }.value,
         mediaType = mediaType,
         originalName = originalName,
         mimeType = mimeType,

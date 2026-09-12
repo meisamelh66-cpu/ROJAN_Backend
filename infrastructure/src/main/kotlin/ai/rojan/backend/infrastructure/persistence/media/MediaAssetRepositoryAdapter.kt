@@ -26,7 +26,7 @@ class MediaAssetRepositoryAdapter(
             }
             ?: MediaAssetJpaEntity(
                 id = mediaAsset.id.value,
-                salonId = mediaAsset.salonId.value,
+                salonId = mediaAsset.salonId?.value,
                 mediaType = mediaAsset.mediaType,
                 storageKey = mediaAsset.storageKey,
                 originalName = mediaAsset.originalName,
@@ -36,6 +36,7 @@ class MediaAssetRepositoryAdapter(
                 uploadedBy = mediaAsset.uploadedBy.value,
                 targetId = mediaAsset.targetId,
                 displayOrder = mediaAsset.displayOrder,
+                userId = mediaAsset.userId?.value,
             )
         return jpaRepository.save(entity).toDomain()
     }
@@ -50,9 +51,19 @@ class MediaAssetRepositoryAdapter(
             .map { it.toDomain() }
             .sortedWith(compareBy({ it.displayOrder }, { it.createdAt }))
 
+    override fun findByIdAndUserId(id: MediaAssetId, userId: UserId): MediaAsset? =
+        jpaRepository.findByIdAndUserId(id.value, userId.value)?.toDomain()
+
+    override fun findByUserIdAndMediaType(userId: UserId, mediaType: MediaType): List<MediaAsset> =
+        jpaRepository.findByUserIdAndMediaType(userId.value, mediaType).map { it.toDomain() }
+
+    override fun delete(id: MediaAssetId) {
+        jpaRepository.deleteById(id.value)
+    }
+
     private fun MediaAssetJpaEntity.toDomain(): MediaAsset = MediaAsset.reconstitute(
         id = MediaAssetId(id),
-        salonId = SalonId(salonId),
+        salonId = salonId?.let { SalonId(it) },
         mediaType = mediaType,
         storageKey = storageKey,
         originalName = originalName,
@@ -64,5 +75,6 @@ class MediaAssetRepositoryAdapter(
         displayOrder = displayOrder,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
+        userId = userId?.let { UserId(it) },
     )
 }

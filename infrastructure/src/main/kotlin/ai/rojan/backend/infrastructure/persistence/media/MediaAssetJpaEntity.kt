@@ -20,6 +20,9 @@ import java.util.UUID
  * Deliberately separate from the domain entity so JPA/Hibernate concerns
  * never leak into the domain layer; [MediaAssetRepositoryAdapter] maps
  * between the two.
+ *
+ * [salonId] / [userId] (Phase 5A.2): exactly one is set, mirrored by
+ * `chk_media_assets_exactly_one_owner` in `V24__user_profile_media.sql`.
  */
 @Entity
 @Table(name = "media_assets")
@@ -28,8 +31,8 @@ class MediaAssetJpaEntity(
     @Id
     val id: UUID,
 
-    @Column(name = "salon_id", nullable = false)
-    val salonId: UUID,
+    @Column(name = "salon_id")
+    val salonId: UUID?,
 
     @Enumerated(EnumType.STRING)
     @Column(name = "media_type", nullable = false, length = 16)
@@ -59,6 +62,9 @@ class MediaAssetJpaEntity(
 
     @Column(name = "display_order", nullable = false)
     var displayOrder: Int = 0,
+
+    @Column(name = "user_id")
+    val userId: UUID? = null,
 ) {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

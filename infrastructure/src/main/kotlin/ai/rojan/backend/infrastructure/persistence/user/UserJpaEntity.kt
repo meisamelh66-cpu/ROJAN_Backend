@@ -53,6 +53,14 @@ class UserJpaEntity(
 
     @Column(nullable = false)
     var active: Boolean,
+
+    // Phase 5A.2, User Profile Media: identity-slot references into
+    // media_assets (mirrors salons.logo_media_id / cover_media_id).
+    @Column(name = "avatar_media_id")
+    var avatarMediaId: UUID? = null,
+
+    @Column(name = "cover_media_id")
+    var coverMediaId: UUID? = null,
 ) {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

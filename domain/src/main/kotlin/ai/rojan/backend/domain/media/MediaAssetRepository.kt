@@ -1,6 +1,7 @@
 package ai.rojan.backend.domain.media
 
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.user.UserId
 import java.util.UUID
 
 interface MediaAssetRepository {
@@ -20,4 +21,25 @@ interface MediaAssetRepository {
      * never assigns a target to that type).
      */
     fun findBySalonId(salonId: SalonId, mediaType: MediaType? = null, targetId: UUID? = null): List<MediaAsset>
+
+    /** Phase 5A.2 - the user-owned counterpart to [findByIdAndSalonId]: tenant-scoped by construction to one user, never an unscoped lookup. */
+    fun findByIdAndUserId(id: MediaAssetId, userId: UserId): MediaAsset?
+
+    /**
+     * Phase 5A.2 - a user's media of one type (`AVATAR` / `PROFILE_COVER`).
+     * The "replace previous safely" path uses this to find every prior
+     * asset of the type before removing it, not just the one [ai.rojan.backend.domain.user.User]
+     * currently references (a defensive cleanup against any past orphaned
+     * row).
+     */
+    fun findByUserIdAndMediaType(userId: UserId, mediaType: MediaType): List<MediaAsset>
+
+    /**
+     * Genuine hard delete - never used by the salon media flow (which
+     * soft-deletes via [MediaAsset.delete] + [save]). Phase 5A.2 uses this
+     * exclusively: personal media is never archived and never left as a
+     * queryable soft-deleted row - a user who replaces their photo expects
+     * the old one actually gone.
+     */
+    fun delete(id: MediaAssetId)
 }

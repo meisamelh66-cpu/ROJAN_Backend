@@ -62,6 +62,15 @@ data class UserResponse(
 
     @field:Schema(example = "CUSTOMER")
     val role: UserRole,
+
+    @field:Schema(
+        nullable = true,
+        description = "Resolved URL of the user's avatar image, or null if not set (Phase 5A.2, User Profile Media). Populated by GET /api/v1/users/me and the /me/media endpoints; auth responses leave it null.",
+    )
+    val avatarUrl: String? = null,
+
+    @field:Schema(nullable = true, description = "Resolved URL of the user's profile-cover image, or null if not set. Same population rules as avatarUrl.")
+    val coverUrl: String? = null,
 )
 
 data class AuthResponse(

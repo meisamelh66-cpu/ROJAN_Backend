@@ -1,6 +1,7 @@
 package ai.rojan.backend.infrastructure.persistence.user
 
 import ai.rojan.backend.domain.auth.PhoneNumber
+import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.User
 import ai.rojan.backend.domain.user.UserId
@@ -23,6 +24,8 @@ class UserRepositoryAdapter(
                 fullName = user.fullName
                 role = user.role
                 active = user.active
+                avatarMediaId = user.avatarMediaId?.value
+                coverMediaId = user.coverMediaId?.value
             }
             ?: UserJpaEntity(
                 id = user.id.value,
@@ -32,6 +35,8 @@ class UserRepositoryAdapter(
                 fullName = user.fullName,
                 role = user.role,
                 active = user.active,
+                avatarMediaId = user.avatarMediaId?.value,
+                coverMediaId = user.coverMediaId?.value,
             )
         return jpaRepository.save(entity).toDomain()
     }
@@ -61,5 +66,7 @@ class UserRepositoryAdapter(
         active = active,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
+        avatarMediaId = avatarMediaId?.let { MediaAssetId(it) },
+        coverMediaId = coverMediaId?.let { MediaAssetId(it) },
     )
 }
