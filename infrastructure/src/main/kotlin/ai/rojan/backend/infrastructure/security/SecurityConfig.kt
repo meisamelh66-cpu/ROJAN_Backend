@@ -73,6 +73,17 @@ class SecurityConfig(
                     // doc comment, docker-compose.prod.yml's nginx service) - this only matters
                     // for a local/dev topology (no Nginx in front) where the JVM is hit directly.
                     .requestMatchers(HttpMethod.GET, "/media/salons/*/media/**").permitAll()
+                    // Customer Profile Personalization Phase 5A.2: same public-read policy as
+                    // salon media above, mirrored for user avatar/cover images - real shape is
+                    // "users/{userId}/media/{uuid}.{ext}" (UploadUserAvatarUseCase /
+                    // UploadUserCoverUseCase, both in UserProfileMediaUseCases.kt). Users have no
+                    // "documents"-equivalent private media segment to accidentally expose, so this
+                    // is a direct analog of the salon rule, not a broader pattern. Without this,
+                    // UserController's own resolved avatarUrl/coverUrl (returned to every
+                    // authenticated client) 401s on GET despite being intended as public,
+                    // semi-public-by-nature URLs - confirmed live: salon media GETs 200/404,
+                    // user media GETs 401 AUTH_UNAUTHORIZED for the identical request shape.
+                    .requestMatchers(HttpMethod.GET, "/media/users/*/media/**").permitAll()
                     .anyRequest().authenticated()
             }
             .addFilterBefore(

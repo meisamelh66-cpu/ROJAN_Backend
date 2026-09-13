@@ -85,4 +85,45 @@ class PublicMediaAccessIntegrationTest {
 
         assertNotEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
     }
+
+    // Customer Profile Personalization Phase 5A.2: the analogous regression for user avatar/cover
+    // media - live-confirmed (2026-09-13) an anonymous GET on a real user's avatarUrl returned 401
+    // AUTH_UNAUTHORIZED, because /media/users/** had no SecurityConfig rule either, same root cause
+    // as the salon case above. Fix mirrors the salon rule exactly: GET /media/users/{userId}/media/**
+    // (the real shape UploadUserAvatarUseCase/UploadUserCoverUseCase write to, confirmed by direct
+    // source read of UserProfileMediaUseCases.kt) is now permitAll; nothing else changes.
+
+    @Test
+    fun `an anonymous GET to a real user's public avatar media path is never blocked by security (401)`() {
+        val response = restTemplate.getForEntity(
+            url("/media/users/11111111-1111-1111-1111-111111111111/media/some-real-file.png"),
+            String::class.java,
+        )
+
+        // Same reasoning as the salon case: InMemoryMediaStorage backs this profile, so no real
+        // file exists here - 404 is expected. Only a 401/403 would mean security still blocks it.
+        assertNotEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
+        assertNotEquals(HttpStatus.FORBIDDEN, response.statusCode)
+    }
+
+    @Test
+    fun `only GET is permitted on the public user media path - the upload endpoint still requires real authentication`() {
+        val response = restTemplate.postForEntity(
+            url("/api/v1/users/me/media/avatar"),
+            null,
+            String::class.java,
+        )
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
+    }
+
+    @Test
+    fun `a real userId with no real media at all still resolves past security the same way - the rule matches on real URL shape, never on whether the asset exists`() {
+        val response = restTemplate.exchange(
+            url("/media/users/99999999-9999-9999-9999-999999999999/media/nonexistent.png"),
+            HttpMethod.GET, null, String::class.java,
+        )
+
+        assertNotEquals(HttpStatus.UNAUTHORIZED, response.statusCode)
+    }
 }
