@@ -41,7 +41,13 @@ class SalonPermissionResolver(
         }
     }
 
-    /** For a read-shaped action any of several permissions should satisfy (e.g. VIEW_DOCUMENTS or the stronger MANAGE_DOCUMENTS) - avoids every such call site re-deriving [resolve] itself. */
+    /**
+     * Like [require], but passes if the caller holds at least one of [permissions] - e.g. a
+     * narrow Reception permission (like [Permission.VIEW_CUSTOMER_IDENTITY]) or the broader CRM
+     * one it stands in for, or a read-shaped action like [Permission.VIEW_DOCUMENTS] that the
+     * stronger [Permission.MANAGE_DOCUMENTS] should also satisfy - avoids every such call site
+     * re-deriving [resolve] itself.
+     */
     fun requireAny(salonId: SalonId, callerId: UserId, vararg permissions: Permission) {
         val granted = resolve(salonId, callerId)
         if (permissions.none { it in granted }) {

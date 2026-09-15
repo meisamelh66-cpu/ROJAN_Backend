@@ -10,6 +10,8 @@ import ai.rojan.backend.application.customer.AddCustomerTagCommand
 import ai.rojan.backend.application.customer.AddCustomerTagUseCase
 import ai.rojan.backend.application.customer.CalculateCustomerLifetimeValueUseCase
 import ai.rojan.backend.application.customer.CreateCustomerCommand
+import ai.rojan.backend.application.customer.CreateCustomerIdentityCommand
+import ai.rojan.backend.application.customer.CreateCustomerIdentityUseCase
 import ai.rojan.backend.application.customer.CreateCustomerUseCase
 import ai.rojan.backend.application.customer.GetCustomerBookingsCommand
 import ai.rojan.backend.application.customer.GetCustomerBookingsUseCase
@@ -59,11 +61,20 @@ import java.math.BigDecimal
 import java.util.UUID
 
 /**
- * Every endpoint here is owner-only, full stop - unlike Booking's
- * "customer or owner" dual-access model, a `User` who happens to also be a
- * [Customer]'s linked account has no read access to their own CRM record
- * via these endpoints (a note like "chargeback risk" must never be
- * customer-visible). See `ROJAN_Customer_CRM_Architecture_Plan_v1.md` §4.
+ * Every endpoint here requiring [Permission.VIEW_CRM]/[Permission.MANAGE_CRM]
+ * is Owner/Manager-only - unlike Booking's "customer or owner" dual-access
+ * model, a `User` who happens to also be a [Customer]'s linked account has
+ * no read access to their own CRM record via these endpoints (a note like
+ * "chargeback risk" must never be customer-visible). See
+ * `ROJAN_Customer_CRM_Architecture_Plan_v1.md` §4.
+ *
+ * [searchIdentity]/[createIdentity] are the exception, per
+ * `ROJAN_Reception_Permission_Contract_Update_ADR_v1.md` -
+ * [Permission.VIEW_CUSTOMER_IDENTITY]/[Permission.CREATE_CUSTOMER_IDENTITY]
+ * additionally admit `RECEPTIONIST`, but only through the structurally
+ * narrower [CustomerIdentityResponse]/[CreateCustomerIdentityRequest] -
+ * never the full [CustomerResponse]/[CreateCustomerRequest] shapes this
+ * class's other endpoints use.
  */
 @RestController
 @RequestMapping("/api/v1/salons/{salonId}/customers")
@@ -76,6 +87,7 @@ class CustomerController(
     private val bookingRepository: BookingRepository,
     private val serviceRepository: ServiceRepository,
     private val createCustomerUseCase: CreateCustomerUseCase,
+    private val createCustomerIdentityUseCase: CreateCustomerIdentityUseCase,
     private val updateCustomerUseCase: UpdateCustomerUseCase,
     private val addCustomerNoteUseCase: AddCustomerNoteUseCase,
     private val addCustomerTagUseCase: AddCustomerTagUseCase,
@@ -130,6 +142,22 @@ class CustomerController(
                 tags = tagsByCustomerId[customer.id].orEmpty().map { it.label },
             )
         }
+    }
+
+    @GetMapping("/identity")
+    @Operation(summary = "Search a salon's customers by identity only - name/phone/email, no CRM data (Reception-eligible)")
+    fun searchIdentity(
+        @PathVariable salonId: UUID,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(required = false) search: String?,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): PagedResponse<CustomerIdentityResponse> {
+        val callerId = currentUserResolver.resolve(principal)
+        val salon = salonRepository.findById(SalonId(salonId)) ?: throw SalonNotFoundException(salonId.toString())
+        salonPermissionResolver.requireAny(salon.id, callerId, Permission.VIEW_CUSTOMER_IDENTITY, Permission.VIEW_CRM)
+        val result = customerRepository.findBySalonId(salon.id, PageRequest(page, size), null, null, search, SortDirection.ASC)
+        return result.toPagedResponse { it.toIdentityResponse() }
     }
 
     @GetMapping("/{customerId}")
@@ -231,6 +259,27 @@ class CustomerController(
             ),
         )
         return customer.toResponse()
+    }
+
+    @PostMapping("/identity")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Register a walk-in customer for booking purposes - fullName/phoneNumber/email only, no CRM fields (Reception-eligible)")
+    fun createIdentity(
+        @PathVariable salonId: UUID,
+        @Valid @RequestBody request: CreateCustomerIdentityRequest,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): CustomerIdentityResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        val customer = createCustomerIdentityUseCase.execute(
+            CreateCustomerIdentityCommand(
+                salonId = SalonId(salonId),
+                callerId = callerId,
+                fullName = request.fullName,
+                phoneNumber = request.phoneNumber,
+                email = request.email,
+            ),
+        )
+        return customer.toIdentityResponse()
     }
 
     @PatchMapping("/{customerId}")
@@ -341,6 +390,15 @@ class CustomerController(
         active = active,
         createdAt = createdAt,
         updatedAt = updatedAt,
+    )
+
+    private fun Customer.toIdentityResponse(): CustomerIdentityResponse = CustomerIdentityResponse(
+        id = id.value,
+        salonId = salonId.value,
+        fullName = fullName,
+        phoneNumber = phoneNumber?.value,
+        email = email?.value,
+        active = active,
     )
 
     private fun Booking.toBookingResponse() = BookingResponse(

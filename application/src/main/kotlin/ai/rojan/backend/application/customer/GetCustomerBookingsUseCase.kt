@@ -47,7 +47,7 @@ class GetCustomerBookingsUseCase(
             ?: throw CustomerNotFoundException(command.customerId.value.toString())
         val salon = salonRepository.findById(customer.salonId)
             ?: throw SalonNotFoundException(customer.salonId.value.toString())
-        salonPermissionResolver.require(salon.id, command.callerId, Permission.VIEW_CRM)
+        salonPermissionResolver.requireAny(salon.id, command.callerId, Permission.VIEW_CRM, Permission.VIEW_CUSTOMER_BOOKING_HISTORY)
 
         val userId = customer.userId
             ?: return PageResult(content = emptyList(), page = command.pageRequest.page, size = command.pageRequest.size, totalElements = 0)

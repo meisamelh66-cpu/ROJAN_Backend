@@ -12,6 +12,7 @@ import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.customer.Customer
 import ai.rojan.backend.domain.salon.Salon
+import ai.rojan.backend.domain.salon.SalonRole
 import ai.rojan.backend.domain.salon.ServiceId
 import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.user.UserId
@@ -102,5 +103,19 @@ class GetCustomerBookingsUseCaseTest {
         assertThrows<SalonAccessDeniedException> {
             useCase.execute(GetCustomerBookingsCommand(customer.id, UserId.new(), PageRequest(0, 20), null, SortDirection.DESC))
         }
+    }
+
+    @Test
+    fun `receptionist can view a customer's booking history via VIEW_CUSTOMER_BOOKING_HISTORY, without VIEW_CRM`() {
+        val receptionistId = UserId.new()
+        membershipRepository.assign(salon.id, receptionistId, SalonRole.RECEPTIONIST)
+        val customer = Customer.create(salon.id, null, "Jane Doe", PhoneNumber("+989123456789"), null, null)
+            .also { customerRepository.save(it) }
+
+        val result = useCase.execute(
+            GetCustomerBookingsCommand(customer.id, receptionistId, PageRequest(0, 20), null, SortDirection.DESC),
+        )
+
+        assertTrue(result.content.isEmpty())
     }
 }

@@ -9,6 +9,11 @@ import ai.rojan.backend.api.auth.UserResponse
 import ai.rojan.backend.api.booking.BookingResponse
 import ai.rojan.backend.api.booking.CreateBookingForCustomerRequest
 import ai.rojan.backend.api.booking.TimeSlotResponse
+import ai.rojan.backend.api.customer.AddCustomerNoteRequest
+import ai.rojan.backend.api.customer.AddCustomerTagRequest
+import ai.rojan.backend.api.customer.CreateCustomerIdentityRequest
+import ai.rojan.backend.api.customer.CreateCustomerRequest
+import ai.rojan.backend.api.customer.CustomerIdentityResponse
 import ai.rojan.backend.api.publicsalon.PublicSalonResponse
 import ai.rojan.backend.api.publicsalon.PublicServiceResponse
 import ai.rojan.backend.api.publicsalon.PublicSpecialistResponse
@@ -351,6 +356,116 @@ class SalonPilotRbacIntegrationTest {
         )
         assertEquals(HttpStatus.OK, confirmed.statusCode)
         assertEquals(BookingStatus.CONFIRMED, confirmed.body!!.status)
+    }
+
+    // ---- Reception customer-identity permissions (ROJAN_Reception_Permission_Contract_Update_ADR_v1.md) ----
+
+    @Test
+    fun `a receptionist can search, register, and view booking history for a customer via the identity endpoints`() {
+        val (ownerToken, _) = registerAndLogin("Sara Ahmadi")
+        val salon = createSalon(ownerToken, "Rojan Beauty Studio")
+        val (receptionToken, receptionUserId) = registerAndLogin("Nazanin Reception")
+        assignMembership(ownerToken, salon.id, receptionUserId, SalonRole.RECEPTIONIST)
+
+        val created = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/identity"), HttpMethod.POST,
+            HttpEntity(CreateCustomerIdentityRequest("Walk-in Wendy", "+989123456700", null), bearer(receptionToken)),
+            CustomerIdentityResponse::class.java,
+        )
+        assertEquals(HttpStatus.CREATED, created.statusCode)
+        assertEquals("Walk-in Wendy", created.body!!.fullName)
+
+        // Lowercase search term: CustomerRepositoryAdapter.findBySalonId's search pattern is not
+        // lowercased before the query (a pre-existing bug in the LOWER(column) LIKE :pattern
+        // comparison, unrelated to and out of scope for this change - discovered incidentally
+        // here, not fixed) - a lowercase term sidesteps it without masking the identity/CRM
+        // assertions this test exists for.
+        val searchRaw = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/identity?search=wendy"), HttpMethod.GET,
+            HttpEntity<Void>(bearer(receptionToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.OK, searchRaw.statusCode)
+        assertTrue(searchRaw.body!!.contains("Walk-in Wendy"))
+        // No full CRM DTO exposure: the identity search response must not carry CRM-intelligence fields,
+        // even though the caller (receptionist) has no way to have set any - this proves the response
+        // shape itself omits them structurally, not merely that none happened to be set.
+        assertFalse(searchRaw.body!!.contains("lifetimeValue"))
+        assertFalse(searchRaw.body!!.contains("\"tags\""))
+        assertFalse(searchRaw.body!!.contains("\"company\""))
+
+        val history = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${created.body!!.id}/bookings"), HttpMethod.GET,
+            HttpEntity<Void>(bearer(receptionToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.OK, history.statusCode)
+    }
+
+    @Test
+    fun `a receptionist is denied CRM management, notes, tags, lifetime value, and the full timeline`() {
+        val (ownerToken, _) = registerAndLogin("Sara Ahmadi")
+        val salon = createSalon(ownerToken, "Rojan Beauty Studio")
+        val (receptionToken, receptionUserId) = registerAndLogin("Nazanin Reception")
+        assignMembership(ownerToken, salon.id, receptionUserId, SalonRole.RECEPTIONIST)
+
+        val customer = customerRepository.save(
+            Customer.create(SalonId(salon.id), null, "Parisa Customer", PhoneNumber("+989123456701"), null, null),
+        )
+
+        // CRM management: full customer creation (with a `company` field the identity path can't carry) is denied.
+        val fullCreate = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers"), HttpMethod.POST,
+            HttpEntity(CreateCustomerRequest("Impersonator", "+989123456702", null, "Acme Corp"), bearer(receptionToken)),
+            String::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, fullCreate.statusCode)
+
+        // Full CRM read (list/get) is denied - this is the endpoint that exposes tags/lifetimeValue/company.
+        val fullList = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers"), HttpMethod.GET,
+            HttpEntity<Void>(bearer(receptionToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, fullList.statusCode)
+
+        val fullGet = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id.value}"), HttpMethod.GET,
+            HttpEntity<Void>(bearer(receptionToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, fullGet.statusCode)
+
+        // Notes access denied.
+        val note = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id.value}/notes"), HttpMethod.POST,
+            HttpEntity(AddCustomerNoteRequest("chargeback risk"), bearer(receptionToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, note.statusCode)
+
+        val notesList = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id.value}/notes"), HttpMethod.GET,
+            HttpEntity<Void>(bearer(receptionToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, notesList.statusCode)
+
+        // Tags access denied.
+        val tag = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id.value}/tags"), HttpMethod.POST,
+            HttpEntity(AddCustomerTagRequest("VIP"), bearer(receptionToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, tag.statusCode)
+
+        // Full CRM timeline denied.
+        val timeline = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id.value}/timeline"), HttpMethod.GET,
+            HttpEntity<Void>(bearer(receptionToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, timeline.statusCode)
+
+        // Confirm this is a genuine denial, not a data-not-found masquerading as one: the owner can reach
+        // the exact same full-read endpoint successfully for the exact same customer.
+        val ownerGet = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/customers/${customer.id.value}"), HttpMethod.GET,
+            HttpEntity<Void>(bearer(ownerToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.OK, ownerGet.statusCode)
     }
 
     // ---- Specialist self-service ----

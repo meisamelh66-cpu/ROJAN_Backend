@@ -61,7 +61,7 @@ class ResolveMySalonAccessUseCaseTest {
 
         assertEquals(1, access.memberships.size)
         assertEquals(SalonRole.RECEPTIONIST, access.memberships[0].membership.role)
-        assertEquals(setOf(Permission.MANAGE_BOOKINGS), access.memberships[0].permissions)
+        assertEquals(SalonRole.RECEPTIONIST.permissions(), access.memberships[0].permissions)
     }
 
     @Test
