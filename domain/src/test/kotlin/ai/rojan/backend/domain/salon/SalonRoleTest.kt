@@ -37,6 +37,9 @@ class SalonRoleTest {
     fun `manager retains full CRM access plus the new customer-identity permissions explicitly`() {
         val permissions = SalonRole.MANAGER.permissions()
 
+        // MANAGE_MEDIA is asserted here too: it landed on release/production-v24 independently of
+        // this ADR's customer-identity permissions (sprint1/rbac-branch-reconciliation merge) -
+        // both are real, both apply to MANAGER, and this test's job is the manager's full set.
         assertEquals(
             setOf(
                 Permission.MANAGE_CATALOG,
@@ -45,6 +48,7 @@ class SalonRoleTest {
                 Permission.VIEW_CRM,
                 Permission.MANAGE_CRM,
                 Permission.MANAGE_BOOKINGS,
+                Permission.MANAGE_MEDIA,
                 Permission.VIEW_CUSTOMER_IDENTITY,
                 Permission.CREATE_CUSTOMER_IDENTITY,
                 Permission.VIEW_CUSTOMER_BOOKING_HISTORY,
