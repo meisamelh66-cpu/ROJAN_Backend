@@ -28,6 +28,9 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
       - name: Gradle build
         run: ./gradlew build -x test --no-daemon --console=plain
 
