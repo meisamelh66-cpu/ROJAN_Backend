@@ -1,0 +1,57 @@
+name: Backend CI (baseline)
+
+# Sprint 1, Task 3 (Backend CI/CD Foundation): first run is deliberately
+# non-blocking - it only triggers on this branch and on manual dispatch, not
+# on pull_request/push against release/production-v24 or main. Nothing
+# currently depends on this workflow passing. Converting it into a real
+# release gate (adding it to branch protection as a required check) is a
+# separate, later decision - see the ROFI Sprint 1 report for this task.
+#
+# Pipeline: Checkout -> JDK Setup -> Gradle Build -> Test -> Report.
+
+on:
+  push:
+    branches:
+      - sprint1/backend-ci-baseline
+  workflow_dispatch: {}
+
+jobs:
+  build-test-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Gradle build
+        run: ./gradlew build -x test --no-daemon --console=plain
+
+      - name: Gradle test
+        run: ./gradlew test --no-daemon --console=plain
+
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-test-results
+          path: '**/build/test-results/test/*.xml'
+          retention-days: 14
+
+      - name: Summarize results
+        if: always()
+        run: |
+          echo "## Backend CI (baseline) - test summary" >> "$GITHUB_STEP_SUMMARY"
+          total=0
+          failed=0
+          for f in $(find . -path '*/build/test-results/test/*.xml' 2>/dev/null); do
+            t=$(grep -o 'tests="[0-9]*"' "$f" | head -1 | grep -o '[0-9]*')
+            fl=$(grep -o 'failures="[0-9]*"' "$f" | head -1 | grep -o '[0-9]*')
+            total=$((total + ${t:-0}))
+            failed=$((failed + ${fl:-0}))
+          done
+          echo "Total: $total, Failed: $failed" >> "$GITHUB_STEP_SUMMARY"
