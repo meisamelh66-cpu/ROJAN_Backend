@@ -4,6 +4,8 @@ import ai.rojan.backend.api.common.ApiError
 import ai.rojan.backend.application.auth.AuthenticateUserCommand
 import ai.rojan.backend.application.auth.AuthenticateUserUseCase
 import ai.rojan.backend.application.auth.AuthenticationResult
+import ai.rojan.backend.application.auth.LogoutCommand
+import ai.rojan.backend.application.auth.LogoutUseCase
 import ai.rojan.backend.application.auth.RefreshTokenCommand
 import ai.rojan.backend.application.auth.RefreshTokenUseCase
 import ai.rojan.backend.application.auth.RegisterUserCommand
@@ -38,6 +40,7 @@ class AuthController(
     private val refreshTokenUseCase: RefreshTokenUseCase,
     private val requestOtpUseCase: RequestOtpUseCase,
     private val verifyOtpUseCase: VerifyOtpUseCase,
+    private val logoutUseCase: LogoutUseCase,
 ) {
 
     @PostMapping("/register")
@@ -176,6 +179,16 @@ class AuthController(
             VerifyOtpCommand(phoneNumber = request.phoneNumber, code = request.code, fullName = request.fullName),
         )
         return result.toResponse()
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Revoke a refresh token's session - it and every other token in the same refresh-token family become invalid immediately")
+    @ApiResponses(
+        ApiResponse(responseCode = "204", description = "Session revoked (or the token was already invalid - logout is idempotent either way)"),
+    )
+    fun logout(@Valid @RequestBody request: RefreshRequest) {
+        logoutUseCase.execute(LogoutCommand(request.refreshToken))
     }
 
     private fun User.toResponse() = UserResponse(

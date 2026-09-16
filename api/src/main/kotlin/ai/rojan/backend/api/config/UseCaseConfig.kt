@@ -2,6 +2,7 @@ package ai.rojan.backend.api.config
 
 import ai.rojan.backend.application.auth.AuthRateLimitPolicy
 import ai.rojan.backend.application.auth.AuthenticateUserUseCase
+import ai.rojan.backend.application.auth.LogoutUseCase
 import ai.rojan.backend.application.auth.OtpPolicy
 import ai.rojan.backend.application.auth.RefreshTokenUseCase
 import ai.rojan.backend.application.auth.RegisterUserUseCase
@@ -9,6 +10,7 @@ import ai.rojan.backend.application.auth.RequestOtpUseCase
 import ai.rojan.backend.application.auth.VerifyOtpUseCase
 import ai.rojan.backend.application.port.PasswordEncoderPort
 import ai.rojan.backend.application.port.RateLimiterPort
+import ai.rojan.backend.application.port.RefreshTokenStorePort
 import ai.rojan.backend.application.port.SmsProviderPort
 import ai.rojan.backend.application.port.TokenProviderPort
 import ai.rojan.backend.domain.auth.OtpRepository
@@ -39,7 +41,8 @@ class UseCaseConfig {
         tokenProvider: TokenProviderPort,
         rateLimiter: RateLimiterPort,
         authRateLimitPolicy: AuthRateLimitPolicy,
-    ) = AuthenticateUserUseCase(userRepository, passwordEncoder, tokenProvider, rateLimiter, authRateLimitPolicy)
+        refreshTokenStore: RefreshTokenStorePort,
+    ) = AuthenticateUserUseCase(userRepository, passwordEncoder, tokenProvider, rateLimiter, authRateLimitPolicy, refreshTokenStore)
 
     @Bean
     fun refreshTokenUseCase(
@@ -47,7 +50,8 @@ class UseCaseConfig {
         tokenProvider: TokenProviderPort,
         rateLimiter: RateLimiterPort,
         authRateLimitPolicy: AuthRateLimitPolicy,
-    ) = RefreshTokenUseCase(userRepository, tokenProvider, rateLimiter, authRateLimitPolicy)
+        refreshTokenStore: RefreshTokenStorePort,
+    ) = RefreshTokenUseCase(userRepository, tokenProvider, rateLimiter, authRateLimitPolicy, refreshTokenStore)
 
     @Bean
     fun requestOtpUseCase(
@@ -64,5 +68,12 @@ class UseCaseConfig {
         tokenProvider: TokenProviderPort,
         rateLimiter: RateLimiterPort,
         otpPolicy: OtpPolicy,
-    ) = VerifyOtpUseCase(otpRepository, userRepository, tokenProvider, rateLimiter, otpPolicy)
+        refreshTokenStore: RefreshTokenStorePort,
+    ) = VerifyOtpUseCase(otpRepository, userRepository, tokenProvider, rateLimiter, otpPolicy, refreshTokenStore)
+
+    @Bean
+    fun logoutUseCase(
+        tokenProvider: TokenProviderPort,
+        refreshTokenStore: RefreshTokenStorePort,
+    ) = LogoutUseCase(tokenProvider, refreshTokenStore)
 }

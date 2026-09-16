@@ -36,13 +36,13 @@ private class MatchingPasswordEncoder(private val correctRawPassword: String) : 
 
 private class FakeTokenProvider : TokenProviderPort {
     override fun generateAccessToken(user: User) =
-        IssuedToken("access-${user.id.value}", Instant.now().plusSeconds(900))
+        IssuedToken("access-${user.id.value}", Instant.now().plusSeconds(900), jti = "access-jti-${user.id.value}")
 
-    override fun generateRefreshToken(user: User) =
-        IssuedToken("refresh-${user.id.value}", Instant.now().plusSeconds(2_592_000))
+    override fun generateRefreshToken(user: User, familyId: String) =
+        IssuedToken("refresh-${user.id.value}", Instant.now().plusSeconds(2_592_000), jti = "refresh-jti-${user.id.value}")
 
     override fun validateAndExtractSubject(token: String) =
-        TokenSubject(userId = token.substringAfter("-"), email = "", role = "", type = TokenType.ACCESS)
+        TokenSubject(userId = token.substringAfter("-"), email = "", role = "", type = TokenType.ACCESS, jti = "jti-${token.substringAfter("-")}")
 }
 
 class AuthenticateUserUseCaseTest {
@@ -54,12 +54,15 @@ class AuthenticateUserUseCaseTest {
         role = UserRole.CUSTOMER,
     )
 
+    private val refreshTokenStore = RecordingRefreshTokenStore()
+
     private val useCase = AuthenticateUserUseCase(
         userRepository = SingleUserRepository(user),
         passwordEncoder = MatchingPasswordEncoder(correctRawPassword = "correct-password"),
         tokenProvider = FakeTokenProvider(),
         rateLimiter = RecordingRateLimiter(),
         policy = testAuthRateLimitPolicy,
+        refreshTokenStore = refreshTokenStore,
     )
 
     @Test
@@ -70,6 +73,13 @@ class AuthenticateUserUseCaseTest {
 
         assertEquals("access-${user.id.value}", result.accessToken)
         assertEquals("refresh-${user.id.value}", result.refreshToken)
+    }
+
+    @Test
+    fun `activates a brand-new refresh-token family in the store on every fresh login`() {
+        useCase.execute(AuthenticateUserCommand(email = "member@example.com", rawPassword = "correct-password"))
+
+        assertEquals(1, refreshTokenStore.activations.size)
     }
 
     @Test
@@ -94,6 +104,7 @@ class AuthenticateUserUseCaseTest {
             tokenProvider = FakeTokenProvider(),
             rateLimiter = RecordingRateLimiter(deniedKeyPrefixes = setOf("auth:login:email:")),
             policy = testAuthRateLimitPolicy,
+            refreshTokenStore = RecordingRefreshTokenStore(),
         )
 
         assertThrows<LoginRateLimitExceededException> {
@@ -109,6 +120,7 @@ class AuthenticateUserUseCaseTest {
             tokenProvider = FakeTokenProvider(),
             rateLimiter = RecordingRateLimiter(deniedKeyPrefixes = setOf("auth:login:ip:")),
             policy = testAuthRateLimitPolicy,
+            refreshTokenStore = RecordingRefreshTokenStore(),
         )
 
         assertThrows<LoginRateLimitExceededException> {
@@ -124,6 +136,7 @@ class AuthenticateUserUseCaseTest {
             tokenProvider = FakeTokenProvider(),
             rateLimiter = RecordingRateLimiter(deniedKeyPrefixes = setOf("auth:login:email:")),
             policy = testAuthRateLimitPolicy,
+            refreshTokenStore = RecordingRefreshTokenStore(),
         )
 
         assertThrows<LoginRateLimitExceededException> {
@@ -140,6 +153,7 @@ class AuthenticateUserUseCaseTest {
             tokenProvider = FakeTokenProvider(),
             rateLimiter = rateLimiter,
             policy = testAuthRateLimitPolicy,
+            refreshTokenStore = RecordingRefreshTokenStore(),
         )
 
         assertThrows<InvalidCredentialsException> {

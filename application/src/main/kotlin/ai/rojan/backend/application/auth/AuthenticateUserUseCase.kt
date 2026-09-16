@@ -2,6 +2,7 @@ package ai.rojan.backend.application.auth
 
 import ai.rojan.backend.application.port.PasswordEncoderPort
 import ai.rojan.backend.application.port.RateLimiterPort
+import ai.rojan.backend.application.port.RefreshTokenStorePort
 import ai.rojan.backend.application.port.TokenProviderPort
 import ai.rojan.backend.domain.common.InactiveUserException
 import ai.rojan.backend.domain.common.InvalidCredentialsException
@@ -11,6 +12,7 @@ import ai.rojan.backend.domain.user.User
 import ai.rojan.backend.domain.user.UserRepository
 import java.time.Duration
 import java.time.Instant
+import java.util.UUID
 
 /** [callerIp] is optional (mirrors [RequestOtpCommand]'s own reasoning) so a test/internal caller with no HTTP context can still exercise this use case - `AuthController` always supplies the real one. */
 data class AuthenticateUserCommand(
@@ -33,6 +35,7 @@ class AuthenticateUserUseCase(
     private val tokenProvider: TokenProviderPort,
     private val rateLimiter: RateLimiterPort,
     private val policy: AuthRateLimitPolicy,
+    private val refreshTokenStore: RefreshTokenStorePort,
 ) {
     fun execute(command: AuthenticateUserCommand): AuthenticationResult {
         val email = Email(command.email.trim().lowercase())
@@ -81,7 +84,11 @@ class AuthenticateUserUseCase(
 
     private fun issueTokens(user: User): AuthenticationResult {
         val accessToken = tokenProvider.generateAccessToken(user)
-        val refreshToken = tokenProvider.generateRefreshToken(user)
+        // A fresh login always starts a brand-new refresh-token family - only a rotation
+        // (RefreshTokenUseCase) ever carries an existing one forward.
+        val familyId = UUID.randomUUID().toString()
+        val refreshToken = tokenProvider.generateRefreshToken(user, familyId)
+        refreshTokenStore.activate(familyId, refreshToken.jti, Duration.between(Instant.now(), refreshToken.expiresAt))
         return AuthenticationResult(
             user = user,
             accessToken = accessToken.token,

@@ -22,6 +22,9 @@ private const val CLAIM_PHONE = "phone"
 private const val CLAIM_ROLE = "role"
 private const val CLAIM_TOKEN_TYPE = "type"
 
+/** Refresh Token Rotation (`BACKEND_REFRESH_TOKEN_SECURITY_PLAN.md`): carried unchanged through every rotation of the same refresh-token family - never present on an access token. */
+private const val CLAIM_FAMILY_ID = "fid"
+
 @Component
 class JwtTokenProvider(
     private val jwtProperties: JwtProperties,
@@ -30,10 +33,10 @@ class JwtTokenProvider(
     private val signingKey: SecretKey = Keys.hmacShaKeyFor(jwtProperties.secret.toByteArray())
 
     override fun generateAccessToken(user: User): IssuedToken =
-        issue(user, TokenType.ACCESS, jwtProperties.accessTokenTtlMinutes, ChronoUnit.MINUTES)
+        issue(user, TokenType.ACCESS, jwtProperties.accessTokenTtlMinutes, ChronoUnit.MINUTES, familyId = null)
 
-    override fun generateRefreshToken(user: User): IssuedToken =
-        issue(user, TokenType.REFRESH, jwtProperties.refreshTokenTtlDays, ChronoUnit.DAYS)
+    override fun generateRefreshToken(user: User, familyId: String): IssuedToken =
+        issue(user, TokenType.REFRESH, jwtProperties.refreshTokenTtlDays, ChronoUnit.DAYS, familyId = familyId)
 
     override fun validateAndExtractSubject(token: String): TokenSubject {
         val claims = try {
@@ -63,14 +66,23 @@ class JwtTokenProvider(
             email = claims[CLAIM_EMAIL] as? String,
             role = claims[CLAIM_ROLE] as? String ?: throw InvalidTokenException(),
             type = type,
+            // The JWT library's own `id` claim (RFC 7519 `jti`) - every token this
+            // provider ever issues carries one (see `issue` below), so a missing one
+            // here would mean a token signed by something other than this provider,
+            // which the signature check above already would have rejected.
+            jti = claims.id ?: throw InvalidTokenException(),
+            // Absent on every access token, and on a legacy refresh token issued
+            // before this claim existed - both are valid, expected states, not errors.
+            familyId = claims[CLAIM_FAMILY_ID] as? String,
         )
     }
 
-    private fun issue(user: User, type: TokenType, ttl: Long, unit: ChronoUnit): IssuedToken {
+    private fun issue(user: User, type: TokenType, ttl: Long, unit: ChronoUnit, familyId: String?): IssuedToken {
         val now = Instant.now()
         val expiresAt = now.plus(ttl, unit)
+        val jti = UUID.randomUUID().toString()
         val builder = Jwts.builder()
-            .id(UUID.randomUUID().toString())
+            .id(jti)
             .subject(user.id.value.toString())
             .claim(CLAIM_ROLE, user.role.name)
             .claim(CLAIM_TOKEN_TYPE, type.name)
@@ -83,7 +95,8 @@ class JwtTokenProvider(
         // claim. Neither is ever required by anything downstream; `sub` is.
         user.email?.let { builder.claim(CLAIM_EMAIL, it.value) }
         user.phoneNumber?.let { builder.claim(CLAIM_PHONE, it.value) }
+        familyId?.let { builder.claim(CLAIM_FAMILY_ID, it) }
         val token = builder.signWith(signingKey).compact()
-        return IssuedToken(token = token, expiresAt = expiresAt)
+        return IssuedToken(token = token, expiresAt = expiresAt, jti = jti)
     }
 }

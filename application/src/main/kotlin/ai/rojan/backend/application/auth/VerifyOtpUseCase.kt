@@ -1,6 +1,7 @@
 package ai.rojan.backend.application.auth
 
 import ai.rojan.backend.application.port.RateLimiterPort
+import ai.rojan.backend.application.port.RefreshTokenStorePort
 import ai.rojan.backend.application.port.TokenProviderPort
 import ai.rojan.backend.domain.auth.OtpRepository
 import ai.rojan.backend.domain.auth.PhoneNumber
@@ -11,6 +12,7 @@ import ai.rojan.backend.domain.user.UserRepository
 import ai.rojan.backend.domain.user.UserRole
 import java.time.Duration
 import java.time.Instant
+import java.util.UUID
 
 /** [fullName] is optional — the approved Owner App flow (Mobile Number → OTP → JWT) collects no name during sign-in; a placeholder is used for a brand-new account and can be changed later once a profile-editing feature exists. Not supplying one is not an error. */
 data class VerifyOtpCommand(val phoneNumber: String, val code: String, val fullName: String? = null)
@@ -38,6 +40,7 @@ class VerifyOtpUseCase(
     private val tokenProvider: TokenProviderPort,
     private val rateLimiter: RateLimiterPort,
     private val policy: OtpPolicy,
+    private val refreshTokenStore: RefreshTokenStorePort,
 ) {
     fun execute(command: VerifyOtpCommand): AuthenticationResult {
         val phone = PhoneNumber(command.phoneNumber)
@@ -72,7 +75,9 @@ class VerifyOtpUseCase(
             )
 
         val accessToken = tokenProvider.generateAccessToken(user)
-        val refreshToken = tokenProvider.generateRefreshToken(user)
+        val familyId = UUID.randomUUID().toString()
+        val refreshToken = tokenProvider.generateRefreshToken(user, familyId)
+        refreshTokenStore.activate(familyId, refreshToken.jti, Duration.between(Instant.now(), refreshToken.expiresAt))
         return AuthenticationResult(
             user = user,
             accessToken = accessToken.token,

@@ -1,6 +1,7 @@
 package ai.rojan.backend.application.auth
 
 import ai.rojan.backend.application.port.RateLimiterPort
+import ai.rojan.backend.application.port.RefreshTokenStorePort
 import ai.rojan.backend.application.port.SmsProviderPort
 import ai.rojan.backend.domain.auth.OneTimePassword
 import ai.rojan.backend.domain.auth.OtpRepository
@@ -79,3 +80,34 @@ internal val testAuthRateLimitPolicy = AuthRateLimitPolicy(
     refreshLimitPerIpWindow = 30,
     refreshWindowSeconds = 300,
 )
+
+/**
+ * Refresh Token Rotation (`BACKEND_REFRESH_TOKEN_SECURITY_PLAN.md`): a plain in-memory fake for
+ * [RefreshTokenStorePort], shared by every auth use-case test that issues or rotates a refresh
+ * token - `application` cannot depend on `infrastructure`'s own real
+ * `RedisRefreshTokenStore`/`InMemoryRefreshTokenStore`, so this is a separate, minimal
+ * implementation of the same one-key-per-family contract, with enough recorded history
+ * ([activations]) for a test to assert exactly which family/jti pairs were activated and in what
+ * order - the only way to observe rotation actually happening from outside the use case.
+ */
+internal class RecordingRefreshTokenStore : RefreshTokenStorePort {
+    // ConcurrentHashMap/CopyOnWriteArrayList, not a plain mutableMapOf/mutableListOf - this fake
+    // is exercised by a genuine multi-threaded race test (RefreshTokenUseCaseTest's "genuinely
+    // simultaneous refresh" test), and a plain HashMap under real concurrent writes risks
+    // corrupting its own internal structure (not just "the wrong value wins," which is the
+    // intentional, tested race - an actual data-structure fault would be a test-infrastructure
+    // bug, not evidence about the use case).
+    private val families = java.util.concurrent.ConcurrentHashMap<String, String>()
+    val activations: MutableList<Pair<String, String>> = java.util.concurrent.CopyOnWriteArrayList()
+
+    override fun activate(familyId: String, jti: String, ttl: Duration) {
+        families[familyId] = jti
+        activations += familyId to jti
+    }
+
+    override fun currentJti(familyId: String): String? = families[familyId]
+
+    override fun revokeFamily(familyId: String) {
+        families.remove(familyId)
+    }
+}

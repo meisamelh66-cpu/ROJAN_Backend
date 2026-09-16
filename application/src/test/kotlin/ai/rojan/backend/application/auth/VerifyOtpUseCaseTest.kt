@@ -18,10 +18,10 @@ import org.junit.jupiter.api.assertThrows
 import java.time.Instant
 
 private class FakeOtpTokenProvider : TokenProviderPort {
-    override fun generateAccessToken(user: User) = IssuedToken("access-${user.id.value}", Instant.now().plusSeconds(900))
-    override fun generateRefreshToken(user: User) = IssuedToken("refresh-${user.id.value}", Instant.now().plusSeconds(2_592_000))
+    override fun generateAccessToken(user: User) = IssuedToken("access-${user.id.value}", Instant.now().plusSeconds(900), jti = "access-jti-${user.id.value}")
+    override fun generateRefreshToken(user: User, familyId: String) = IssuedToken("refresh-${user.id.value}", Instant.now().plusSeconds(2_592_000), jti = "refresh-jti-${user.id.value}")
     override fun validateAndExtractSubject(token: String) =
-        TokenSubject(userId = token.substringAfter("-"), email = null, role = "", type = TokenType.ACCESS)
+        TokenSubject(userId = token.substringAfter("-"), email = null, role = "", type = TokenType.ACCESS, jti = "jti-${token.substringAfter("-")}")
 }
 
 class VerifyOtpUseCaseTest {
@@ -30,9 +30,10 @@ class VerifyOtpUseCaseTest {
     private val otpRepository = InMemoryOtpRepository()
     private val userRepository = InMemoryOtpUserRepository()
     private val tokenProvider = FakeOtpTokenProvider()
+    private val refreshTokenStore = RecordingRefreshTokenStore()
 
     private fun useCase(policy: OtpPolicy = defaultTestOtpPolicy, rateLimiter: RecordingRateLimiter = RecordingRateLimiter()) =
-        VerifyOtpUseCase(otpRepository, userRepository, tokenProvider, rateLimiter, policy)
+        VerifyOtpUseCase(otpRepository, userRepository, tokenProvider, rateLimiter, policy, refreshTokenStore)
 
     private fun issueOtp(code: String = "123456", now: Instant = Instant.now(), ttlSeconds: Long = 120, maxAttempts: Int = 5) {
         otpRepository.save(OneTimePassword.issue(phone, OtpHashing.hash(code), now, ttlSeconds, maxAttempts))
@@ -125,6 +126,15 @@ class VerifyOtpUseCaseTest {
         val stillPending = otpRepository.findByPhoneNumber(phone)
         assertNotNull(stillPending)
         assertEquals(4, stillPending!!.attemptsRemaining)
+    }
+
+    @Test
+    fun `activates a brand-new refresh-token family on successful verification`() {
+        issueOtp("123456")
+
+        useCase().execute(VerifyOtpCommand(phoneNumber = "+989123456789", code = "123456"))
+
+        assertEquals(1, refreshTokenStore.activations.size)
     }
 
     @Test
