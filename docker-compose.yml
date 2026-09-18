@@ -55,6 +55,16 @@ services:
       REDIS_PORT: 6379
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set to a random string of at least 32 characters — see README.md}
+      # LocalDevSmsProvider (Local OTP Test Support v1): opts into the dev-only
+      # logging SMS adapter so OTP login/register is exercisable without real
+      # MeliPayamak credentials - RealSmsProviderAdapter's own SMS_API_URL/
+      # SMS_API_KEY/SMS_SENDER stay unset here on purpose, same as before this
+      # change; this dev compose file is never used for production (see
+      # docker-compose.prod.yml, which sets SPRING_PROFILES_ACTIVE=prod and
+      # always requires real SMS credentials - LocalDevSmsProvider's own
+      # @Profile("!test & !prod") means this property alone couldn't activate
+      # it there even if copied by mistake).
+      SMS_PROVIDER: local-dev
     # PASS INFRA-MEDIA-02: LocalMediaStorageProperties.storageRoot defaults to
     # /app/uploads (application.yml's MEDIA_STORAGE_ROOT default, matched by the
     # Dockerfile's own mkdir there) - LocalDiskMediaStorageAdapter writes every

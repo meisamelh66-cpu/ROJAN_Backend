@@ -28,6 +28,7 @@ class SmsProviderSelectionTest {
             RealSmsProviderAdapter::class.java,
             MeliPayamakSharedPatternProviderConfig::class.java,
             MeliPayamakSharedPatternProvider::class.java,
+            LocalDevSmsProvider::class.java,
         )
         .withPropertyValues(
             "rojan.sms.api-url=https://console.melipayamak.com/api/send/simple",
@@ -60,6 +61,31 @@ class SmsProviderSelectionTest {
                 assertEquals(2, beanNames.size, "expected both adapters registered simultaneously, found: ${beanNames.toList()}")
 
                 assertInstanceOf(MeliPayamakSharedPatternProvider::class.java, context.getBean(SmsProviderPort::class.java))
+            }
+    }
+
+    @Test
+    fun `with rojan sms provider set to local-dev, LocalDevSmsProvider is selected via @Primary`() {
+        baseContextRunner
+            .withPropertyValues("rojan.sms.provider=local-dev")
+            .run { context ->
+                // Same "both genuinely registered, @Primary breaks the tie" shape as the
+                // melipayamak-shared case above.
+                val beanNames = context.getBeanNamesForType(SmsProviderPort::class.java)
+                assertEquals(2, beanNames.size, "expected both RealSmsProviderAdapter and LocalDevSmsProvider registered simultaneously, found: ${beanNames.toList()}")
+
+                assertInstanceOf(LocalDevSmsProvider::class.java, context.getBean(SmsProviderPort::class.java))
+            }
+    }
+
+    @Test
+    fun `LocalDevSmsProvider is never registered when SPRING_PROFILES_ACTIVE includes prod, even if selected by property`() {
+        baseContextRunner
+            .withPropertyValues("rojan.sms.provider=local-dev", "spring.profiles.active=prod")
+            .run { context ->
+                val beanNames = context.getBeanNamesForType(SmsProviderPort::class.java)
+                assertEquals(1, beanNames.size, "expected only RealSmsProviderAdapter under the prod profile, found: ${beanNames.toList()}")
+                assertInstanceOf(RealSmsProviderAdapter::class.java, context.getBean(SmsProviderPort::class.java))
             }
     }
 }
