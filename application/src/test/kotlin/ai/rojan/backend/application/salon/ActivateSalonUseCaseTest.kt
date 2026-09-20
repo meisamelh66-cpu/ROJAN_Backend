@@ -3,6 +3,8 @@ package ai.rojan.backend.application.salon
 import ai.rojan.backend.application.schedule.InMemoryWorkingHoursRepository
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotReadyForActivationException
+import ai.rojan.backend.domain.salon.SalonOnboardingStatus
+import ai.rojan.backend.domain.salon.SalonRole
 import ai.rojan.backend.domain.salon.Service
 import ai.rojan.backend.domain.salon.ServiceCategoryId
 import ai.rojan.backend.domain.salon.Specialist
@@ -48,6 +50,27 @@ class ActivateSalonUseCaseTest {
         workingHoursRepository.save(WorkingHours.create(salon.id, DayOfWeek.MONDAY, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(17, 0)))))
     }
 
+    /**
+     * Salon Completeness fields - persisted/trackable completion data, deliberately never
+     * activation-blocking (a real regression found and reverted during Phase 5: see
+     * [missingSalonActivationRequirements]'s own doc comment). Used below only to prove these fields
+     * being *fully answered* doesn't change the outcome either way.
+     */
+    private fun completeCompletionProfile() {
+        val contactMembership = membershipRepository.assign(salon.id, UserId.new(), SalonRole.MANAGER)
+        salon.updateCompletionProfile(
+            activityStartJalaliYear = 1398,
+            hasInternalExtensions = false,
+            sellsProducts = null,
+            hasCafe = null,
+            hasStaffUniform = null,
+            isNeighborhoodSalon = null,
+            isCityCenterSalon = null,
+            primaryContactMembershipId = contactMembership.id,
+        )
+        salonRepository.save(salon)
+    }
+
     @Test
     fun `rejects activation when no active service exists`() {
         addActiveSpecialist()
@@ -79,6 +102,59 @@ class ActivateSalonUseCaseTest {
             activateUseCase.execute(ActivateSalonCommand(salon.id, owner))
         }
         assertTrue(ex.message!!.contains("working-hours"))
+    }
+
+    @Test
+    fun `activates once service, specialist, working hours, and completeness fields are all present`() {
+        addActiveService()
+        addActiveSpecialist()
+        addWorkingHours()
+        completeCompletionProfile()
+
+        val activated = activateUseCase.execute(ActivateSalonCommand(salon.id, owner))
+
+        assertEquals(SalonOnboardingStatus.ACTIVE, activated.onboardingStatus)
+    }
+
+    @Test
+    fun `activation succeeds with no activity start year set - completeness fields never block activation`() {
+        addActiveService()
+        addActiveSpecialist()
+        addWorkingHours()
+        val contactMembership = membershipRepository.assign(salon.id, UserId.new(), SalonRole.MANAGER)
+        salon.updateCompletionProfile(null, false, null, null, null, null, null, contactMembership.id)
+        salonRepository.save(salon)
+
+        val activated = activateUseCase.execute(ActivateSalonCommand(salon.id, owner))
+
+        assertEquals(SalonOnboardingStatus.ACTIVE, activated.onboardingStatus)
+    }
+
+    @Test
+    fun `activation succeeds with no primary contact designated - completeness fields never block activation`() {
+        addActiveService()
+        addActiveSpecialist()
+        addWorkingHours()
+        salon.updateCompletionProfile(1398, false, null, null, null, null, null, null)
+        salonRepository.save(salon)
+
+        val activated = activateUseCase.execute(ActivateSalonCommand(salon.id, owner))
+
+        assertEquals(SalonOnboardingStatus.ACTIVE, activated.onboardingStatus)
+    }
+
+    @Test
+    fun `internal telephone extensions being unset never blocks activation`() {
+        addActiveService()
+        addActiveSpecialist()
+        addWorkingHours()
+        completeCompletionProfile()
+        // completeCompletionProfile() already leaves hasInternalExtensions = false / no extension
+        // rows - this test exists to make that non-requirement explicit and regression-proof.
+
+        val activated = activateUseCase.execute(ActivateSalonCommand(salon.id, owner))
+
+        assertEquals(SalonOnboardingStatus.ACTIVE, activated.onboardingStatus)
     }
 
     @Test

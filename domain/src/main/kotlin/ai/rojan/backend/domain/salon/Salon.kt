@@ -34,6 +34,16 @@ class Salon private constructor(
     longitude: Double?,
     city: String?,
     active: Boolean,
+    activityStartJalaliYear: Int?,
+    hasInternalExtensions: Boolean,
+    sellsProducts: Boolean?,
+    hasCafe: Boolean?,
+    hasStaffUniform: Boolean?,
+    isNeighborhoodSalon: Boolean?,
+    isCityCenterSalon: Boolean?,
+    primaryContactMembershipId: SalonMembershipId?,
+    rojanVerified: Boolean,
+    rojanVerifiedAt: Instant?,
     val createdAt: Instant,
     updatedAt: Instant,
 ) {
@@ -75,6 +85,50 @@ class Salon private constructor(
         private set
 
     var active: Boolean = active
+        private set
+
+    /** Salon Completeness (V25) - the Jalali year the salon started operating. Raw year only; years-of-activity is a display-layer computation, never stored (see the migration's own doc comment). */
+    var activityStartJalaliYear: Int? = activityStartJalaliYear
+        private set
+
+    /** Salon Completeness (V25) - whether [ai.rojan.backend.domain.salon.SalonInternalExtension] rows for this salon are meaningful. Defaults `false`; toggling it off never deletes existing extension rows (see that class's own doc comment). */
+    var hasInternalExtensions: Boolean = hasInternalExtensions
+        private set
+
+    /** Salon Completeness (V25) - `null` means "not yet answered", distinct from an honest `false`. */
+    var sellsProducts: Boolean? = sellsProducts
+        private set
+
+    var hasCafe: Boolean? = hasCafe
+        private set
+
+    var hasStaffUniform: Boolean? = hasStaffUniform
+        private set
+
+    /** Owner-declared only - see [ai.rojan.backend.domain.verification.SalonGeoClassificationReview] for the independently reviewer-verified counterpart. Never itself flips based on a review. */
+    var isNeighborhoodSalon: Boolean? = isNeighborhoodSalon
+        private set
+
+    var isCityCenterSalon: Boolean? = isCityCenterSalon
+        private set
+
+    /** Salon Completeness (V25) - which existing [SalonMembership] is this salon's designated manager/reception contact. Never a new phone field - the number itself is that membership's own [ai.rojan.backend.domain.user.User.phoneNumber]. */
+    var primaryContactMembershipId: SalonMembershipId? = primaryContactMembershipId
+        private set
+
+    /**
+     * ROJAN Verification (V30) - a system-controlled projection of "is this
+     * salon's latest concluded verification case APPROVED", not a source of
+     * truth in its own right (the real source of truth is the
+     * [ai.rojan.backend.domain.verification.SalonVerification] history) and
+     * never owner-editable - the only writer is [projectRojanVerification].
+     * Deliberately never read by activation ([activate]) or by any
+     * public-discovery query - see that method's own doc comment for why.
+     */
+    var rojanVerified: Boolean = rojanVerified
+        private set
+
+    var rojanVerifiedAt: Instant? = rojanVerifiedAt
         private set
 
     var updatedAt: Instant = updatedAt
@@ -120,6 +174,53 @@ class Salon private constructor(
         this.latitude = latitude
         this.longitude = longitude
         this.city = city?.trim()?.ifBlank { null }
+        this.updatedAt = Instant.now()
+    }
+
+    /**
+     * Salon Completeness profile fields - deliberately its own group, same
+     * reasoning as [updateProfile]: an owner answering "do you have a cafe?"
+     * shouldn't need to resubmit name/phone/address too. [activityStartJalaliYear]
+     * is validated only for being positive - this codebase stores the raw
+     * Jalali year the owner typed, never a computed years-of-activity figure,
+     * and has no calendar-conversion utility to validate it against a "real"
+     * range with (see the migration's own doc comment). Completeness/activation
+     * *readiness* (is this required, is this enough) is cross-aggregate and
+     * deliberately does not live here - same split [activate] already uses.
+     */
+    fun updateCompletionProfile(
+        activityStartJalaliYear: Int?,
+        hasInternalExtensions: Boolean,
+        sellsProducts: Boolean?,
+        hasCafe: Boolean?,
+        hasStaffUniform: Boolean?,
+        isNeighborhoodSalon: Boolean?,
+        isCityCenterSalon: Boolean?,
+        primaryContactMembershipId: SalonMembershipId?,
+    ) {
+        require(activityStartJalaliYear == null || activityStartJalaliYear > 0) { "Activity start year must be a positive Jalali year" }
+        this.activityStartJalaliYear = activityStartJalaliYear
+        this.hasInternalExtensions = hasInternalExtensions
+        this.sellsProducts = sellsProducts
+        this.hasCafe = hasCafe
+        this.hasStaffUniform = hasStaffUniform
+        this.isNeighborhoodSalon = isNeighborhoodSalon
+        this.isCityCenterSalon = isCityCenterSalon
+        this.primaryContactMembershipId = primaryContactMembershipId
+        this.updatedAt = Instant.now()
+    }
+
+    /**
+     * ROJAN Verification - the single writer of [rojanVerified]/[rojanVerifiedAt].
+     * A minimal state-recording guard only, the same "guards the transition
+     * itself" split [activate]'s own doc comment already establishes - the
+     * cross-aggregate decision of *when* a salon becomes ROJAN VERIFIED
+     * (reviewing its latest concluded verification case) belongs to a future
+     * application-layer use case, not here.
+     */
+    fun projectRojanVerification(verified: Boolean, verifiedAt: Instant?) {
+        this.rojanVerified = verified
+        this.rojanVerifiedAt = verifiedAt
         this.updatedAt = Instant.now()
     }
 
@@ -235,6 +336,20 @@ class Salon private constructor(
                 longitude = longitude,
                 city = city?.trim()?.ifBlank { null },
                 active = true,
+                // Salon Completeness / ROJAN Verification: every field below is unanswered/false/null
+                // for a brand-new salon - matches V25/V30's own DEFAULT FALSE / nullable shape exactly,
+                // and keeps every existing Salon.create(...) call site (production and test) compiling
+                // and behaving unchanged, same precedent as onboardingStatus's own default above.
+                activityStartJalaliYear = null,
+                hasInternalExtensions = false,
+                sellsProducts = null,
+                hasCafe = null,
+                hasStaffUniform = null,
+                isNeighborhoodSalon = null,
+                isCityCenterSalon = null,
+                primaryContactMembershipId = null,
+                rojanVerified = false,
+                rojanVerifiedAt = null,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -258,9 +373,22 @@ class Salon private constructor(
             active: Boolean,
             createdAt: Instant,
             updatedAt: Instant,
+            activityStartJalaliYear: Int? = null,
+            hasInternalExtensions: Boolean = false,
+            sellsProducts: Boolean? = null,
+            hasCafe: Boolean? = null,
+            hasStaffUniform: Boolean? = null,
+            isNeighborhoodSalon: Boolean? = null,
+            isCityCenterSalon: Boolean? = null,
+            primaryContactMembershipId: SalonMembershipId? = null,
+            rojanVerified: Boolean = false,
+            rojanVerifiedAt: Instant? = null,
         ): Salon = Salon(
             id, ownerId, name, description, phone, email, address, slug,
-            onboardingStatus, logoMediaId, coverMediaId, latitude, longitude, city, active, createdAt, updatedAt,
+            onboardingStatus, logoMediaId, coverMediaId, latitude, longitude, city, active,
+            activityStartJalaliYear, hasInternalExtensions, sellsProducts, hasCafe, hasStaffUniform,
+            isNeighborhoodSalon, isCityCenterSalon, primaryContactMembershipId, rojanVerified, rojanVerifiedAt,
+            createdAt, updatedAt,
         )
     }
 }

@@ -68,6 +68,38 @@ class SalonJpaEntity(
 
     @Column(nullable = false)
     var active: Boolean,
+
+    // Salon Completeness (V25)
+    @Column(name = "activity_start_jalali_year", nullable = true)
+    var activityStartJalaliYear: Int?,
+
+    @Column(name = "has_internal_extensions", nullable = false)
+    var hasInternalExtensions: Boolean,
+
+    @Column(name = "sells_products", nullable = true)
+    var sellsProducts: Boolean?,
+
+    @Column(name = "has_cafe", nullable = true)
+    var hasCafe: Boolean?,
+
+    @Column(name = "has_staff_uniform", nullable = true)
+    var hasStaffUniform: Boolean?,
+
+    @Column(name = "is_neighborhood_salon", nullable = true)
+    var isNeighborhoodSalon: Boolean?,
+
+    @Column(name = "is_city_center_salon", nullable = true)
+    var isCityCenterSalon: Boolean?,
+
+    @Column(name = "primary_contact_membership_id", nullable = true)
+    var primaryContactMembershipId: UUID?,
+
+    // ROJAN Verification (V30) - a read-model projection, see Salon.rojanVerified's own doc comment.
+    @Column(name = "rojan_verified", nullable = false)
+    var rojanVerified: Boolean,
+
+    @Column(name = "rojan_verified_at", nullable = true)
+    var rojanVerifiedAt: Instant?,
 ) {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

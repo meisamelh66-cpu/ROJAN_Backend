@@ -20,6 +20,7 @@ import ai.rojan.backend.application.salon.DeactivateServiceUseCase
 import ai.rojan.backend.application.salon.DeactivateSpecialistUseCase
 import ai.rojan.backend.application.salon.GenerateSalonInviteQrCodeUseCase
 import ai.rojan.backend.application.salon.GenerateSalonQrCodeUseCase
+import ai.rojan.backend.application.salon.GetSalonCompletenessUseCase
 import ai.rojan.backend.application.salon.GetSalonInviteUseCase
 import ai.rojan.backend.application.salon.ListSalonInvitesUseCase
 import ai.rojan.backend.application.salon.RemoveMembershipUseCase
@@ -28,6 +29,7 @@ import ai.rojan.backend.application.salon.RevokeSalonInviteUseCase
 import ai.rojan.backend.application.salon.RemoveServiceFromSpecialistUseCase
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.application.salon.UpdateBranchUseCase
+import ai.rojan.backend.application.salon.UpdateSalonCompletionProfileUseCase
 import ai.rojan.backend.application.salon.UpdateSalonUseCase
 import ai.rojan.backend.application.salon.UpdateServiceCategoryUseCase
 import ai.rojan.backend.application.salon.UpdateServiceUseCase
@@ -237,4 +239,20 @@ class SalonUseCaseConfig {
         specialistRepository: SpecialistRepository,
         salonPermissionResolver: SalonPermissionResolver,
     ) = ResolveMySalonAccessUseCase(salonRepository, membershipRepository, specialistRepository, salonPermissionResolver)
+
+    @Bean
+    fun getSalonCompletenessUseCase(
+        salonRepository: SalonRepository,
+        serviceRepository: ServiceRepository,
+        specialistRepository: SpecialistRepository,
+        workingHoursRepository: WorkingHoursRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = GetSalonCompletenessUseCase(salonRepository, serviceRepository, specialistRepository, workingHoursRepository, salonPermissionResolver)
+
+    @Bean
+    fun updateSalonCompletionProfileUseCase(
+        salonRepository: SalonRepository,
+        membershipRepository: SalonMembershipRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = UpdateSalonCompletionProfileUseCase(salonRepository, membershipRepository, salonPermissionResolver)
 }

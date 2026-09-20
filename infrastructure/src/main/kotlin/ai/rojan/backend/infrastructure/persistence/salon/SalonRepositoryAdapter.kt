@@ -7,6 +7,7 @@ import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.salon.NearbySalonResult
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.salon.SalonMembershipId
 import ai.rojan.backend.domain.salon.SalonOnboardingStatus
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.user.UserId
@@ -37,6 +38,16 @@ class SalonRepositoryAdapter(
                 longitude = salon.longitude
                 city = salon.city
                 active = salon.active
+                activityStartJalaliYear = salon.activityStartJalaliYear
+                hasInternalExtensions = salon.hasInternalExtensions
+                sellsProducts = salon.sellsProducts
+                hasCafe = salon.hasCafe
+                hasStaffUniform = salon.hasStaffUniform
+                isNeighborhoodSalon = salon.isNeighborhoodSalon
+                isCityCenterSalon = salon.isCityCenterSalon
+                primaryContactMembershipId = salon.primaryContactMembershipId?.value
+                rojanVerified = salon.rojanVerified
+                rojanVerifiedAt = salon.rojanVerifiedAt
             }
             ?: SalonJpaEntity(
                 id = salon.id.value,
@@ -54,6 +65,16 @@ class SalonRepositoryAdapter(
                 longitude = salon.longitude,
                 city = salon.city,
                 active = salon.active,
+                activityStartJalaliYear = salon.activityStartJalaliYear,
+                hasInternalExtensions = salon.hasInternalExtensions,
+                sellsProducts = salon.sellsProducts,
+                hasCafe = salon.hasCafe,
+                hasStaffUniform = salon.hasStaffUniform,
+                isNeighborhoodSalon = salon.isNeighborhoodSalon,
+                isCityCenterSalon = salon.isCityCenterSalon,
+                primaryContactMembershipId = salon.primaryContactMembershipId?.value,
+                rojanVerified = salon.rojanVerified,
+                rojanVerifiedAt = salon.rojanVerifiedAt,
             )
         return jpaRepository.save(entity).toDomain()
     }
@@ -152,6 +173,16 @@ class SalonRepositoryAdapter(
         longitude = longitude,
         city = city,
         active = active,
+        activityStartJalaliYear = activityStartJalaliYear,
+        hasInternalExtensions = hasInternalExtensions,
+        sellsProducts = sellsProducts,
+        hasCafe = hasCafe,
+        hasStaffUniform = hasStaffUniform,
+        isNeighborhoodSalon = isNeighborhoodSalon,
+        isCityCenterSalon = isCityCenterSalon,
+        primaryContactMembershipId = primaryContactMembershipId?.let { SalonMembershipId(it) },
+        rojanVerified = rojanVerified,
+        rojanVerifiedAt = rojanVerifiedAt,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
     )
