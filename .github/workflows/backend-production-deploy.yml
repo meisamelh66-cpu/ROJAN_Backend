@@ -1,0 +1,273 @@
+name: Backend Production Deploy
+
+# Mirrors ROJAN_Web's proven web-production-deploy.yml pattern: build on GitHub Actions (this VPS
+# cannot reliably pull from Docker Hub or GHCR directly - see the 2026-09-24 Docker Hub BuildKit
+# frontend investigation, same root cause already documented for ghcr.io in the website workflow),
+# stream the finished image to the VPS over SSH, and deploy from a preloaded image - never a build
+# on the VPS itself.
+#
+# Deliberately gated to this one branch only, not every branch/PR - production deployment must
+# stay an explicit, reviewed action, never a side effect of pushing to an unrelated branch.
+on:
+  push:
+    branches: [release/production-v24]
+    paths:
+      - "domain/**"
+      - "application/**"
+      - "infrastructure/**"
+      - "api/**"
+      - "bootstrap/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle/**"
+      - "Dockerfile"
+      - "docker-compose.prod.yml"
+      - "scripts/deploy-production.sh"
+      - "scripts/rollback-production.sh"
+      - ".github/workflows/backend-production-deploy.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: backend-production-deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/rojan-backend
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Gradle build
+        run: ./gradlew build -x test --no-daemon --console=plain
+
+      - name: Gradle test
+        run: ./gradlew test --no-daemon --console=plain
+
+  build-and-push:
+    name: Build and push Docker image
+    needs: test
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ github.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the runtime jar (Dockerfile expects it pre-built - see its own doc comment)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :bootstrap:bootJar --no-daemon --console=plain
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          # Single-platform deploy image: one plain manifest, not a manifest list with extra
+          # provenance/SBOM attestations - same reasoning as the website's own image, so `docker
+          # load` on the VPS is unambiguous.
+          provenance: false
+          sbom: false
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+
+  deploy:
+    name: Deploy to VPS
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      # For the runner-side `docker pull` below (so the image can be streamed on to the VPS).
+      # The VPS never contacts GHCR or Docker Hub during this job.
+      packages: read
+
+    environment: production
+
+    steps:
+      - name: Log in to GHCR (runner)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull the built image onto the runner
+        run: docker pull "${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image_tag }}"
+
+      - name: Prepare SSH known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Write SSH private key
+        run: |
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Stream image to the VPS
+        # IMAGE TRANSFER - same reasoning and shape as web-production-deploy.yml's own step: this
+        # VPS's outbound access to Docker Hub/GHCR is unreliable (confirmed directly, 2026-09-24),
+        # so the image travels over the one transport already proven to work - SSH -
+        # `docker save | gzip | ssh 'docker load'`. Three attempts with backoff, same as the
+        # website's own step.
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image_tag }}"
+          attempts=3
+          for i in $(seq 1 "$attempts"); do
+            echo "docker save | gzip | ssh 'docker load'  (attempt $i/$attempts)"
+            if docker save "$IMAGE_REF" | gzip | timeout 900 ssh \
+                -i ~/.ssh/deploy_key \
+                -o StrictHostKeyChecking=yes \
+                -o UserKnownHostsFile=~/.ssh/known_hosts \
+                -o BatchMode=yes \
+                -o ConnectTimeout=30 \
+                -o ServerAliveInterval=30 \
+                -o ServerAliveCountMax=6 \
+                "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" 'bash -o pipefail -c "gunzip | docker load"'; then
+              echo "image loaded on the VPS."
+              exit 0
+            fi
+            if [ "$i" -lt "$attempts" ]; then
+              delay=$(( 30 * i ))
+              echo "stream attempt $i failed - retrying in ${delay}s..."
+              sleep "$delay"
+            fi
+          done
+          echo "image stream to the VPS failed after $attempts attempts - aborting deploy." >&2
+          exit 1
+
+      - name: Deploy to VPS
+        run: |
+          timeout 1200 ssh \
+            -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -o BatchMode=yes \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=6 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash -s <<'REMOTE_SCRIPT'
+          set -euo pipefail
+
+          IMAGE_REF="ghcr.io/meisamelh66-cpu/rojan-backend:${{ needs.build-and-push.outputs.image_tag }}"
+
+          echo "STEP: VERIFY IMAGE LOADED"
+          if ! docker image inspect "$IMAGE_REF" >/dev/null 2>&1; then
+            echo "$IMAGE_REF is not present on the VPS after the image stream - aborting deploy." >&2
+            exit 1
+          fi
+          echo "  $IMAGE_REF present locally"
+
+          cd "${{ secrets.VPS_REPO_PATH }}"
+
+          echo "STEP: GIT SYNC"
+          # Same HTTPS-over-SSH-port-22-unreliability fix already proven in the website's deploy
+          # workflow - the origin remote is a plain https://github.com/... URL with no embedded
+          # token (safe to print via `git remote -v`); the real credential is supplied per-
+          # invocation via a transient `http.extraheader`, never written to .git/config.
+          git remote set-url origin https://github.com/meisamelh66-cpu/ROJAN_Backend.git
+          git remote -v
+          git status
+
+          AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "${{ secrets.GITHUB_TOKEN }}" | base64 -w0)"
+          GIT_FETCH_ATTEMPTS=3
+          GIT_FETCH_TIMEOUT_SECONDS=30
+          GIT_FETCH_RETRY_DELAY_SECONDS=10
+          fetch_succeeded=0
+          for attempt in $(seq 1 "$GIT_FETCH_ATTEMPTS"); do
+            echo "git fetch origin release/production-v24 over HTTPS (attempt $attempt/$GIT_FETCH_ATTEMPTS, ${GIT_FETCH_TIMEOUT_SECONDS}s timeout)"
+            if timeout "${GIT_FETCH_TIMEOUT_SECONDS}s" git -c http.extraheader="$AUTH_HEADER" fetch origin release/production-v24; then
+              fetch_succeeded=1
+              break
+            fi
+            echo "git fetch attempt $attempt failed or timed out."
+            if [ "$attempt" -lt "$GIT_FETCH_ATTEMPTS" ]; then
+              echo "retrying in ${GIT_FETCH_RETRY_DELAY_SECONDS}s..."
+              sleep "$GIT_FETCH_RETRY_DELAY_SECONDS"
+            fi
+          done
+          unset AUTH_HEADER
+          if [ "$fetch_succeeded" -ne 1 ]; then
+            echo "git fetch origin release/production-v24 (HTTPS) failed after $GIT_FETCH_ATTEMPTS attempts - aborting deploy." >&2
+            exit 1
+          fi
+          git reset --hard origin/release/production-v24
+
+          echo "STEP: VERIFY GIT SYNC"
+          EXPECTED_COMMIT="${{ needs.build-and-push.outputs.image_tag }}"
+          ACTUAL_COMMIT="$(git rev-parse HEAD)"
+          echo "expected commit: $EXPECTED_COMMIT"
+          echo "actual HEAD:     $ACTUAL_COMMIT"
+          if [ "$ACTUAL_COMMIT" != "$EXPECTED_COMMIT" ]; then
+            echo "VPS checkout HEAD does not match the expected commit after git reset --hard - aborting deploy." >&2
+            exit 1
+          fi
+
+          echo "STEP: DEPLOY SCRIPT"
+          # $IMAGE_REF is already loaded on the VPS (streamed in above) - deploy-production.sh
+          # consumes it directly and never invokes `docker compose build`.
+          ./scripts/deploy-production.sh "${{ needs.build-and-push.outputs.image_tag }}"
+
+          echo "STEP: VERIFY RUNNING IMAGE"
+          RUNNING_IMAGE="$(docker inspect --format '{{.Config.Image}}' backend-app-1)"
+          echo "expected: $IMAGE_REF"
+          echo "running:  $RUNNING_IMAGE"
+          if [ "$RUNNING_IMAGE" != "$IMAGE_REF" ]; then
+            echo "Deployment script reported success but the running container's image does not match the expected tag." >&2
+            exit 1
+          fi
+          REMOTE_SCRIPT
+
+  report:
+    name: Report deployment result
+    needs: deploy
+    if: always()
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Summarize
+        run: |
+          if [ "${{ needs.deploy.result }}" = "success" ]; then
+            echo "### ✅ Deployment succeeded" >> "$GITHUB_STEP_SUMMARY"
+            echo "Image \`${{ needs.build-and-push.outputs.image_tag || github.sha }}\` is live." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### ❌ Deployment failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Check the deploy job logs for which STEP failed." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- If it failed at **HEALTH CHECK**, \`deploy-production.sh\` has already rolled the VPS back to the previous image automatically." >> "$GITHUB_STEP_SUMMARY"
+            echo "- Otherwise the previous version is still live and untouched - re-run this workflow (Run workflow) to rebuild and redeploy, no VPS-side registry access needed." >> "$GITHUB_STEP_SUMMARY"
+            echo "- With VPS SSH access: \`./scripts/rollback-production.sh\` from the repo checkout." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi

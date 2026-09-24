@@ -106,6 +106,13 @@ services:
       retries: 10
 
   app:
+    # BACKEND_IMAGE (Backend Production Deploy CI/CD): additive, backward-compatible - unset
+    # resolves to backend-app:latest, the exact tag `scripts/deploy.sh`'s own `docker compose
+    # build app` already produces, so the existing local-build path is completely unaffected.
+    # `scripts/deploy-production.sh` instead exports BACKEND_IMAGE to a preloaded
+    # ghcr.io/.../rojan-backend:<tag> and always passes `--no-build`, so `build:` below is never
+    # invoked on that path - it only matters to the local `deploy.sh`/`rollback.sh` flow.
+    image: ${BACKEND_IMAGE:-backend-app:latest}
     build:
       context: .
       dockerfile: Dockerfile
