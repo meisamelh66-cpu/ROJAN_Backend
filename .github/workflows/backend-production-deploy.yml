@@ -6,25 +6,13 @@ name: Backend Production Deploy
 # stream the finished image to the VPS over SSH, and deploy from a preloaded image - never a build
 # on the VPS itself.
 #
-# Deliberately gated to this one branch only, not every branch/PR - production deployment must
-# stay an explicit, reviewed action, never a side effect of pushing to an unrelated branch.
+# Manual-only (2026-09-24 trigger fix): the previous `push` trigger meant pushing a change to
+# this workflow file, docker-compose.prod.yml, or any watched source path on
+# release/production-v24 could start the production pipeline as a side effect of the push
+# itself - confirmed live (run 36028060215, cancelled before it reached build-and-push/deploy).
+# workflow_dispatch only - production deployment is now always an explicit, separate action,
+# never automatic.
 on:
-  push:
-    branches: [release/production-v24]
-    paths:
-      - "domain/**"
-      - "application/**"
-      - "infrastructure/**"
-      - "api/**"
-      - "bootstrap/**"
-      - "build.gradle.kts"
-      - "settings.gradle.kts"
-      - "gradle/**"
-      - "Dockerfile"
-      - "docker-compose.prod.yml"
-      - "scripts/deploy-production.sh"
-      - "scripts/rollback-production.sh"
-      - ".github/workflows/backend-production-deploy.yml"
   workflow_dispatch: {}
 
 concurrency:
