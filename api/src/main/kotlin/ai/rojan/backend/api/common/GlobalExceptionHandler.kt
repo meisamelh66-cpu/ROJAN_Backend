@@ -2,6 +2,8 @@ package ai.rojan.backend.api.common
 
 import ai.rojan.backend.domain.common.AmbiguousSalonContextException
 import ai.rojan.backend.domain.common.BookingAccessDeniedException
+import ai.rojan.backend.domain.common.BannerNotFoundException
+import ai.rojan.backend.domain.common.BannerReorderMismatchException
 import ai.rojan.backend.domain.common.BookingConflictException
 import ai.rojan.backend.domain.common.BookingNotFoundException
 import ai.rojan.backend.domain.common.BookingRoleNotAllowedException
@@ -143,6 +145,7 @@ class GlobalExceptionHandler {
         MediaAssetNotFoundException::class,
         SalonDocumentNotFoundException::class,
         SalonVerificationNotFoundException::class,
+        BannerNotFoundException::class,
         NoResourceFoundException::class,
     )
     fun handleNotFound(ex: Exception, request: WebRequest) =
@@ -153,6 +156,7 @@ class GlobalExceptionHandler {
         InvalidVerificationDocumentException::class,
         MediaTargetRequiredException::class,
         MediaReorderMismatchException::class,
+        BannerReorderMismatchException::class,
     )
     fun handleBadRequestDomainException(ex: Exception, request: WebRequest) =
         respond(HttpStatus.BAD_REQUEST, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -260,6 +264,8 @@ class GlobalExceptionHandler {
         is MediaTypeMismatchException -> "MEDIA_TYPE_MISMATCH"
         is MediaTargetRequiredException -> "MEDIA_TARGET_REQUIRED"
         is MediaReorderMismatchException -> "MEDIA_REORDER_MISMATCH"
+        is BannerNotFoundException -> "BANNER_NOT_FOUND"
+        is BannerReorderMismatchException -> "BANNER_REORDER_MISMATCH"
         is SalonDocumentNotFoundException -> "SALON_DOCUMENT_NOT_FOUND"
         is DocumentAlreadyAttachedException -> "DOCUMENT_ALREADY_ATTACHED"
         is SalonVerificationNotFoundException -> "SALON_VERIFICATION_NOT_FOUND"
