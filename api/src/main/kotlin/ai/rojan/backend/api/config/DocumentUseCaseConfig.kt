@@ -1,11 +1,15 @@
 package ai.rojan.backend.api.config
 
+import ai.rojan.backend.application.document.ApproveSalonDocumentUseCase
 import ai.rojan.backend.application.document.AttachDocumentUseCase
 import ai.rojan.backend.application.document.DeleteDocumentUseCase
 import ai.rojan.backend.application.document.GetDocumentAccessUrlUseCase
 import ai.rojan.backend.application.document.GetDocumentUseCase
 import ai.rojan.backend.application.document.ListDocumentsUseCase
+import ai.rojan.backend.application.document.ListSalonDocumentsForPlatformUseCase
+import ai.rojan.backend.application.document.RejectSalonDocumentUseCase
 import ai.rojan.backend.application.media.DeleteMediaUseCase
+import ai.rojan.backend.application.platformauthority.PlatformAuthorizationResolver
 import ai.rojan.backend.application.port.MediaStoragePort
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.document.SalonDocumentRepository
@@ -63,4 +67,23 @@ class DocumentUseCaseConfig {
         salonPermissionResolver: SalonPermissionResolver,
         deleteMediaUseCase: DeleteMediaUseCase,
     ) = DeleteDocumentUseCase(salonRepository, documentRepository, salonPermissionResolver, deleteMediaUseCase)
+
+    @Bean
+    fun approveSalonDocumentUseCase(
+        documentRepository: SalonDocumentRepository,
+        platformAuthorization: PlatformAuthorizationResolver,
+    ) = ApproveSalonDocumentUseCase(documentRepository, platformAuthorization)
+
+    @Bean
+    fun rejectSalonDocumentUseCase(
+        documentRepository: SalonDocumentRepository,
+        platformAuthorization: PlatformAuthorizationResolver,
+    ) = RejectSalonDocumentUseCase(documentRepository, platformAuthorization)
+
+    @Bean
+    fun listSalonDocumentsForPlatformUseCase(
+        salonRepository: SalonRepository,
+        documentRepository: SalonDocumentRepository,
+        platformAuthorization: PlatformAuthorizationResolver,
+    ) = ListSalonDocumentsForPlatformUseCase(salonRepository, documentRepository, platformAuthorization)
 }

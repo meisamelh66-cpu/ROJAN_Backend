@@ -2,6 +2,7 @@ package ai.rojan.backend.domain.document
 
 import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.user.UserId
 import java.time.Instant
 import java.time.LocalDate
@@ -14,7 +15,7 @@ value class SalonDocumentId(val value: UUID) {
     }
 }
 
-enum class DocumentType { LICENSE, CERTIFICATE, OWNERSHIP, AGREEMENT, OTHER }
+enum class DocumentType { LICENSE, CERTIFICATE, OWNERSHIP, AGREEMENT, HYGIENE_CERTIFICATE, OTHER }
 
 enum class DocumentVerificationStatus { PENDING, APPROVED, REJECTED, EXPIRED }
 
@@ -36,26 +37,40 @@ class SalonDocument private constructor(
     verificationStatus: DocumentVerificationStatus,
     val expiryDate: LocalDate?,
     val uploadedBy: UserId,
+    val specialistId: SpecialistId?,
+    reviewedBy: UserId?,
+    reviewedAt: Instant?,
     val createdAt: Instant,
     updatedAt: Instant,
 ) {
     var verificationStatus: DocumentVerificationStatus = verificationStatus
         private set
 
+    /** Staff Hygiene Certificates (V31) - who reviewed this document, `null` until [approve]/[reject]. Real, not built at all before this phase (this class previously recorded no reviewer identity whatsoever). */
+    var reviewedBy: UserId? = reviewedBy
+        private set
+
+    var reviewedAt: Instant? = reviewedAt
+        private set
+
     var updatedAt: Instant = updatedAt
         private set
 
-    /** Platform Authority tooling only (not built this phase) - the guard exists now so the invariant is real the moment a caller exists, not bolted on later. */
-    fun approve() {
+    /** Platform Authority tooling only (not built this phase) - the guard exists now so the invariant is real the moment a caller exists, not bolted on later. Now records reviewer identity/timestamp - matches [ai.rojan.backend.domain.verification.SalonVerification.approve]'s own shape, previously missing here entirely. */
+    fun approve(reviewerId: UserId) {
         require(verificationStatus == DocumentVerificationStatus.PENDING) { "Only a pending document can be approved" }
         verificationStatus = DocumentVerificationStatus.APPROVED
+        reviewedBy = reviewerId
+        reviewedAt = Instant.now()
         touch()
     }
 
-    fun reject(reason: String) {
+    fun reject(reviewerId: UserId, reason: String) {
         require(verificationStatus == DocumentVerificationStatus.PENDING) { "Only a pending document can be rejected" }
         require(reason.isNotBlank()) { "A rejection reason is required" }
         verificationStatus = DocumentVerificationStatus.REJECTED
+        reviewedBy = reviewerId
+        reviewedAt = Instant.now()
         touch()
     }
 
@@ -77,6 +92,7 @@ class SalonDocument private constructor(
             documentType: DocumentType,
             expiryDate: LocalDate?,
             uploadedBy: UserId,
+            specialistId: SpecialistId? = null,
         ): SalonDocument {
             val now = Instant.now()
             return SalonDocument(
@@ -87,6 +103,9 @@ class SalonDocument private constructor(
                 verificationStatus = DocumentVerificationStatus.PENDING,
                 expiryDate = expiryDate,
                 uploadedBy = uploadedBy,
+                specialistId = specialistId,
+                reviewedBy = null,
+                reviewedAt = null,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -102,8 +121,12 @@ class SalonDocument private constructor(
             uploadedBy: UserId,
             createdAt: Instant,
             updatedAt: Instant,
+            specialistId: SpecialistId? = null,
+            reviewedBy: UserId? = null,
+            reviewedAt: Instant? = null,
         ): SalonDocument = SalonDocument(
-            id, salonId, mediaAssetId, documentType, verificationStatus, expiryDate, uploadedBy, createdAt, updatedAt,
+            id, salonId, mediaAssetId, documentType, verificationStatus, expiryDate, uploadedBy,
+            specialistId, reviewedBy, reviewedAt, createdAt, updatedAt,
         )
     }
 }

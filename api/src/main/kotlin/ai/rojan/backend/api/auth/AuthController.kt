@@ -16,6 +16,7 @@ import ai.rojan.backend.application.auth.RequestOtpUseCase
 import ai.rojan.backend.application.auth.VerifyOtpCommand
 import ai.rojan.backend.application.auth.VerifyOtpUseCase
 import ai.rojan.backend.domain.user.User
+import ai.rojan.backend.domain.user.UserRole
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
@@ -65,6 +66,13 @@ class AuthController(
         ),
     )
     fun register(@Valid @RequestBody request: RegisterRequest, httpRequest: HttpServletRequest): UserResponse {
+        // Platform Authority (Phase 5): a real, pre-existing gap closed here - RegisterUserCommand.role
+        // was passed straight from client input with no restriction, which meant self-registering as
+        // PLATFORM_ADMIN/PLATFORM_REVIEWER through this public endpoint was possible before this check
+        // existed (role carried no real authority until this phase). Every legitimate platform role
+        // account is created exclusively through CreatePlatformReviewerUseCase (PLATFORM_ADMIN-only,
+        // never self-service) - see Section 11's own "never taken from caller input" requirement.
+        require(request.role !in PLATFORM_ROLES) { "role must be one of CUSTOMER, MANAGER, SPECIALIST" }
         val user = registerUserUseCase.execute(
             RegisterUserCommand(
                 email = request.email,
@@ -212,4 +220,8 @@ class AuthController(
         refreshToken = refreshToken,
         refreshTokenExpiresAt = refreshTokenExpiresAt,
     )
+
+    private companion object {
+        val PLATFORM_ROLES = setOf(UserRole.PLATFORM_ADMIN, UserRole.PLATFORM_REVIEWER)
+    }
 }

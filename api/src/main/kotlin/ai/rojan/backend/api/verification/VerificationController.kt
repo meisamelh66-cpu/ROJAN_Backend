@@ -24,13 +24,14 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 /**
- * Salon Verification Foundation (Phase 3) - submit and read only. Review,
- * approve, and reject are deliberately not exposed here: they require a
- * Platform Authority caller that doesn't exist in this codebase yet
- * (Phase 3 architecture §04, explicitly out of scope for this
- * implementation). The underlying domain state machine already supports
- * those transitions - see [ai.rojan.backend.domain.verification.SalonVerification] -
- * they simply have no use case or route wired to them.
+ * Salon Verification Foundation (Phase 3) - submit and read only, manager-scoped
+ * ([ai.rojan.backend.api.common.CurrentUserResolver] + owner/[ai.rojan.backend.domain.salon.Permission.VIEW_DOCUMENTS]/
+ * [ai.rojan.backend.domain.salon.Permission.MANAGE_DOCUMENTS] checks below). Review, approve, and reject
+ * are deliberately never exposed here - they're Platform Authority actions, authorized purely against
+ * [ai.rojan.backend.domain.user.User.role] rather than salon membership, and live under
+ * [ai.rojan.backend.api.platformauthority.PlatformAuthorityVerificationController] instead (Phase 5).
+ * Mixing the two authorization models on one controller was deliberately avoided - see that
+ * controller's own doc comment.
  */
 @RestController
 @RequestMapping("/api/v1/salons/{salonId}/verification")
@@ -90,6 +91,8 @@ class VerificationController(
         reviewedBy = verification.reviewedBy?.value,
         reviewedAt = verification.reviewedAt,
         rejectionReason = verification.rejectionReason,
+        qualityScore = verification.qualityScore,
+        decorScore = verification.decorScore,
         documentIds = documentIds.map { it.value },
         createdAt = verification.createdAt,
         updatedAt = verification.updatedAt,

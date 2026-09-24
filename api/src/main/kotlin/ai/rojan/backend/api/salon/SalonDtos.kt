@@ -77,6 +77,11 @@ data class UpdateSalonRequest(
  * at read time (via `MediaStoragePort`) - `Salon` itself stores only the
  * ids, never a URL. [logoMediaId]/[coverMediaId] are exposed for clients
  * that want the raw reference rather than parsing a URL.
+ *
+ * [rojanVerified]/[rojanVerifiedAt] (Phase 5) are additive, response-only fields -
+ * [ai.rojan.backend.domain.salon.Salon.rojanVerified]'s own doc comment: a system-controlled
+ * projection, never accepted on [UpdateSalonRequest] or any other write path, never an activation
+ * gate, never a public-discovery filter.
  */
 data class SalonResponse(
     val id: UUID,
@@ -96,6 +101,8 @@ data class SalonResponse(
     val longitude: Double?,
     val city: String?,
     val active: Boolean,
+    val rojanVerified: Boolean,
+    val rojanVerifiedAt: Instant?,
     val createdAt: Instant,
     val updatedAt: Instant,
 )

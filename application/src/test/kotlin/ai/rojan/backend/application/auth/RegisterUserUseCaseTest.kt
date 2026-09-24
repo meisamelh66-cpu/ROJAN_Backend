@@ -3,7 +3,10 @@ package ai.rojan.backend.application.auth
 import ai.rojan.backend.application.port.PasswordEncoderPort
 import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.common.EmailAlreadyRegisteredException
+import ai.rojan.backend.domain.common.PageRequest
+import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.RegisterRateLimitExceededException
+import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.User
 import ai.rojan.backend.domain.user.UserId
@@ -31,6 +34,20 @@ private class InMemoryUserRepository : UserRepository {
     override fun findByPhoneNumber(phoneNumber: PhoneNumber): User? = store.values.find { it.phoneNumber == phoneNumber }
 
     override fun existsByPhoneNumber(phoneNumber: PhoneNumber): Boolean = store.values.any { it.phoneNumber == phoneNumber }
+
+    override fun findByRole(role: UserRole): List<User> = store.values.filter { it.role == role }
+
+    /** Not exercised by this file's tests - a minimal, correct in-memory implementation only to satisfy the interface (Platform Management API Contract). */
+    override fun findByRole(role: UserRole, pageRequest: PageRequest, search: String?, sortDirection: SortDirection): PageResult<User> {
+        val matches = store.values
+            .filter { it.role == role }
+            .filter { search.isNullOrBlank() || it.fullName.contains(search, ignoreCase = true) || it.phoneNumber?.value?.contains(search) == true }
+            .sortedBy { it.fullName }
+            .let { if (sortDirection == SortDirection.DESC) it.reversed() else it }
+        val fromIndex = (pageRequest.page * pageRequest.size).coerceIn(0, matches.size)
+        val toIndex = (fromIndex + pageRequest.size).coerceIn(fromIndex, matches.size)
+        return PageResult(content = matches.subList(fromIndex, toIndex), page = pageRequest.page, size = pageRequest.size, totalElements = matches.size.toLong())
+    }
 }
 
 private class PlainTextPasswordEncoder : PasswordEncoderPort {

@@ -261,6 +261,8 @@ class SalonController(
         longitude = longitude,
         city = city,
         active = active,
+        rojanVerified = rojanVerified,
+        rojanVerifiedAt = rojanVerifiedAt,
         createdAt = createdAt,
         updatedAt = updatedAt,
     )

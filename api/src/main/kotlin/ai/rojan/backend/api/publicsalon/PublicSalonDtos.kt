@@ -20,6 +20,8 @@ data class PublicSalonResponse(
     val coverImageUrl: String?,
     val latitude: Double?,
     val longitude: Double?,
+    /** Phase 5: read-only ROJAN-verified badge - see [ai.rojan.backend.domain.salon.Salon.rojanVerified]'s own doc comment. Never a discovery filter - every publicly-discoverable salon still appears here regardless of this value. */
+    val rojanVerified: Boolean,
 )
 
 /** [storageKey] never exposed - same reasoning as [ai.rojan.backend.api.media.MediaAssetResponse]. */
@@ -72,4 +74,6 @@ data class PublicSalonListResponse(
      * identical response shape to before, just with one new field it can safely ignore).
      */
     val distanceKm: Double? = null,
+    /** Salon Completeness + ROJAN Verification (Phase 5): same read-only badge as [PublicSalonResponse.rojanVerified], never a discovery filter. */
+    val rojanVerified: Boolean = false,
 )

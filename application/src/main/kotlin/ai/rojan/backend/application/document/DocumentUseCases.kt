@@ -2,6 +2,7 @@ package ai.rojan.backend.application.document
 
 import ai.rojan.backend.application.media.DeleteMediaCommand
 import ai.rojan.backend.application.media.DeleteMediaUseCase
+import ai.rojan.backend.application.platformauthority.PlatformAuthorizationResolver
 import ai.rojan.backend.application.port.MediaStoragePort
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.common.DocumentAlreadyAttachedException
@@ -159,5 +160,71 @@ class DeleteDocumentUseCase(
 
         deleteMediaUseCase.execute(DeleteMediaCommand(command.salonId, command.callerId, document.mediaAssetId))
         documentRepository.deleteById(document.id)
+    }
+}
+
+// ---- Platform Authority document review (Phase 4, Staff Hygiene Certificates + general documents) ----
+
+data class ApproveSalonDocumentCommand(val salonId: SalonId, val documentId: SalonDocumentId, val reviewerId: UserId)
+
+/**
+ * Platform-scoped, not salon-scoped - authorization is
+ * [PlatformAuthorizationResolver.requirePlatformReviewerOrAdmin], never
+ * [SalonPermissionResolver]. Reviewed individually per document (a hygiene
+ * certificate included) - approving one document never touches any other
+ * document, [ai.rojan.backend.domain.verification.SalonVerification], or
+ * [ai.rojan.backend.domain.salon.Salon.active]/[ai.rojan.backend.domain.salon.Salon.onboardingStatus].
+ */
+class ApproveSalonDocumentUseCase(
+    private val documentRepository: SalonDocumentRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(command: ApproveSalonDocumentCommand): SalonDocument {
+        platformAuthorization.requirePlatformReviewerOrAdmin(command.reviewerId)
+        val document = documentRepository.findByIdAndSalonId(command.documentId, command.salonId)
+            ?: throw SalonDocumentNotFoundException(command.documentId.value.toString())
+        document.approve(command.reviewerId)
+        return documentRepository.save(document)
+    }
+}
+
+data class RejectSalonDocumentCommand(val salonId: SalonId, val documentId: SalonDocumentId, val reviewerId: UserId, val reason: String)
+
+/** Same authorization/isolation shape as [ApproveSalonDocumentUseCase]. A rejected hygiene certificate never deactivates the salon - nothing here touches [ai.rojan.backend.domain.salon.Salon] at all. */
+class RejectSalonDocumentUseCase(
+    private val documentRepository: SalonDocumentRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(command: RejectSalonDocumentCommand): SalonDocument {
+        platformAuthorization.requirePlatformReviewerOrAdmin(command.reviewerId)
+        val document = documentRepository.findByIdAndSalonId(command.documentId, command.salonId)
+            ?: throw SalonDocumentNotFoundException(command.documentId.value.toString())
+        document.reject(command.reviewerId, command.reason)
+        return documentRepository.save(document)
+    }
+}
+
+data class ListSalonDocumentsForPlatformQuery(
+    val salonId: SalonId,
+    val callerId: UserId,
+    val documentType: DocumentType?,
+    val verificationStatus: DocumentVerificationStatus?,
+)
+
+/**
+ * API contract-completion phase: Platform Authority counterpart to [ListDocumentsUseCase] - the
+ * exact same list (every document type, [DocumentType.HYGIENE_CERTIFICATE] included), authorized via
+ * [PlatformAuthorizationResolver] instead of [ai.rojan.backend.application.salon.SalonPermissionResolver].
+ * Reuses [SalonDocumentRepository.findBySalonId] - no new repository method.
+ */
+class ListSalonDocumentsForPlatformUseCase(
+    private val salonRepository: SalonRepository,
+    private val documentRepository: SalonDocumentRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(query: ListSalonDocumentsForPlatformQuery): List<SalonDocument> {
+        platformAuthorization.requirePlatformReviewerOrAdmin(query.callerId)
+        salonRepository.findById(query.salonId) ?: throw SalonNotFoundException(query.salonId.value.toString())
+        return documentRepository.findBySalonId(query.salonId, query.documentType, query.verificationStatus)
     }
 }

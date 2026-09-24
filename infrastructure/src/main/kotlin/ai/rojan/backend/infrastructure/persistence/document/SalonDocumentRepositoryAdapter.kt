@@ -7,6 +7,7 @@ import ai.rojan.backend.domain.document.SalonDocumentId
 import ai.rojan.backend.domain.document.SalonDocumentRepository
 import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.salon.SpecialistId
 import ai.rojan.backend.domain.user.UserId
 import org.springframework.stereotype.Repository
 import java.time.Instant
@@ -19,7 +20,11 @@ class SalonDocumentRepositoryAdapter(
 
     override fun save(document: SalonDocument): SalonDocument {
         val entity = jpaRepository.findById(document.id.value).orElse(null)
-            ?.apply { verificationStatus = document.verificationStatus }
+            ?.apply {
+                verificationStatus = document.verificationStatus
+                reviewedBy = document.reviewedBy?.value
+                reviewedAt = document.reviewedAt
+            }
             ?: SalonDocumentJpaEntity(
                 id = document.id.value,
                 salonId = document.salonId.value,
@@ -28,6 +33,9 @@ class SalonDocumentRepositoryAdapter(
                 verificationStatus = document.verificationStatus,
                 expiryDate = document.expiryDate,
                 uploadedBy = document.uploadedBy.value,
+                specialistId = document.specialistId?.value,
+                reviewedBy = document.reviewedBy?.value,
+                reviewedAt = document.reviewedAt,
             )
         return jpaRepository.save(entity).toDomain()
     }
@@ -37,6 +45,11 @@ class SalonDocumentRepositoryAdapter(
 
     override fun findBySalonId(salonId: SalonId, documentType: DocumentType?, verificationStatus: DocumentVerificationStatus?): List<SalonDocument> =
         jpaRepository.findBySalonId(salonId.value)
+            .filter { (documentType == null || it.documentType == documentType) && (verificationStatus == null || it.verificationStatus == verificationStatus) }
+            .map { it.toDomain() }
+
+    override fun findBySpecialistId(specialistId: SpecialistId, documentType: DocumentType?, verificationStatus: DocumentVerificationStatus?): List<SalonDocument> =
+        jpaRepository.findBySpecialistId(specialistId.value)
             .filter { (documentType == null || it.documentType == documentType) && (verificationStatus == null || it.verificationStatus == verificationStatus) }
             .map { it.toDomain() }
 
@@ -55,6 +68,9 @@ class SalonDocumentRepositoryAdapter(
         verificationStatus = verificationStatus,
         expiryDate = expiryDate,
         uploadedBy = UserId(uploadedBy),
+        specialistId = specialistId?.let { SpecialistId(it) },
+        reviewedBy = reviewedBy?.let { UserId(it) },
+        reviewedAt = reviewedAt,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
     )

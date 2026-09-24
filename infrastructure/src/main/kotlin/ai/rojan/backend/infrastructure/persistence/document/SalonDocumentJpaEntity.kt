@@ -36,7 +36,10 @@ class SalonDocumentJpaEntity(
     val mediaAssetId: UUID,
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "document_type", nullable = false, length = 16)
+    // Widened from 16 to 32 (Staff Hygiene Certificates, V31) - the longest
+    // value at 16 chars was CERTIFICATE (11); HYGIENE_CERTIFICATE is 19 and
+    // would not have fit. See V31's own doc comment.
+    @Column(name = "document_type", nullable = false, length = 32)
     val documentType: DocumentType,
 
     @Enumerated(EnumType.STRING)
@@ -48,6 +51,16 @@ class SalonDocumentJpaEntity(
 
     @Column(name = "uploaded_by", nullable = false)
     val uploadedBy: UUID,
+
+    // Staff Hygiene Certificates (V31)
+    @Column(name = "specialist_id", nullable = true)
+    val specialistId: UUID?,
+
+    @Column(name = "reviewed_by", nullable = true)
+    var reviewedBy: UUID?,
+
+    @Column(name = "reviewed_at", nullable = true)
+    var reviewedAt: Instant?,
 ) {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

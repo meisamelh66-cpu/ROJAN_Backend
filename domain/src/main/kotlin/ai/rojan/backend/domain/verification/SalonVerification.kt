@@ -42,6 +42,8 @@ class SalonVerification private constructor(
     reviewedBy: UserId?,
     reviewedAt: Instant?,
     rejectionReason: String?,
+    qualityScore: Int?,
+    decorScore: Int?,
     val createdAt: Instant,
     updatedAt: Instant,
 ) {
@@ -57,6 +59,14 @@ class SalonVerification private constructor(
     var rejectionReason: String? = rejectionReason
         private set
 
+    /** ROJAN's 1-5 quality score (V29) - `null` until a reviewer provides one on [approve]; never owner-writable. */
+    var qualityScore: Int? = qualityScore
+        private set
+
+    /** ROJAN's cleanliness/decor assessment (V29) - `null` until [approve]. Deliberately no fixed numeric range yet - the approved scale for this field was never pinned down, unlike [qualityScore]'s explicit 1..5. */
+    var decorScore: Int? = decorScore
+        private set
+
     var updatedAt: Instant = updatedAt
         private set
 
@@ -69,12 +79,24 @@ class SalonVerification private constructor(
         touch()
     }
 
-    fun approve(reviewerId: UserId, allDocumentsApproved: Boolean) {
+    /**
+     * [qualityScore]/[decorScore] are optional here at the domain guard level
+     * (`null` defaults) - the cross-aggregate decision of what an approval
+     * *requires* (e.g. always demanding a real quality score) belongs to a
+     * future application-layer use case, not this entity's own transition
+     * guard, same split every other cross-aggregate check in this codebase
+     * already follows (see [ai.rojan.backend.domain.salon.Salon.activate]'s
+     * own doc comment).
+     */
+    fun approve(reviewerId: UserId, allDocumentsApproved: Boolean, qualityScore: Int? = null, decorScore: Int? = null) {
         require(status == SalonVerificationStatus.UNDER_REVIEW) { "Only a verification under review can be approved" }
         require(reviewerId == reviewedBy) { "Only the reviewer who claimed this case may decide it" }
         require(allDocumentsApproved) { "Every linked document must be individually approved before the case can be approved" }
+        require(qualityScore == null || qualityScore in 1..5) { "Quality score must be between 1 and 5" }
         status = SalonVerificationStatus.APPROVED
         reviewedAt = Instant.now()
+        this.qualityScore = qualityScore
+        this.decorScore = decorScore
         touch()
     }
 
@@ -115,6 +137,8 @@ class SalonVerification private constructor(
                 reviewedBy = null,
                 reviewedAt = null,
                 rejectionReason = null,
+                qualityScore = null,
+                decorScore = null,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -131,8 +155,10 @@ class SalonVerification private constructor(
             rejectionReason: String?,
             createdAt: Instant,
             updatedAt: Instant,
+            qualityScore: Int? = null,
+            decorScore: Int? = null,
         ): SalonVerification = SalonVerification(
-            id, salonId, status, submittedBy, submittedAt, reviewedBy, reviewedAt, rejectionReason, createdAt, updatedAt,
+            id, salonId, status, submittedBy, submittedAt, reviewedBy, reviewedAt, rejectionReason, qualityScore, decorScore, createdAt, updatedAt,
         )
     }
 }

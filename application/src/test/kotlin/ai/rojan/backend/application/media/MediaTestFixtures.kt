@@ -2,6 +2,9 @@ package ai.rojan.backend.application.media
 
 import ai.rojan.backend.application.port.MediaStoragePort
 import ai.rojan.backend.domain.auth.PhoneNumber
+import ai.rojan.backend.domain.common.PageRequest
+import ai.rojan.backend.domain.common.PageResult
+import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.media.MediaAsset
 import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.media.MediaAssetRepository
@@ -11,6 +14,7 @@ import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.User
 import ai.rojan.backend.domain.user.UserId
 import ai.rojan.backend.domain.user.UserRepository
+import ai.rojan.backend.domain.user.UserRole
 import java.util.UUID
 
 /** Mirrors [ai.rojan.backend.application.salon.InMemorySalonRepository]'s style. */
@@ -52,6 +56,13 @@ internal class InMemoryMediaUserRepository : UserRepository {
     override fun existsByEmail(email: Email): Boolean = store.values.any { it.email == email }
     override fun findByPhoneNumber(phoneNumber: PhoneNumber): User? = store.values.find { it.phoneNumber == phoneNumber }
     override fun existsByPhoneNumber(phoneNumber: PhoneNumber): Boolean = store.values.any { it.phoneNumber == phoneNumber }
+    override fun findByRole(role: UserRole): List<User> = store.values.filter { it.role == role }
+
+    /** Not exercised by this file's tests - a minimal, correct in-memory implementation only to satisfy the interface (Platform Management API Contract). */
+    override fun findByRole(role: UserRole, pageRequest: PageRequest, search: String?, sortDirection: SortDirection): PageResult<User> {
+        val matches = findByRole(role)
+        return PageResult(content = matches.take(pageRequest.size), page = pageRequest.page, size = pageRequest.size, totalElements = matches.size.toLong())
+    }
 }
 
 /** In-memory - no real bytes stored, just tracks what was uploaded/deleted for assertions. */

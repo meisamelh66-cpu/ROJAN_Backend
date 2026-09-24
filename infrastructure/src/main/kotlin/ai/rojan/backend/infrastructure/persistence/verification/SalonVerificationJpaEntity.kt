@@ -51,6 +51,13 @@ class SalonVerificationJpaEntity(
 
     @Column(name = "rejection_reason", nullable = true, length = 1000)
     var rejectionReason: String?,
+
+    // ROJAN Verification review scores (V29) - null until a reviewer approves the case.
+    @Column(name = "quality_score", nullable = true)
+    var qualityScore: Int?,
+
+    @Column(name = "decor_score", nullable = true)
+    var decorScore: Int?,
 ) {
     @Version
     @Column(name = "version", nullable = false)

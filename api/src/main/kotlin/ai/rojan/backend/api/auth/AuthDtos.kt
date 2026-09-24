@@ -26,7 +26,7 @@ data class RegisterRequest(
     val fullName: String,
 
     @field:NotNull
-    @field:Schema(example = "CUSTOMER")
+    @field:Schema(example = "CUSTOMER", description = "One of CUSTOMER, MANAGER, SPECIALIST - PLATFORM_ADMIN/PLATFORM_REVIEWER are rejected here (Phase 5 Section 11): platform roles are never self-service, only created via POST /api/v1/platform-authority/reviewers by an existing PLATFORM_ADMIN.")
     val role: UserRole,
 )
 

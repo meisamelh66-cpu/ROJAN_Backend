@@ -17,6 +17,7 @@ class ServiceCategory private constructor(
     name: String,
     description: String?,
     active: Boolean,
+    isSpecialty: Boolean,
     val createdAt: Instant,
     updatedAt: Instant,
 ) {
@@ -29,6 +30,10 @@ class ServiceCategory private constructor(
     var active: Boolean = active
         private set
 
+    /** Salon Completeness (V27) - the approved salon "specialty line" flag (e.g. professional keratin services). Owner-entered, optional-but-answered, never activation-blocking. */
+    var isSpecialty: Boolean = isSpecialty
+        private set
+
     var updatedAt: Instant = updatedAt
         private set
 
@@ -36,6 +41,12 @@ class ServiceCategory private constructor(
         require(name.isNotBlank()) { "Service category name must not be blank" }
         this.name = name.trim()
         this.description = description?.trim()?.ifBlank { null }
+        this.updatedAt = Instant.now()
+    }
+
+    /** Separate from [update] - same "different concern, different method" split this codebase already uses elsewhere (e.g. [ai.rojan.backend.domain.salon.Salon.update] vs. [ai.rojan.backend.domain.salon.Salon.updateProfile]). */
+    fun markAsSpecialty(isSpecialty: Boolean) {
+        this.isSpecialty = isSpecialty
         this.updatedAt = Instant.now()
     }
 
@@ -55,6 +66,7 @@ class ServiceCategory private constructor(
                 name = name.trim(),
                 description = description?.trim()?.ifBlank { null },
                 active = true,
+                isSpecialty = false,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -68,6 +80,7 @@ class ServiceCategory private constructor(
             active: Boolean,
             createdAt: Instant,
             updatedAt: Instant,
-        ): ServiceCategory = ServiceCategory(id, salonId, name, description, active, createdAt, updatedAt)
+            isSpecialty: Boolean = false,
+        ): ServiceCategory = ServiceCategory(id, salonId, name, description, active, isSpecialty, createdAt, updatedAt)
     }
 }

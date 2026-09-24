@@ -26,27 +26,27 @@ class SalonDocumentTest {
     @Test
     fun `approve transitions a pending document to approved`() {
         val document = newDocument()
-        document.approve()
+        document.approve(UserId.new())
         assertEquals(DocumentVerificationStatus.APPROVED, document.verificationStatus)
     }
 
     @Test
     fun `reject transitions a pending document to rejected and records nothing without a reason`() {
         val document = newDocument()
-        document.reject("Illegible scan")
+        document.reject(UserId.new(), "Illegible scan")
         assertEquals(DocumentVerificationStatus.REJECTED, document.verificationStatus)
     }
 
     @Test
     fun `reject requires a non-blank reason`() {
         val document = newDocument()
-        assertThrows(IllegalArgumentException::class.java) { document.reject("  ") }
+        assertThrows(IllegalArgumentException::class.java) { document.reject(UserId.new(), "  ") }
     }
 
     @Test
     fun `expire transitions an approved document to expired`() {
         val document = newDocument()
-        document.approve()
+        document.approve(UserId.new())
         document.expire()
         assertEquals(DocumentVerificationStatus.EXPIRED, document.verificationStatus)
     }
@@ -54,15 +54,15 @@ class SalonDocumentTest {
     @Test
     fun `approve rejects a document that is not pending`() {
         val document = newDocument()
-        document.approve()
-        assertThrows(IllegalArgumentException::class.java) { document.approve() }
+        document.approve(UserId.new())
+        assertThrows(IllegalArgumentException::class.java) { document.approve(UserId.new()) }
     }
 
     @Test
     fun `reject rejects a document that is not pending`() {
         val document = newDocument()
-        document.approve()
-        assertThrows(IllegalArgumentException::class.java) { document.reject("too late") }
+        document.approve(UserId.new())
+        assertThrows(IllegalArgumentException::class.java) { document.reject(UserId.new(), "too late") }
     }
 
     @Test
@@ -74,7 +74,7 @@ class SalonDocumentTest {
     @Test
     fun `expire rejects an already-rejected document`() {
         val document = newDocument()
-        document.reject("bad scan")
+        document.reject(UserId.new(), "bad scan")
         assertThrows(IllegalArgumentException::class.java) { document.expire() }
     }
 }

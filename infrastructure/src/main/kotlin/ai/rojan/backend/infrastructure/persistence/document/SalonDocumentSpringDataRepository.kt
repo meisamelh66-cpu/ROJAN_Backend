@@ -6,5 +6,9 @@ import java.util.UUID
 interface SalonDocumentSpringDataRepository : JpaRepository<SalonDocumentJpaEntity, UUID> {
     fun findByIdAndSalonId(id: UUID, salonId: UUID): SalonDocumentJpaEntity?
     fun findBySalonId(salonId: UUID): List<SalonDocumentJpaEntity>
+
+    /** Staff Hygiene Certificates (V31). */
+    fun findBySpecialistId(specialistId: UUID): List<SalonDocumentJpaEntity>
+
     fun findByMediaAssetId(mediaAssetId: UUID): SalonDocumentJpaEntity?
 }

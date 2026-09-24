@@ -1,11 +1,14 @@
 package ai.rojan.backend.infrastructure.persistence.verification
 
+import ai.rojan.backend.domain.common.PageRequest
+import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.user.UserId
 import ai.rojan.backend.domain.verification.SalonVerification
 import ai.rojan.backend.domain.verification.SalonVerificationId
 import ai.rojan.backend.domain.verification.SalonVerificationRepository
 import ai.rojan.backend.domain.verification.SalonVerificationStatus
+import org.springframework.data.domain.PageRequest as SpringPageRequest
 import org.springframework.stereotype.Repository
 import java.time.Instant
 
@@ -24,6 +27,8 @@ class SalonVerificationRepositoryAdapter(
                 reviewedBy = verification.reviewedBy?.value
                 reviewedAt = verification.reviewedAt
                 rejectionReason = verification.rejectionReason
+                qualityScore = verification.qualityScore
+                decorScore = verification.decorScore
             }
             ?: SalonVerificationJpaEntity(
                 id = verification.id.value,
@@ -34,6 +39,8 @@ class SalonVerificationRepositoryAdapter(
                 reviewedBy = verification.reviewedBy?.value,
                 reviewedAt = verification.reviewedAt,
                 rejectionReason = verification.rejectionReason,
+                qualityScore = verification.qualityScore,
+                decorScore = verification.decorScore,
             )
         return jpaRepository.save(entity).toDomain()
     }
@@ -47,6 +54,17 @@ class SalonVerificationRepositoryAdapter(
     override fun findHistoryBySalonId(salonId: SalonId): List<SalonVerification> =
         jpaRepository.findBySalonIdOrderByCreatedAtDesc(salonId.value).map { it.toDomain() }
 
+    override fun findAllOpen(pageRequest: PageRequest): PageResult<SalonVerification> {
+        val pageable = SpringPageRequest.of(pageRequest.page, pageRequest.size)
+        val page = jpaRepository.findByStatusIn(ACTIVE_STATUSES, pageable)
+        return PageResult(
+            content = page.content.map { it.toDomain() },
+            page = page.number,
+            size = page.size,
+            totalElements = page.totalElements,
+        )
+    }
+
     private fun SalonVerificationJpaEntity.toDomain(): SalonVerification = SalonVerification.reconstitute(
         id = SalonVerificationId(id),
         salonId = SalonId(salonId),
@@ -56,6 +74,8 @@ class SalonVerificationRepositoryAdapter(
         reviewedBy = reviewedBy?.let { UserId(it) },
         reviewedAt = reviewedAt,
         rejectionReason = rejectionReason,
+        qualityScore = qualityScore,
+        decorScore = decorScore,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
     )

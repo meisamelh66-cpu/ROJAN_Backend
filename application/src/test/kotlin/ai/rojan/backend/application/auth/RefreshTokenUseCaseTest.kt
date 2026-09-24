@@ -7,7 +7,10 @@ import ai.rojan.backend.application.port.TokenType
 import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.common.InactiveUserException
 import ai.rojan.backend.domain.common.InvalidTokenException
+import ai.rojan.backend.domain.common.PageRequest
+import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.RefreshRateLimitExceededException
+import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.user.Email
 import ai.rojan.backend.domain.user.User
@@ -34,6 +37,13 @@ private class SoleUserRepository(private val user: User) : UserRepository {
     override fun existsByEmail(email: Email): Boolean = user.email == email
     override fun findByPhoneNumber(phoneNumber: PhoneNumber): User? = user.takeIf { it.phoneNumber == phoneNumber }
     override fun existsByPhoneNumber(phoneNumber: PhoneNumber): Boolean = user.phoneNumber == phoneNumber
+    override fun findByRole(role: UserRole): List<User> = listOfNotNull(user.takeIf { it.role == role })
+
+    /** Not exercised by this file's tests - a minimal, correct in-memory implementation only to satisfy the interface (Platform Management API Contract). */
+    override fun findByRole(role: UserRole, pageRequest: PageRequest, search: String?, sortDirection: SortDirection): PageResult<User> {
+        val matches = findByRole(role)
+        return PageResult(content = matches.take(pageRequest.size), page = pageRequest.page, size = pageRequest.size, totalElements = matches.size.toLong())
+    }
 }
 
 /**

@@ -18,6 +18,7 @@ class ServiceCategoryRepositoryAdapter(
                 name = category.name
                 description = category.description
                 active = category.active
+                isSpecialty = category.isSpecialty
             }
             ?: ServiceCategoryJpaEntity(
                 id = category.id.value,
@@ -25,6 +26,7 @@ class ServiceCategoryRepositoryAdapter(
                 name = category.name,
                 description = category.description,
                 active = category.active,
+                isSpecialty = category.isSpecialty,
             )
         return jpaRepository.save(entity).toDomain()
     }
@@ -41,6 +43,7 @@ class ServiceCategoryRepositoryAdapter(
         name = name,
         description = description,
         active = active,
+        isSpecialty = isSpecialty,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
     )

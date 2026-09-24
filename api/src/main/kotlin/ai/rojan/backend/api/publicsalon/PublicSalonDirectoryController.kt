@@ -102,6 +102,7 @@ class PublicSalonDirectoryController(
         coverUrl = coverMediaId?.let { resolveMediaUrl(it) },
         city = city,
         distanceKm = distanceKm,
+        rojanVerified = rojanVerified,
     )
 
     private fun Salon.resolveMediaUrl(mediaId: MediaAssetId): String? =

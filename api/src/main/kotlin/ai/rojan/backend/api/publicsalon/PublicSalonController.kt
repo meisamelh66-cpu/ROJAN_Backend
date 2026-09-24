@@ -159,6 +159,7 @@ class PublicSalonController(
         logoMediaId?.let { resolveMediaUrl(it) },
         coverMediaId?.let { resolveMediaUrl(it) },
         latitude, longitude,
+        rojanVerified,
     )
 
     private fun Salon.resolveMediaUrl(mediaId: MediaAssetId): String? =

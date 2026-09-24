@@ -129,6 +129,9 @@ class DocumentController(
         verificationStatus = verificationStatus,
         expiryDate = expiryDate,
         uploadedBy = uploadedBy.value,
+        specialistId = specialistId?.value,
+        reviewedBy = reviewedBy?.value,
+        reviewedAt = reviewedAt,
         createdAt = createdAt,
         updatedAt = updatedAt,
     )

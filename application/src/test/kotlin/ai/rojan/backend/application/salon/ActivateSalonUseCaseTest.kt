@@ -12,6 +12,7 @@ import ai.rojan.backend.domain.schedule.TimeInterval
 import ai.rojan.backend.domain.schedule.WorkingHours
 import ai.rojan.backend.domain.user.UserId
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -158,14 +159,17 @@ class ActivateSalonUseCaseTest {
     }
 
     @Test
-    fun `activates once service, specialist, and working hours are all present`() {
+    fun `activation succeeds with no ROJAN verification ever having existed - verification is not a second activation gate`() {
         addActiveService()
         addActiveSpecialist()
         addWorkingHours()
+        completeCompletionProfile()
+        assertFalse(salon.rojanVerified)
 
         val activated = activateUseCase.execute(ActivateSalonCommand(salon.id, owner))
 
-        assertEquals(ai.rojan.backend.domain.salon.SalonOnboardingStatus.ACTIVE, activated.onboardingStatus)
+        assertEquals(SalonOnboardingStatus.ACTIVE, activated.onboardingStatus)
+        assertFalse(activated.rojanVerified)
     }
 
     @Test

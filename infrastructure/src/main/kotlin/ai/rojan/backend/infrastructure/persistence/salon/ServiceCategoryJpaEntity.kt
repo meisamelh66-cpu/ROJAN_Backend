@@ -29,6 +29,9 @@ class ServiceCategoryJpaEntity(
 
     @Column(nullable = false)
     var active: Boolean,
+
+    @Column(name = "is_specialty", nullable = false)
+    var isSpecialty: Boolean,
 ) {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

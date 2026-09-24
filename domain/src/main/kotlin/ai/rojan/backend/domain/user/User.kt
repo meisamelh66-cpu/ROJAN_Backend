@@ -9,6 +9,20 @@ enum class UserRole {
     CUSTOMER,
     MANAGER,
     SPECIALIST,
+
+    /**
+     * Platform-level actors (Super Admin - ROJAN Web only, never Android, never
+     * a fourth app flavor). Deliberately never salon-scoped: authorization for
+     * these two values is always checked directly against [User.role], never
+     * through [ai.rojan.backend.domain.salon.SalonMembership]/
+     * [ai.rojan.backend.application.salon.SalonPermissionResolver] - a platform
+     * reviewer or admin has no [ai.rojan.backend.domain.salon.SalonMembership]
+     * row of their own and needs none.
+     */
+    PLATFORM_REVIEWER,
+
+    /** Full platform authority, including managing [PLATFORM_REVIEWER] accounts - see [PLATFORM_REVIEWER]'s own doc comment for the same salon-scoping rule. */
+    PLATFORM_ADMIN,
 }
 
 @JvmInline
@@ -107,6 +121,13 @@ class User private constructor(
     fun deactivate() {
         if (!active) return
         active = false
+        updatedAt = Instant.now()
+    }
+
+    /** Platform Roles: the reverse of [deactivate] - e.g. a [PLATFORM_ADMIN] restoring a [PLATFORM_REVIEWER] account it previously deactivated. Idempotent, same shape as [deactivate]. */
+    fun reactivate() {
+        if (active) return
+        active = true
         updatedAt = Instant.now()
     }
 

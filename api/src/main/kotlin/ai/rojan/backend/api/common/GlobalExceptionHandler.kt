@@ -28,6 +28,8 @@ import ai.rojan.backend.domain.common.MediaTypeInvalidException
 import ai.rojan.backend.domain.common.MediaTypeMismatchException
 import ai.rojan.backend.domain.common.OtpRateLimitExceededException
 import ai.rojan.backend.domain.common.OtpVerifyRateLimitExceededException
+import ai.rojan.backend.domain.common.PhoneNumberAlreadyRegisteredException
+import ai.rojan.backend.domain.common.PlatformAccessDeniedException
 import ai.rojan.backend.domain.common.RefreshRateLimitExceededException
 import ai.rojan.backend.domain.common.RegisterRateLimitExceededException
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
@@ -93,8 +95,8 @@ class GlobalExceptionHandler {
 
     private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
 
-    @ExceptionHandler(EmailAlreadyRegisteredException::class)
-    fun handleEmailAlreadyRegistered(ex: EmailAlreadyRegisteredException, request: WebRequest) =
+    @ExceptionHandler(EmailAlreadyRegisteredException::class, PhoneNumberAlreadyRegisteredException::class)
+    fun handleEmailAlreadyRegistered(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, errorCodeFor(ex), ex.message.orEmpty(), request)
 
     @ExceptionHandler(InvalidCredentialsException::class)
@@ -159,7 +161,7 @@ class GlobalExceptionHandler {
     fun handleMediaSizeExceeded(ex: MediaSizeExceededException, request: WebRequest) =
         respond(HttpStatus.PAYLOAD_TOO_LARGE, errorCodeFor(ex), ex.message.orEmpty(), request)
 
-    @ExceptionHandler(SalonAccessDeniedException::class, BookingAccessDeniedException::class, CustomerAccessDeniedException::class, BookingRoleNotAllowedException::class)
+    @ExceptionHandler(SalonAccessDeniedException::class, BookingAccessDeniedException::class, CustomerAccessDeniedException::class, BookingRoleNotAllowedException::class, PlatformAccessDeniedException::class)
     fun handleAccessDenied(ex: Exception, request: WebRequest) =
         respond(HttpStatus.FORBIDDEN, errorCodeFor(ex), ex.message.orEmpty(), request)
 
@@ -226,6 +228,7 @@ class GlobalExceptionHandler {
      */
     private fun errorCodeFor(ex: Throwable): String = when (ex) {
         is EmailAlreadyRegisteredException -> "EMAIL_ALREADY_REGISTERED"
+        is PhoneNumberAlreadyRegisteredException -> "PHONE_NUMBER_ALREADY_REGISTERED"
         is InvalidCredentialsException -> "INVALID_CREDENTIALS"
         is InvalidTokenException -> "INVALID_TOKEN"
         is InvalidOtpException -> "INVALID_OTP"
@@ -264,6 +267,7 @@ class GlobalExceptionHandler {
         is InvalidVerificationDocumentException -> "INVALID_VERIFICATION_DOCUMENT"
         is NoResourceFoundException -> "RESOURCE_NOT_FOUND"
         is SalonAccessDeniedException, is BookingAccessDeniedException, is CustomerAccessDeniedException -> "ACCESS_DENIED"
+        is PlatformAccessDeniedException -> "PLATFORM_ACCESS_DENIED"
         is BookingRoleNotAllowedException -> "BOOKING_ROLE_NOT_ALLOWED"
         is BookingConflictException -> "BOOKING_CONFLICT"
         is InvalidBookingStateException -> "INVALID_BOOKING_STATE"

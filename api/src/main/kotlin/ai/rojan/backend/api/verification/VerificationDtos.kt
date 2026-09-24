@@ -10,7 +10,11 @@ data class SubmitVerificationRequest(
     val documentIds: List<UUID>,
 )
 
-/** [reviewedBy]/[reviewedAt]/[rejectionReason] stay null for every case reachable this phase - review/approve/reject aren't wired to any use case or endpoint yet. */
+/**
+ * [reviewedBy]/[reviewedAt]/[rejectionReason]/[qualityScore]/[decorScore] are `null` until a Platform
+ * Authority reviewer acts on this case (Phase 5: `POST /api/v1/platform-authority/salons/{salonId}/verifications/...`)
+ * - never writable through this manager-facing controller.
+ */
 data class SalonVerificationResponse(
     val id: UUID,
     val salonId: UUID,
@@ -20,6 +24,8 @@ data class SalonVerificationResponse(
     val reviewedBy: UUID?,
     val reviewedAt: Instant?,
     val rejectionReason: String?,
+    val qualityScore: Int?,
+    val decorScore: Int?,
     val documentIds: List<UUID>,
     val createdAt: Instant,
     val updatedAt: Instant,

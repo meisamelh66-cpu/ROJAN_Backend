@@ -2,6 +2,7 @@ package ai.rojan.backend.domain.document
 
 import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.salon.SalonId
+import ai.rojan.backend.domain.salon.SpecialistId
 
 interface SalonDocumentRepository {
     fun save(document: SalonDocument): SalonDocument
@@ -11,6 +12,13 @@ interface SalonDocumentRepository {
 
     fun findBySalonId(
         salonId: SalonId,
+        documentType: DocumentType? = null,
+        verificationStatus: DocumentVerificationStatus? = null,
+    ): List<SalonDocument>
+
+    /** Staff Hygiene Certificates (V31) - every document (of any type) attached to one specialist, optionally narrowed the same way [findBySalonId] already is. In practice callers pass [DocumentType.HYGIENE_CERTIFICATE] to find that specialist's certificates. */
+    fun findBySpecialistId(
+        specialistId: SpecialistId,
         documentType: DocumentType? = null,
         verificationStatus: DocumentVerificationStatus? = null,
     ): List<SalonDocument>
