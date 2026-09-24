@@ -13,7 +13,13 @@ name: Backend Production Deploy
 # workflow_dispatch only - production deployment is now always an explicit, separate action,
 # never automatic.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "true = actually deploy to the production VPS after building/pushing the image. false (default) = build, test, and push to GHCR only - no VPS changes, safe to use to validate the pipeline."
+        type: boolean
+        required: true
+        default: false
 
 concurrency:
   group: backend-production-deploy
@@ -90,6 +96,7 @@ jobs:
   deploy:
     name: Deploy to VPS
     needs: build-and-push
+    if: ${{ inputs.deploy == true }}
     runs-on: ubuntu-latest
 
     permissions:
@@ -247,7 +254,13 @@ jobs:
     steps:
       - name: Summarize
         run: |
-          if [ "${{ needs.deploy.result }}" = "success" ]; then
+          DEPLOY_RESULT="${{ needs.deploy.result }}"
+          if [ "$DEPLOY_RESULT" = "skipped" ]; then
+            echo "### ⏭️ Build-only run - deploy skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "Image \`${{ needs.build-and-push.outputs.image_tag || github.sha }}\` was built, tested, and pushed to GHCR." >> "$GITHUB_STEP_SUMMARY"
+            echo "The \`deploy\` job did not run because this run's \`deploy\` input was \`false\` - no VPS changes were made." >> "$GITHUB_STEP_SUMMARY"
+            echo "Re-run this workflow with \`deploy: true\` to actually deploy this image." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$DEPLOY_RESULT" = "success" ]; then
             echo "### ✅ Deployment succeeded" >> "$GITHUB_STEP_SUMMARY"
             echo "Image \`${{ needs.build-and-push.outputs.image_tag || github.sha }}\` is live." >> "$GITHUB_STEP_SUMMARY"
           else
