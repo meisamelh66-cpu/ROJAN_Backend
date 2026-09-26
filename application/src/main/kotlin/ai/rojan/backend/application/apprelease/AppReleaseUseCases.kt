@@ -1,0 +1,188 @@
+package ai.rojan.backend.application.apprelease
+
+import ai.rojan.backend.application.platformauthority.PlatformAuthorizationResolver
+import ai.rojan.backend.domain.apprelease.AppRelease
+import ai.rojan.backend.domain.apprelease.AppReleaseId
+import ai.rojan.backend.domain.apprelease.AppReleaseRepository
+import ai.rojan.backend.domain.apprelease.AppReleaseStatus
+import ai.rojan.backend.domain.apprelease.AppTarget
+import ai.rojan.backend.domain.common.AppReleaseNotFoundException
+import ai.rojan.backend.domain.common.AppReleaseVersionCodeAlreadyExistsException
+import ai.rojan.backend.domain.common.InvalidApplicationIdException
+import ai.rojan.backend.domain.user.UserId
+import java.time.LocalDate
+
+/** Shared by every admin use case below - the one place an incoming, client-supplied `applicationId` string is validated against the known [AppTarget] set. Never silently falls back to a default app; an unrecognized id is always a hard [InvalidApplicationIdException], mirroring how [ai.rojan.backend.api.banner.BannerController]'s `target` binding fails closed for an unknown value. */
+internal fun resolveTarget(applicationId: String): AppTarget =
+    AppTarget.fromApplicationId(applicationId) ?: throw InvalidApplicationIdException(applicationId)
+
+data class CreateAppReleaseCommand(
+    val callerId: UserId,
+    val applicationId: String,
+    val versionName: String,
+    val versionCode: Int,
+    val minSupportedVersionCode: Int,
+    val isMandatory: Boolean,
+    val status: AppReleaseStatus,
+    val downloadUrl: String,
+    val sha256: String,
+    val fileSizeBytes: Long,
+    val releaseNotes: String?,
+    val releaseDate: LocalDate,
+    val isActive: Boolean,
+)
+
+/** PLATFORM_ADMIN only. `versionCode` must be unique per app - a duplicate is a real [AppReleaseVersionCodeAlreadyExistsException], never a silent overwrite of the existing row. */
+class CreateAppReleaseUseCase(
+    private val appReleaseRepository: AppReleaseRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(command: CreateAppReleaseCommand): AppRelease {
+        platformAuthorization.requirePlatformAdmin(command.callerId)
+        val target = resolveTarget(command.applicationId)
+
+        if (appReleaseRepository.existsByTargetAndVersionCode(target, command.versionCode)) {
+            throw AppReleaseVersionCodeAlreadyExistsException(command.applicationId, command.versionCode)
+        }
+
+        val release = AppRelease.create(
+            target = target,
+            versionName = command.versionName,
+            versionCode = command.versionCode,
+            minSupportedVersionCode = command.minSupportedVersionCode,
+            isMandatory = command.isMandatory,
+            status = command.status,
+            downloadUrl = command.downloadUrl,
+            sha256 = command.sha256,
+            fileSizeBytes = command.fileSizeBytes,
+            releaseNotes = command.releaseNotes,
+            releaseDate = command.releaseDate,
+            isActive = command.isActive,
+            createdBy = command.callerId,
+        )
+        return appReleaseRepository.save(release)
+    }
+}
+
+data class UpdateAppReleaseCommand(
+    val callerId: UserId,
+    val releaseId: AppReleaseId,
+    val versionName: String,
+    val minSupportedVersionCode: Int,
+    val isMandatory: Boolean,
+    val status: AppReleaseStatus,
+    val downloadUrl: String,
+    val sha256: String,
+    val fileSizeBytes: Long,
+    val releaseNotes: String?,
+    val releaseDate: LocalDate,
+)
+
+/** PLATFORM_ADMIN only. Never touches `applicationId`/`versionCode` - see [AppRelease]'s own doc comment for why those two stay immutable once created. */
+class UpdateAppReleaseUseCase(
+    private val appReleaseRepository: AppReleaseRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(command: UpdateAppReleaseCommand): AppRelease {
+        platformAuthorization.requirePlatformAdmin(command.callerId)
+        val release = appReleaseRepository.findById(command.releaseId)
+            ?: throw AppReleaseNotFoundException(command.releaseId.value.toString())
+
+        release.updateMetadata(
+            versionName = command.versionName,
+            minSupportedVersionCode = command.minSupportedVersionCode,
+            isMandatory = command.isMandatory,
+            status = command.status,
+            downloadUrl = command.downloadUrl,
+            sha256 = command.sha256,
+            fileSizeBytes = command.fileSizeBytes,
+            releaseNotes = command.releaseNotes,
+            releaseDate = command.releaseDate,
+        )
+        return appReleaseRepository.save(release)
+    }
+}
+
+data class ActivateAppReleaseCommand(val callerId: UserId, val releaseId: AppReleaseId)
+
+/** PLATFORM_ADMIN only. */
+class ActivateAppReleaseUseCase(
+    private val appReleaseRepository: AppReleaseRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(command: ActivateAppReleaseCommand): AppRelease {
+        platformAuthorization.requirePlatformAdmin(command.callerId)
+        val release = appReleaseRepository.findById(command.releaseId)
+            ?: throw AppReleaseNotFoundException(command.releaseId.value.toString())
+        release.activate()
+        return appReleaseRepository.save(release)
+    }
+}
+
+data class DeactivateAppReleaseCommand(val callerId: UserId, val releaseId: AppReleaseId)
+
+/** PLATFORM_ADMIN only. Never deletes the row - same "disable, don't destroy" discipline the rest of this platform's admin-moderation surfaces (e.g. [ai.rojan.backend.application.platformauthority.DeactivatePlatformManagerUseCase]) already use. */
+class DeactivateAppReleaseUseCase(
+    private val appReleaseRepository: AppReleaseRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(command: DeactivateAppReleaseCommand): AppRelease {
+        platformAuthorization.requirePlatformAdmin(command.callerId)
+        val release = appReleaseRepository.findById(command.releaseId)
+            ?: throw AppReleaseNotFoundException(command.releaseId.value.toString())
+        release.deactivate()
+        return appReleaseRepository.save(release)
+    }
+}
+
+data class ListAppReleasesQuery(val callerId: UserId, val applicationId: String)
+
+/** PLATFORM_ADMIN or PLATFORM_REVIEWER - the admin management view, includes every status (DRAFT/PUBLISHED/ARCHIVED) and inactive rows. Mirrors [ai.rojan.backend.api.platformauthority.PlatformAuthorityManagerController]'s "reviewer can read, only admin mutates" split - the task's explicit convention to reuse, not [ai.rojan.backend.api.banner.BannerController]'s stricter admin-only-for-everything shape. */
+class ListAppReleasesForAdminUseCase(
+    private val appReleaseRepository: AppReleaseRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(query: ListAppReleasesQuery): List<AppRelease> {
+        platformAuthorization.requirePlatformReviewerOrAdmin(query.callerId)
+        val target = resolveTarget(query.applicationId)
+        return appReleaseRepository.findByTarget(target)
+    }
+}
+
+data class LatestAppReleaseQuery(val applicationId: String, val callerVersionCode: Int)
+
+/** The computed result of checking one caller's current [callerVersionCode] against the real latest [release] - never persisted, recomputed fresh on every call. */
+data class LatestAppReleaseResult(
+    val updateAvailable: Boolean,
+    val forceUpdate: Boolean,
+    val release: AppRelease,
+)
+
+/**
+ * No authorization at all, by design - this is the public surface every Android client eventually
+ * calls before login, mirroring [ai.rojan.backend.application.banner.ListActiveBannersUseCase]'s
+ * own "intentionally open" shape. An app with no PUBLISHED+active release yet is a real
+ * [AppReleaseNotFoundException] (404) - never a fabricated "no update available" response for data
+ * that genuinely doesn't exist (the website's own `lib/downloads/release-registry.ts` follows the
+ * identical "404 rather than resolve to nothing" discipline for the same reason).
+ *
+ * [LatestAppReleaseResult.forceUpdate] is true only when an update is actually available AND either
+ * this specific release was marked mandatory, or the caller's version has fallen below the release's
+ * own [AppRelease.minSupportedVersionCode] floor - a caller already on or above the latest version
+ * is never told to force-update, regardless of either flag.
+ */
+class GetLatestAppReleaseUseCase(
+    private val appReleaseRepository: AppReleaseRepository,
+) {
+    fun execute(query: LatestAppReleaseQuery): LatestAppReleaseResult {
+        val target = resolveTarget(query.applicationId)
+        val release = appReleaseRepository.findLatestPublished(target)
+            ?: throw AppReleaseNotFoundException(query.applicationId)
+
+        val updateAvailable = query.callerVersionCode < release.versionCode
+        val forceUpdate = updateAvailable &&
+            (release.isMandatory || query.callerVersionCode < release.minSupportedVersionCode)
+
+        return LatestAppReleaseResult(updateAvailable, forceUpdate, release)
+    }
+}
