@@ -1,6 +1,7 @@
 package ai.rojan.backend.application.auth
 
 import ai.rojan.backend.application.port.IssuedToken
+import ai.rojan.backend.application.port.RefreshTokenStorePort
 import ai.rojan.backend.application.port.TokenProviderPort
 import ai.rojan.backend.application.port.TokenSubject
 import ai.rojan.backend.application.port.TokenType
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.assertThrows
 import java.time.Instant
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
@@ -83,6 +85,28 @@ private class EncodedTokenProvider : TokenProviderPort {
         val jti = parts.getOrNull(2) ?: throw InvalidTokenException()
         val familyId = parts.getOrNull(3)
         return TokenSubject(userId = userId, email = "", role = "", type = type, jti = jti, familyId = familyId)
+    }
+}
+
+/**
+ * Test-only [RefreshTokenStorePort] that makes the "genuinely simultaneous refresh" interleaving
+ * deterministic: [currentJti] reads the real value from [delegate], then waits on [barrier] until
+ * every racing caller has read too, before returning. So no caller can rotate (`activate`) or
+ * revoke the family until all of them have seen the original, still-valid jti - exactly the
+ * overlap the race test asserts on. Without it, a loaded machine (e.g. a CI runner running every
+ * module's tests in parallel) can let one caller finish its whole refresh before the other even
+ * reads the store; that other ordering is the ordinary reuse-detection path, covered on its own by
+ * `replaying an already-rotated-out token revokes the whole family`. Everything else delegates
+ * unchanged; the timeout turns a stuck barrier into a test failure instead of a hang.
+ */
+private class BarrierOnReadRefreshTokenStore(
+    private val delegate: RefreshTokenStorePort,
+    private val barrier: CyclicBarrier,
+) : RefreshTokenStorePort by delegate {
+    override fun currentJti(familyId: String): String? {
+        val current = delegate.currentJti(familyId)
+        barrier.await(5, TimeUnit.SECONDS)
+        return current
     }
 }
 
@@ -263,16 +287,28 @@ class RefreshTokenUseCaseTest {
         // a sequential double-call (already covered by the "replaying an already-rotated-out
         // token" test above) cannot exercise genuine interleaving at all, since by the time a
         // second sequential call starts, the first has already finished rotating.
+        //
+        // The latch alone only releases both threads together; it cannot stop the scheduler from
+        // running one of them to completion before the other reads the store. The barrier store
+        // (see BarrierOnReadRefreshTokenStore) guarantees both callers have read the original jti
+        // before either can rotate or revoke, so this test always exercises the true overlap.
         val originalRefreshToken = issueFamily()
         val startLatch = CountDownLatch(1)
         val ready = CountDownLatch(2)
         val executor = Executors.newFixedThreadPool(2)
+        val racingUseCase = RefreshTokenUseCase(
+            userRepository = SoleUserRepository(user),
+            tokenProvider = tokenProvider,
+            rateLimiter = RecordingRateLimiter(),
+            policy = testAuthRateLimitPolicy,
+            refreshTokenStore = BarrierOnReadRefreshTokenStore(refreshTokenStore, CyclicBarrier(2)),
+        )
 
         fun raceCall(): Future<Result<AuthenticationResult>> = executor.submit(
             Callable {
                 ready.countDown()
                 startLatch.await(5, TimeUnit.SECONDS)
-                runCatching { useCase.execute(RefreshTokenCommand(originalRefreshToken)) }
+                runCatching { racingUseCase.execute(RefreshTokenCommand(originalRefreshToken)) }
             },
         )
 
