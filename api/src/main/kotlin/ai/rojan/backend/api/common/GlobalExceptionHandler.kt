@@ -1,6 +1,7 @@
 package ai.rojan.backend.api.common
 
 import ai.rojan.backend.domain.common.AmbiguousSalonContextException
+import ai.rojan.backend.domain.common.AppReleaseConcurrentModificationException
 import ai.rojan.backend.domain.common.AppReleaseNotFoundException
 import ai.rojan.backend.domain.common.AppReleaseVersionCodeAlreadyExistsException
 import ai.rojan.backend.domain.common.InvalidAppReleaseStatusTransitionException
@@ -195,6 +196,7 @@ class GlobalExceptionHandler {
         AppReleaseVersionCodeAlreadyExistsException::class,
         InvalidAppReleaseStatusTransitionException::class,
         PublishedAppReleaseArtifactImmutableException::class,
+        AppReleaseConcurrentModificationException::class,
     )
     fun handleConflict(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -280,6 +282,7 @@ class GlobalExceptionHandler {
         is AppReleaseVersionCodeAlreadyExistsException -> "APP_RELEASE_VERSION_CODE_ALREADY_EXISTS"
         is InvalidAppReleaseStatusTransitionException -> "APP_RELEASE_INVALID_STATUS_TRANSITION"
         is PublishedAppReleaseArtifactImmutableException -> "APP_RELEASE_PUBLISHED_ARTIFACT_IMMUTABLE"
+        is AppReleaseConcurrentModificationException -> "APP_RELEASE_CONCURRENT_MODIFICATION"
         is InvalidApplicationIdException -> "INVALID_APPLICATION_ID"
         is SalonDocumentNotFoundException -> "SALON_DOCUMENT_NOT_FOUND"
         is DocumentAlreadyAttachedException -> "DOCUMENT_ALREADY_ATTACHED"

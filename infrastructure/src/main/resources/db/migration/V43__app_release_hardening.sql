@@ -21,6 +21,12 @@ ALTER TABLE app_releases
     ADD COLUMN signer_thumbprint VARCHAR(64)
         CHECK (signer_thumbprint ~ '^([0-9A-F]{40}|[0-9A-F]{64})$');
 
+-- Optimistic lock (AppReleaseJpaEntity @Version): every save carries the version it was loaded
+-- with, so a save based on an outdated copy is refused instead of overwriting newer data - e.g. a
+-- stale edit landing after a concurrent publish. Existing rows start at 0.
+ALTER TABLE app_releases
+    ADD COLUMN version BIGINT NOT NULL DEFAULT 0;
+
 -- Rows created before this migration were published without an audit trail - record the best
 -- information that exists (last update, creator) so every PUBLISHED row satisfies the constraint
 -- below. ARCHIVED rows are left alone: V42 allowed creating a row directly as ARCHIVED, so an

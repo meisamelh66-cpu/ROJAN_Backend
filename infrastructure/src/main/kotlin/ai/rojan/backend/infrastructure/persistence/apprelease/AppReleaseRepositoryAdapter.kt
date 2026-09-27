@@ -6,7 +6,9 @@ import ai.rojan.backend.domain.apprelease.AppReleaseId
 import ai.rojan.backend.domain.apprelease.AppReleaseRepository
 import ai.rojan.backend.domain.apprelease.AppReleaseStatus
 import ai.rojan.backend.domain.apprelease.AppTarget
+import ai.rojan.backend.domain.common.AppReleaseConcurrentModificationException
 import ai.rojan.backend.domain.user.UserId
+import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Repository
 import java.time.Instant
 
@@ -31,9 +33,20 @@ class AppReleaseRepositoryAdapter(
     override fun existsByTargetAndChannelAndVersionCode(target: AppTarget, channel: AppReleaseChannel, versionCode: Int): Boolean =
         jpaRepository.existsByApplicationIdAndChannelAndVersionCode(target.applicationId, channel, versionCode)
 
+    /**
+     * Optimistic concurrency: [release] carries the version of the row it was loaded from. If the
+     * stored row has moved on since (another request saved it in between - e.g. published it), the
+     * save is refused with [AppReleaseConcurrentModificationException] instead of copying stale
+     * fields over the newer row. The version is also set on the merged entity, so the `@Version`
+     * check in the final UPDATE catches a change that commits between this check and the write.
+     */
     override fun save(release: AppRelease): AppRelease {
         val entity = jpaRepository.findById(release.id.value).orElse(null)
             ?.apply {
+                if (version != release.version) {
+                    throw AppReleaseConcurrentModificationException(release.id.value.toString())
+                }
+                version = release.version
                 versionName = release.versionName
                 minSupportedVersionCode = release.minSupportedVersionCode
                 isMandatory = release.isMandatory
@@ -70,7 +83,11 @@ class AppReleaseRepositoryAdapter(
                 publishedBy = release.publishedBy?.value,
                 createdBy = release.createdBy.value,
             )
-        return jpaRepository.save(entity).toDomain()
+        return try {
+            jpaRepository.saveAndFlush(entity).toDomain()
+        } catch (ex: ObjectOptimisticLockingFailureException) {
+            throw AppReleaseConcurrentModificationException(release.id.value.toString())
+        }
     }
 
     private fun AppReleaseJpaEntity.toDomain(): AppRelease = AppRelease.reconstitute(
@@ -97,5 +114,6 @@ class AppReleaseRepositoryAdapter(
         createdBy = UserId(createdBy),
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
+        version = version,
     )
 }

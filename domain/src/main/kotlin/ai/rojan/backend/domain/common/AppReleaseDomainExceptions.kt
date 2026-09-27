@@ -17,3 +17,6 @@ class InvalidAppReleaseStatusTransitionException(from: Enum<*>, to: Enum<*>) :
 
 class PublishedAppReleaseArtifactImmutableException(field: String) :
     DomainException("$field cannot change once a release has been published - publish a new release with a new versionCode instead")
+
+class AppReleaseConcurrentModificationException(releaseId: String) :
+    DomainException("App release $releaseId was changed by another request - reload it and try again")

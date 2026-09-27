@@ -65,6 +65,10 @@ enum class AppReleaseChannel { PRODUCTION, BETA }
  * different build must be a new release with a new versionCode. [minSupportedVersionCode],
  * [isMandatory], [releaseNotes], [releaseDate] and the signer metadata stay editable.
  *
+ * Concurrency: [version] is the stored row's optimistic-lock version; a save based on an outdated
+ * version fails with [ai.rojan.backend.domain.common.AppReleaseConcurrentModificationException]
+ * instead of overwriting newer data (e.g. a publish that happened in between).
+ *
  * Signer metadata ([signerSubject]/[signerThumbprint]) is informational only - a record of which
  * certificate signed the artifact, for admins and diagnostics. Clients must never treat it as their
  * trust root: it comes from the same server as [downloadUrl], so anyone able to alter one could
@@ -92,6 +96,13 @@ class AppRelease private constructor(
     val createdBy: UserId,
     val createdAt: Instant,
     updatedAt: Instant,
+    /**
+     * Optimistic-concurrency version of the stored row this object was loaded from (null for a
+     * release that has never been saved). Persistence refuses to save an object whose version is
+     * no longer the stored one, so a request that loaded a release before another request changed
+     * it (e.g. published it) can never silently overwrite that newer state.
+     */
+    val version: Long? = null,
 ) {
     var versionName: String = versionName
         private set
@@ -358,10 +369,11 @@ class AppRelease private constructor(
             createdBy: UserId,
             createdAt: Instant,
             updatedAt: Instant,
+            version: Long?,
         ): AppRelease = AppRelease(
             id, target, channel, versionName, versionCode, minSupportedVersionCode, isMandatory, status, downloadUrl,
             sha256, fileSizeBytes, releaseNotes, releaseDate, isActive, signerSubject, signerThumbprint,
-            publishedAt, publishedBy, createdBy, createdAt, updatedAt,
+            publishedAt, publishedBy, createdBy, createdAt, updatedAt, version,
         )
 
         private fun validateVersionName(versionName: String) {

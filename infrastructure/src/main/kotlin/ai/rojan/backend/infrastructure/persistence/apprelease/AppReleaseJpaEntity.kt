@@ -9,6 +9,7 @@ import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import jakarta.persistence.Version
 import org.springframework.data.annotation.CreatedDate
 import org.springframework.data.annotation.LastModifiedDate
 import org.springframework.data.jpa.domain.support.AuditingEntityListener
@@ -87,4 +88,9 @@ class AppReleaseJpaEntity(
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant? = null
+
+    /** Optimistic lock - null only before the first insert (which also tells Spring Data the entity is new). */
+    @Version
+    @Column(name = "version", nullable = false)
+    var version: Long? = null
 }
