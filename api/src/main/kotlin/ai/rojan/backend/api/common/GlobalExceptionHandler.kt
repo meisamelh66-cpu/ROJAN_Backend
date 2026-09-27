@@ -1,6 +1,11 @@
 package ai.rojan.backend.api.common
 
 import ai.rojan.backend.domain.common.AmbiguousSalonContextException
+import ai.rojan.backend.domain.common.AppReleaseConcurrentModificationException
+import ai.rojan.backend.domain.common.AppReleaseNotFoundException
+import ai.rojan.backend.domain.common.AppReleaseVersionCodeAlreadyExistsException
+import ai.rojan.backend.domain.common.InvalidAppReleaseStatusTransitionException
+import ai.rojan.backend.domain.common.PublishedAppReleaseArtifactImmutableException
 import ai.rojan.backend.domain.common.BookingAccessDeniedException
 import ai.rojan.backend.domain.common.BannerNotFoundException
 import ai.rojan.backend.domain.common.BannerReorderMismatchException
@@ -16,6 +21,7 @@ import ai.rojan.backend.domain.common.CustomerTagNotFoundException
 import ai.rojan.backend.domain.common.DocumentAlreadyAttachedException
 import ai.rojan.backend.domain.common.EmailAlreadyRegisteredException
 import ai.rojan.backend.domain.common.InactiveUserException
+import ai.rojan.backend.domain.common.InvalidApplicationIdException
 import ai.rojan.backend.domain.common.InvalidBookingStateException
 import ai.rojan.backend.domain.common.InvalidCredentialsException
 import ai.rojan.backend.domain.common.InvalidCustomerStateException
@@ -146,6 +152,7 @@ class GlobalExceptionHandler {
         SalonDocumentNotFoundException::class,
         SalonVerificationNotFoundException::class,
         BannerNotFoundException::class,
+        AppReleaseNotFoundException::class,
         NoResourceFoundException::class,
     )
     fun handleNotFound(ex: Exception, request: WebRequest) =
@@ -157,6 +164,7 @@ class GlobalExceptionHandler {
         MediaTargetRequiredException::class,
         MediaReorderMismatchException::class,
         BannerReorderMismatchException::class,
+        InvalidApplicationIdException::class,
     )
     fun handleBadRequestDomainException(ex: Exception, request: WebRequest) =
         respond(HttpStatus.BAD_REQUEST, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -185,6 +193,10 @@ class GlobalExceptionHandler {
         MediaTypeMismatchException::class,
         DocumentAlreadyAttachedException::class,
         VerificationAlreadyPendingException::class,
+        AppReleaseVersionCodeAlreadyExistsException::class,
+        InvalidAppReleaseStatusTransitionException::class,
+        PublishedAppReleaseArtifactImmutableException::class,
+        AppReleaseConcurrentModificationException::class,
     )
     fun handleConflict(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -266,6 +278,12 @@ class GlobalExceptionHandler {
         is MediaReorderMismatchException -> "MEDIA_REORDER_MISMATCH"
         is BannerNotFoundException -> "BANNER_NOT_FOUND"
         is BannerReorderMismatchException -> "BANNER_REORDER_MISMATCH"
+        is AppReleaseNotFoundException -> "APP_RELEASE_NOT_FOUND"
+        is AppReleaseVersionCodeAlreadyExistsException -> "APP_RELEASE_VERSION_CODE_ALREADY_EXISTS"
+        is InvalidAppReleaseStatusTransitionException -> "APP_RELEASE_INVALID_STATUS_TRANSITION"
+        is PublishedAppReleaseArtifactImmutableException -> "APP_RELEASE_PUBLISHED_ARTIFACT_IMMUTABLE"
+        is AppReleaseConcurrentModificationException -> "APP_RELEASE_CONCURRENT_MODIFICATION"
+        is InvalidApplicationIdException -> "INVALID_APPLICATION_ID"
         is SalonDocumentNotFoundException -> "SALON_DOCUMENT_NOT_FOUND"
         is DocumentAlreadyAttachedException -> "DOCUMENT_ALREADY_ATTACHED"
         is SalonVerificationNotFoundException -> "SALON_VERIFICATION_NOT_FOUND"
