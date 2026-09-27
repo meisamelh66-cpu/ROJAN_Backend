@@ -1,10 +1,13 @@
 package ai.rojan.backend.api.config
 
 import ai.rojan.backend.application.apprelease.ActivateAppReleaseUseCase
+import ai.rojan.backend.application.apprelease.ArchiveAppReleaseUseCase
 import ai.rojan.backend.application.apprelease.CreateAppReleaseUseCase
 import ai.rojan.backend.application.apprelease.DeactivateAppReleaseUseCase
 import ai.rojan.backend.application.apprelease.GetLatestAppReleaseUseCase
 import ai.rojan.backend.application.apprelease.ListAppReleasesForAdminUseCase
+import ai.rojan.backend.application.apprelease.PublishAppReleaseUseCase
+import ai.rojan.backend.application.apprelease.RepublishAppReleaseUseCase
 import ai.rojan.backend.application.apprelease.UpdateAppReleaseUseCase
 import ai.rojan.backend.application.platformauthority.PlatformAuthorizationResolver
 import ai.rojan.backend.domain.apprelease.AppReleaseRepository
@@ -38,6 +41,24 @@ class AppReleaseUseCaseConfig {
         appReleaseRepository: AppReleaseRepository,
         platformAuthorizationResolver: PlatformAuthorizationResolver,
     ) = DeactivateAppReleaseUseCase(appReleaseRepository, platformAuthorizationResolver)
+
+    @Bean
+    fun publishAppReleaseUseCase(
+        appReleaseRepository: AppReleaseRepository,
+        platformAuthorizationResolver: PlatformAuthorizationResolver,
+    ) = PublishAppReleaseUseCase(appReleaseRepository, platformAuthorizationResolver)
+
+    @Bean
+    fun archiveAppReleaseUseCase(
+        appReleaseRepository: AppReleaseRepository,
+        platformAuthorizationResolver: PlatformAuthorizationResolver,
+    ) = ArchiveAppReleaseUseCase(appReleaseRepository, platformAuthorizationResolver)
+
+    @Bean
+    fun republishAppReleaseUseCase(
+        appReleaseRepository: AppReleaseRepository,
+        platformAuthorizationResolver: PlatformAuthorizationResolver,
+    ) = RepublishAppReleaseUseCase(appReleaseRepository, platformAuthorizationResolver)
 
     @Bean
     fun listAppReleasesForAdminUseCase(

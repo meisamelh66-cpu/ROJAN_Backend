@@ -3,6 +3,8 @@ package ai.rojan.backend.api.common
 import ai.rojan.backend.domain.common.AmbiguousSalonContextException
 import ai.rojan.backend.domain.common.AppReleaseNotFoundException
 import ai.rojan.backend.domain.common.AppReleaseVersionCodeAlreadyExistsException
+import ai.rojan.backend.domain.common.InvalidAppReleaseStatusTransitionException
+import ai.rojan.backend.domain.common.PublishedAppReleaseArtifactImmutableException
 import ai.rojan.backend.domain.common.BookingAccessDeniedException
 import ai.rojan.backend.domain.common.BannerNotFoundException
 import ai.rojan.backend.domain.common.BannerReorderMismatchException
@@ -191,6 +193,8 @@ class GlobalExceptionHandler {
         DocumentAlreadyAttachedException::class,
         VerificationAlreadyPendingException::class,
         AppReleaseVersionCodeAlreadyExistsException::class,
+        InvalidAppReleaseStatusTransitionException::class,
+        PublishedAppReleaseArtifactImmutableException::class,
     )
     fun handleConflict(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -274,6 +278,8 @@ class GlobalExceptionHandler {
         is BannerReorderMismatchException -> "BANNER_REORDER_MISMATCH"
         is AppReleaseNotFoundException -> "APP_RELEASE_NOT_FOUND"
         is AppReleaseVersionCodeAlreadyExistsException -> "APP_RELEASE_VERSION_CODE_ALREADY_EXISTS"
+        is InvalidAppReleaseStatusTransitionException -> "APP_RELEASE_INVALID_STATUS_TRANSITION"
+        is PublishedAppReleaseArtifactImmutableException -> "APP_RELEASE_PUBLISHED_ARTIFACT_IMMUTABLE"
         is InvalidApplicationIdException -> "INVALID_APPLICATION_ID"
         is SalonDocumentNotFoundException -> "SALON_DOCUMENT_NOT_FOUND"
         is DocumentAlreadyAttachedException -> "DOCUMENT_ALREADY_ATTACHED"

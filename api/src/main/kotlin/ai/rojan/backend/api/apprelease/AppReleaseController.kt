@@ -3,12 +3,18 @@ package ai.rojan.backend.api.apprelease
 import ai.rojan.backend.api.common.CurrentUserResolver
 import ai.rojan.backend.application.apprelease.ActivateAppReleaseCommand
 import ai.rojan.backend.application.apprelease.ActivateAppReleaseUseCase
+import ai.rojan.backend.application.apprelease.ArchiveAppReleaseCommand
+import ai.rojan.backend.application.apprelease.ArchiveAppReleaseUseCase
 import ai.rojan.backend.application.apprelease.CreateAppReleaseCommand
 import ai.rojan.backend.application.apprelease.CreateAppReleaseUseCase
 import ai.rojan.backend.application.apprelease.DeactivateAppReleaseCommand
 import ai.rojan.backend.application.apprelease.DeactivateAppReleaseUseCase
 import ai.rojan.backend.application.apprelease.ListAppReleasesForAdminUseCase
 import ai.rojan.backend.application.apprelease.ListAppReleasesQuery
+import ai.rojan.backend.application.apprelease.PublishAppReleaseCommand
+import ai.rojan.backend.application.apprelease.PublishAppReleaseUseCase
+import ai.rojan.backend.application.apprelease.RepublishAppReleaseCommand
+import ai.rojan.backend.application.apprelease.RepublishAppReleaseUseCase
 import ai.rojan.backend.application.apprelease.UpdateAppReleaseCommand
 import ai.rojan.backend.application.apprelease.UpdateAppReleaseUseCase
 import ai.rojan.backend.domain.apprelease.AppRelease
@@ -46,6 +52,13 @@ import java.util.UUID
  * validates it against [ai.rojan.backend.domain.apprelease.AppTarget] itself
  * (`InvalidApplicationIdException`, mapped to 400).
  *
+ * Status changes are explicit: `PUT` may only keep the status, publish a DRAFT or archive a
+ * PUBLISHED release (the existing Super Admin form sends `status` on every save), while the
+ * dedicated `/publish`, `/archive` and `/republish` operations each do exactly one transition.
+ * Re-publishing an ARCHIVED release is only possible through `/republish`. Once published, a
+ * release's artifact (versionName/downloadUrl/sha256/fileSizeBytes) is locked - see
+ * [ai.rojan.backend.domain.apprelease.AppRelease]'s own doc comment.
+ *
  * The public, unauthenticated read surface every Android client eventually calls before login lives
  * separately at [PublicAppReleaseController] - `/api/v1/public/app-releases/{applicationId}/latest`,
  * mirroring the platform's existing public/admin split (e.g. `PublicBannerController`/`BannerController`).
@@ -59,6 +72,9 @@ class AppReleaseController(
     private val activateAppReleaseUseCase: ActivateAppReleaseUseCase,
     private val deactivateAppReleaseUseCase: DeactivateAppReleaseUseCase,
     private val listAppReleasesForAdminUseCase: ListAppReleasesForAdminUseCase,
+    private val publishAppReleaseUseCase: PublishAppReleaseUseCase,
+    private val archiveAppReleaseUseCase: ArchiveAppReleaseUseCase,
+    private val republishAppReleaseUseCase: RepublishAppReleaseUseCase,
     private val currentUserResolver: CurrentUserResolver,
 ) {
 
@@ -95,6 +111,9 @@ class AppReleaseController(
                 releaseNotes = request.releaseNotes,
                 releaseDate = request.releaseDate,
                 isActive = request.isActive,
+                channel = request.channel,
+                signerSubject = request.signerSubject,
+                signerThumbprint = request.signerThumbprint,
             ),
         ).toResponse()
     }
@@ -120,8 +139,31 @@ class AppReleaseController(
                 fileSizeBytes = request.fileSizeBytes,
                 releaseNotes = request.releaseNotes,
                 releaseDate = request.releaseDate,
+                signerSubject = request.signerSubject,
+                signerThumbprint = request.signerThumbprint,
             ),
         ).toResponse()
+    }
+
+    @PostMapping("/{releaseId}/publish")
+    @Operation(summary = "Publish a DRAFT release - records publishedAt/publishedBy and locks its artifact (PLATFORM_ADMIN only)")
+    fun publish(@PathVariable releaseId: UUID, @AuthenticationPrincipal principal: UserDetails): AppReleaseResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        return publishAppReleaseUseCase.execute(PublishAppReleaseCommand(callerId, AppReleaseId(releaseId))).toResponse()
+    }
+
+    @PostMapping("/{releaseId}/archive")
+    @Operation(summary = "Archive a PUBLISHED release - it stops being offered as the latest release (PLATFORM_ADMIN only)")
+    fun archive(@PathVariable releaseId: UUID, @AuthenticationPrincipal principal: UserDetails): AppReleaseResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        return archiveAppReleaseUseCase.execute(ArchiveAppReleaseCommand(callerId, AppReleaseId(releaseId))).toResponse()
+    }
+
+    @PostMapping("/{releaseId}/republish")
+    @Operation(summary = "Explicitly re-publish an ARCHIVED release - same artifact, new publishedAt/publishedBy (PLATFORM_ADMIN only)")
+    fun republish(@PathVariable releaseId: UUID, @AuthenticationPrincipal principal: UserDetails): AppReleaseResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        return republishAppReleaseUseCase.execute(RepublishAppReleaseCommand(callerId, AppReleaseId(releaseId))).toResponse()
     }
 
     @PostMapping("/{releaseId}/activate")
@@ -141,6 +183,7 @@ class AppReleaseController(
     private fun AppRelease.toResponse() = AppReleaseResponse(
         id = id.value,
         applicationId = target.applicationId,
+        channel = channel,
         versionName = versionName,
         versionCode = versionCode,
         minSupportedVersionCode = minSupportedVersionCode,
@@ -152,6 +195,10 @@ class AppReleaseController(
         releaseNotes = releaseNotes,
         releaseDate = releaseDate,
         isActive = isActive,
+        signerSubject = signerSubject,
+        signerThumbprint = signerThumbprint,
+        publishedAt = publishedAt,
+        publishedBy = publishedBy?.value,
         createdBy = createdBy.value,
         createdAt = createdAt,
         updatedAt = updatedAt,

@@ -2,6 +2,7 @@ package ai.rojan.backend.application.apprelease
 
 import ai.rojan.backend.application.platformauthority.PlatformAuthorizationResolver
 import ai.rojan.backend.domain.apprelease.AppRelease
+import ai.rojan.backend.domain.apprelease.AppReleaseChannel
 import ai.rojan.backend.domain.apprelease.AppReleaseId
 import ai.rojan.backend.domain.apprelease.AppReleaseRepository
 import ai.rojan.backend.domain.apprelease.AppReleaseStatus
@@ -30,9 +31,12 @@ data class CreateAppReleaseCommand(
     val releaseNotes: String?,
     val releaseDate: LocalDate,
     val isActive: Boolean,
+    val channel: AppReleaseChannel = AppReleaseChannel.PRODUCTION,
+    val signerSubject: String? = null,
+    val signerThumbprint: String? = null,
 )
 
-/** PLATFORM_ADMIN only. `versionCode` must be unique per app - a duplicate is a real [AppReleaseVersionCodeAlreadyExistsException], never a silent overwrite of the existing row. */
+/** PLATFORM_ADMIN only. `versionCode` must be unique per app and channel - a duplicate is a real [AppReleaseVersionCodeAlreadyExistsException], never a silent overwrite of the existing row. */
 class CreateAppReleaseUseCase(
     private val appReleaseRepository: AppReleaseRepository,
     private val platformAuthorization: PlatformAuthorizationResolver,
@@ -41,8 +45,8 @@ class CreateAppReleaseUseCase(
         platformAuthorization.requirePlatformAdmin(command.callerId)
         val target = resolveTarget(command.applicationId)
 
-        if (appReleaseRepository.existsByTargetAndVersionCode(target, command.versionCode)) {
-            throw AppReleaseVersionCodeAlreadyExistsException(command.applicationId, command.versionCode)
+        if (appReleaseRepository.existsByTargetAndChannelAndVersionCode(target, command.channel, command.versionCode)) {
+            throw AppReleaseVersionCodeAlreadyExistsException(command.applicationId, command.channel.name, command.versionCode)
         }
 
         val release = AppRelease.create(
@@ -59,6 +63,9 @@ class CreateAppReleaseUseCase(
             releaseDate = command.releaseDate,
             isActive = command.isActive,
             createdBy = command.callerId,
+            channel = command.channel,
+            signerSubject = command.signerSubject,
+            signerThumbprint = command.signerThumbprint,
         )
         return appReleaseRepository.save(release)
     }
@@ -76,9 +83,20 @@ data class UpdateAppReleaseCommand(
     val fileSizeBytes: Long,
     val releaseNotes: String?,
     val releaseDate: LocalDate,
+    /** Null means "leave unchanged" - see [AppRelease.updateMetadata]. */
+    val signerSubject: String? = null,
+    /** Null means "leave unchanged" - see [AppRelease.updateMetadata]. */
+    val signerThumbprint: String? = null,
 )
 
-/** PLATFORM_ADMIN only. Never touches `applicationId`/`versionCode` - see [AppRelease]'s own doc comment for why those two stay immutable once created. */
+/**
+ * PLATFORM_ADMIN only. Never touches `applicationId`/`channel`/`versionCode` - see [AppRelease]'s own
+ * doc comment for why those stay immutable once created. [UpdateAppReleaseCommand.status] may only
+ * request a transition [AppRelease.transitionTo] allows (DRAFT -> PUBLISHED, PUBLISHED -> ARCHIVED,
+ * or no change); re-publishing an ARCHIVED release is [RepublishAppReleaseUseCase]. The status is
+ * checked before anything else changes, and the metadata edit runs before a publish so a DRAFT's
+ * final artifact can be set and published in one save - after which it is locked.
+ */
 class UpdateAppReleaseUseCase(
     private val appReleaseRepository: AppReleaseRepository,
     private val platformAuthorization: PlatformAuthorizationResolver,
@@ -88,17 +106,20 @@ class UpdateAppReleaseUseCase(
         val release = appReleaseRepository.findById(command.releaseId)
             ?: throw AppReleaseNotFoundException(command.releaseId.value.toString())
 
+        release.requireTransitionAllowed(command.status)
         release.updateMetadata(
             versionName = command.versionName,
             minSupportedVersionCode = command.minSupportedVersionCode,
             isMandatory = command.isMandatory,
-            status = command.status,
             downloadUrl = command.downloadUrl,
             sha256 = command.sha256,
             fileSizeBytes = command.fileSizeBytes,
             releaseNotes = command.releaseNotes,
             releaseDate = command.releaseDate,
+            signerSubject = command.signerSubject,
+            signerThumbprint = command.signerThumbprint,
         )
+        release.transitionTo(command.status, command.callerId)
         return appReleaseRepository.save(release)
     }
 }
@@ -135,6 +156,54 @@ class DeactivateAppReleaseUseCase(
     }
 }
 
+data class PublishAppReleaseCommand(val callerId: UserId, val releaseId: AppReleaseId)
+
+/** PLATFORM_ADMIN only. DRAFT -> PUBLISHED - records publishedAt/publishedBy and locks the artifact fields for good. */
+class PublishAppReleaseUseCase(
+    private val appReleaseRepository: AppReleaseRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(command: PublishAppReleaseCommand): AppRelease {
+        platformAuthorization.requirePlatformAdmin(command.callerId)
+        val release = appReleaseRepository.findById(command.releaseId)
+            ?: throw AppReleaseNotFoundException(command.releaseId.value.toString())
+        release.publish(command.callerId)
+        return appReleaseRepository.save(release)
+    }
+}
+
+data class ArchiveAppReleaseCommand(val callerId: UserId, val releaseId: AppReleaseId)
+
+/** PLATFORM_ADMIN only. PUBLISHED -> ARCHIVED - the public lookup stops returning it, so the next-highest published release becomes "latest" again (rollback). */
+class ArchiveAppReleaseUseCase(
+    private val appReleaseRepository: AppReleaseRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(command: ArchiveAppReleaseCommand): AppRelease {
+        platformAuthorization.requirePlatformAdmin(command.callerId)
+        val release = appReleaseRepository.findById(command.releaseId)
+            ?: throw AppReleaseNotFoundException(command.releaseId.value.toString())
+        release.archive()
+        return appReleaseRepository.save(release)
+    }
+}
+
+data class RepublishAppReleaseCommand(val callerId: UserId, val releaseId: AppReleaseId)
+
+/** PLATFORM_ADMIN only. ARCHIVED -> PUBLISHED, the one explicit way back - never a side effect of an edit. Re-stamps publishedAt/publishedBy; the artifact stays exactly the one published before. */
+class RepublishAppReleaseUseCase(
+    private val appReleaseRepository: AppReleaseRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(command: RepublishAppReleaseCommand): AppRelease {
+        platformAuthorization.requirePlatformAdmin(command.callerId)
+        val release = appReleaseRepository.findById(command.releaseId)
+            ?: throw AppReleaseNotFoundException(command.releaseId.value.toString())
+        release.republish(command.callerId)
+        return appReleaseRepository.save(release)
+    }
+}
+
 data class ListAppReleasesQuery(val callerId: UserId, val applicationId: String)
 
 /** PLATFORM_ADMIN or PLATFORM_REVIEWER - the admin management view, includes every status (DRAFT/PUBLISHED/ARCHIVED) and inactive rows. Mirrors [ai.rojan.backend.api.platformauthority.PlatformAuthorityManagerController]'s "reviewer can read, only admin mutates" split - the task's explicit convention to reuse, not [ai.rojan.backend.api.banner.BannerController]'s stricter admin-only-for-everything shape. */
@@ -149,7 +218,11 @@ class ListAppReleasesForAdminUseCase(
     }
 }
 
-data class LatestAppReleaseQuery(val applicationId: String, val callerVersionCode: Int)
+data class LatestAppReleaseQuery(
+    val applicationId: String,
+    val callerVersionCode: Int,
+    val channel: AppReleaseChannel = AppReleaseChannel.PRODUCTION,
+)
 
 /** The computed result of checking one caller's current [callerVersionCode] against the real latest [release] - never persisted, recomputed fresh on every call. */
 data class LatestAppReleaseResult(
@@ -159,7 +232,10 @@ data class LatestAppReleaseResult(
 )
 
 /**
- * No authorization at all, by design - this is the public surface every Android client eventually
+ * No authorization at all, by design. Only PUBLISHED+active releases on the requested channel
+ * ([LatestAppReleaseQuery.channel], PRODUCTION unless a caller explicitly asks otherwise) are ever
+ * considered - DRAFT, ARCHIVED and deactivated releases are invisible here.
+ * - this is the public surface every Android client eventually
  * calls before login, mirroring [ai.rojan.backend.application.banner.ListActiveBannersUseCase]'s
  * own "intentionally open" shape. An app with no PUBLISHED+active release yet is a real
  * [AppReleaseNotFoundException] (404) - never a fabricated "no update available" response for data
@@ -176,8 +252,8 @@ class GetLatestAppReleaseUseCase(
 ) {
     fun execute(query: LatestAppReleaseQuery): LatestAppReleaseResult {
         val target = resolveTarget(query.applicationId)
-        val release = appReleaseRepository.findLatestPublished(target)
-            ?: throw AppReleaseNotFoundException(query.applicationId)
+        val release = appReleaseRepository.findLatestPublished(target, query.channel)
+            ?: throw AppReleaseNotFoundException("${query.applicationId} (${query.channel})")
 
         val updateAvailable = query.callerVersionCode < release.versionCode
         val forceUpdate = updateAvailable &&

@@ -1,5 +1,6 @@
 package ai.rojan.backend.api.apprelease
 
+import ai.rojan.backend.domain.apprelease.AppReleaseChannel
 import ai.rojan.backend.domain.apprelease.AppReleaseStatus
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
@@ -13,6 +14,7 @@ import java.util.UUID
 data class AppReleaseResponse(
     val id: UUID,
     val applicationId: String,
+    val channel: AppReleaseChannel,
     val versionName: String,
     val versionCode: Int,
     val minSupportedVersionCode: Int,
@@ -24,6 +26,10 @@ data class AppReleaseResponse(
     val releaseNotes: String?,
     val releaseDate: LocalDate,
     val isActive: Boolean,
+    val signerSubject: String?,
+    val signerThumbprint: String?,
+    val publishedAt: Instant?,
+    val publishedBy: UUID?,
     val createdBy: UUID,
     val createdAt: Instant,
     val updatedAt: Instant,
@@ -71,9 +77,20 @@ data class CreateAppReleaseRequest(
     val releaseDate: LocalDate,
 
     val isActive: Boolean = true,
+
+    /** Defaults to PRODUCTION. Immutable once created - part of the release's identity with applicationId/versionCode. */
+    val channel: AppReleaseChannel = AppReleaseChannel.PRODUCTION,
+
+    /** Optional, informational only - which certificate signed the artifact. Never a client trust root. */
+    @field:Size(max = 512)
+    val signerSubject: String? = null,
+
+    /** Optional, informational only - never a client trust root. SHA-1 (40 hex) or SHA-256 (64 hex); spaces/colons tolerated. */
+    @field:Size(max = 200)
+    val signerThumbprint: String? = null,
 )
 
-/** Never includes `applicationId`/`versionCode` - both are immutable once a release is created, see [ai.rojan.backend.domain.apprelease.AppRelease]'s own doc comment. */
+/** Never includes `applicationId`/`channel`/`versionCode` - all three are immutable once a release is created, see [ai.rojan.backend.domain.apprelease.AppRelease]'s own doc comment. */
 data class UpdateAppReleaseRequest(
     @field:NotBlank
     @field:Size(max = 32)
@@ -100,22 +117,36 @@ data class UpdateAppReleaseRequest(
     val releaseNotes: String? = null,
 
     val releaseDate: LocalDate,
+
+    /** Null leaves the stored value unchanged (the existing Super Admin form never sends it). */
+    @field:Size(max = 512)
+    val signerSubject: String? = null,
+
+    /** Null leaves the stored value unchanged. SHA-1 (40 hex) or SHA-256 (64 hex); spaces/colons tolerated. */
+    @field:Size(max = 200)
+    val signerThumbprint: String? = null,
 )
 
 /**
  * The public "check for update" response - deliberately a distinct, narrower shape from
- * [AppReleaseResponse]. Never includes `createdBy`, the release's internal database id, `status`,
- * or `isActive` - none of that is the calling app's business, matching the task's own explicit
- * "do not expose internal/admin-only metadata" requirement.
+ * [AppReleaseResponse]. Never includes `createdBy`/`publishedBy`, the release's internal database
+ * id, `status`, `isActive` or signer metadata - none of that is the calling app's business, matching
+ * the task's own explicit "do not expose internal/admin-only metadata" requirement.
+ * [minSupportedVersionCode]/[isMandatory] are the raw inputs to [forceUpdate], exposed so a client
+ * can explain why an update is required.
  */
 data class PublicLatestReleaseResponse(
     val updateAvailable: Boolean,
     val forceUpdate: Boolean,
     val latestVersion: String,
     val latestVersionCode: Int,
+    val minSupportedVersionCode: Int,
+    val isMandatory: Boolean,
+    val channel: AppReleaseChannel,
     val downloadUrl: String,
     val sha256: String,
     val fileSizeBytes: Long,
     val releaseNotes: String?,
     val releaseDate: LocalDate,
+    val publishedAt: Instant?,
 )

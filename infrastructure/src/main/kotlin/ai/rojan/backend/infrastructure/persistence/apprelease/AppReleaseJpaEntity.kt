@@ -1,5 +1,6 @@
 package ai.rojan.backend.infrastructure.persistence.apprelease
 
+import ai.rojan.backend.domain.apprelease.AppReleaseChannel
 import ai.rojan.backend.domain.apprelease.AppReleaseStatus
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -25,6 +26,10 @@ class AppReleaseJpaEntity(
 
     @Column(name = "application_id", nullable = false, length = 64)
     val applicationId: String,
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16, updatable = false)
+    val channel: AppReleaseChannel,
 
     @Column(name = "version_name", nullable = false, length = 32)
     var versionName: String,
@@ -59,6 +64,18 @@ class AppReleaseJpaEntity(
 
     @Column(name = "is_active", nullable = false)
     var isActive: Boolean,
+
+    @Column(name = "signer_subject", length = 512)
+    var signerSubject: String?,
+
+    @Column(name = "signer_thumbprint", length = 64)
+    var signerThumbprint: String?,
+
+    @Column(name = "published_at")
+    var publishedAt: Instant?,
+
+    @Column(name = "published_by")
+    var publishedBy: UUID?,
 
     @Column(name = "created_by", nullable = false)
     val createdBy: UUID,
