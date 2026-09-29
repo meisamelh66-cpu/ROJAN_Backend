@@ -13,12 +13,13 @@ value class BannerId(val value: UUID) {
 
 /**
  * Banner Management (Web Phase - Super Admin): the platform surface a banner is shown on.
- * MANAGER is deliberately absent - not "disabled", genuinely not a valid value yet (enforced by
- * the DB CHECK constraint in `V40__banners.sql` too, not just here) - adding it is explicit future
- * work, not a flag flip. Never salon-scoped, never user-scoped: a [Banner] belongs to the platform
- * itself, unlike every [ai.rojan.backend.domain.media.MediaAsset] row.
+ * MANAGER added in `V44__manager_banner_target.sql` (additive - `V40__banners.sql` itself is
+ * already applied and is never edited retroactively; `V43` is already taken by
+ * `V43__app_release_hardening.sql` on this line, hence `V44`). Never salon-scoped, never
+ * user-scoped: a [Banner] belongs to the platform itself, unlike every
+ * [ai.rojan.backend.domain.media.MediaAsset] row.
  */
-enum class BannerTarget { SITE, CUSTOMER, DESKTOP }
+enum class BannerTarget { SITE, CUSTOMER, DESKTOP, MANAGER }
 
 /**
  * A platform-wide promotional banner shown on one [BannerTarget] surface. Deliberately its own
