@@ -17,6 +17,8 @@ import ai.rojan.backend.application.customer.GetCustomerBookingsCommand
 import ai.rojan.backend.application.customer.GetCustomerBookingsUseCase
 import ai.rojan.backend.application.customer.GetCustomerTimelineCommand
 import ai.rojan.backend.application.customer.GetCustomerTimelineUseCase
+import ai.rojan.backend.application.customer.LinkCustomerToUserCommand
+import ai.rojan.backend.application.customer.LinkCustomerToUserUseCase
 import ai.rojan.backend.application.customer.RemoveCustomerTagCommand
 import ai.rojan.backend.application.customer.RemoveCustomerTagUseCase
 import ai.rojan.backend.application.customer.UpdateCustomerCommand
@@ -89,6 +91,7 @@ class CustomerController(
     private val createCustomerUseCase: CreateCustomerUseCase,
     private val createCustomerIdentityUseCase: CreateCustomerIdentityUseCase,
     private val updateCustomerUseCase: UpdateCustomerUseCase,
+    private val linkCustomerToUserUseCase: LinkCustomerToUserUseCase,
     private val addCustomerNoteUseCase: AddCustomerNoteUseCase,
     private val addCustomerTagUseCase: AddCustomerTagUseCase,
     private val removeCustomerTagUseCase: RemoveCustomerTagUseCase,
@@ -304,6 +307,31 @@ class CustomerController(
             ),
         )
         return updated.toResponse()
+    }
+
+    /**
+     * Explicit, Owner/Manager-initiated reconciliation of an unlinked walk-in customer to a real
+     * account - a dedicated action, deliberately separate from [update]'s generic PATCH (see
+     * `LinkCustomerToUserUseCase`'s own doc comment). Never fuzzy/automatic matching.
+     */
+    @PostMapping("/{customerId}/link")
+    @Operation(summary = "Link an unlinked walk-in customer to an existing backend account (owner only)")
+    fun link(
+        @PathVariable salonId: UUID,
+        @PathVariable customerId: UUID,
+        @Valid @RequestBody request: LinkCustomerToUserRequest,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): CustomerResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        findCustomerOrThrow(salonId, customerId)
+        val linked = linkCustomerToUserUseCase.execute(
+            LinkCustomerToUserCommand(
+                customerId = CustomerId(customerId),
+                callerId = callerId,
+                userId = UserId(request.userId),
+            ),
+        )
+        return linked.toResponse()
     }
 
     @PostMapping("/{customerId}/notes")

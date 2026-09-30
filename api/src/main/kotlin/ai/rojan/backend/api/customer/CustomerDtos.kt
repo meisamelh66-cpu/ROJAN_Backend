@@ -3,6 +3,7 @@ package ai.rojan.backend.api.customer
 import ai.rojan.backend.domain.customer.CustomerStatus
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 import java.math.BigDecimal
 import java.time.Instant
@@ -58,6 +59,13 @@ data class UpdateCustomerRequest(
     val company: String?,
 
     val status: CustomerStatus?,
+)
+
+/** Explicit, Owner/Manager-initiated reconciliation of an unlinked walk-in [ai.rojan.backend.domain.customer.Customer] to a real account - see `LinkCustomerToUserUseCase`'s own doc comment. Never fuzzy/automatic matching. */
+data class LinkCustomerToUserRequest(
+    @field:NotNull
+    @field:Schema(description = "The backend account to link this customer to.")
+    val userId: UUID,
 )
 
 data class AddCustomerNoteRequest(
