@@ -6,6 +6,7 @@ import ai.rojan.backend.application.booking.ConfirmBookingUseCase
 import ai.rojan.backend.application.booking.CreateBookingUseCase
 import ai.rojan.backend.application.booking.GetAvailableSlotsUseCase
 import ai.rojan.backend.application.booking.RescheduleBookingUseCase
+import ai.rojan.backend.application.booking.SpecialistAvailabilityValidator
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.salon.SalonRepository
@@ -25,13 +26,23 @@ import org.springframework.context.annotation.Configuration
 class BookingUseCaseConfig {
 
     @Bean
+    fun specialistAvailabilityValidator(
+        workingHoursRepository: WorkingHoursRepository,
+        weeklyAvailabilityRepository: SpecialistWeeklyAvailabilityRepository,
+        overrideRepository: SpecialistScheduleOverrideRepository,
+        leaveRepository: SpecialistLeaveRepository,
+        blockRepository: SpecialistBlockRepository,
+    ) = SpecialistAvailabilityValidator(workingHoursRepository, weeklyAvailabilityRepository, overrideRepository, leaveRepository, blockRepository)
+
+    @Bean
     fun createBookingUseCase(
         salonRepository: SalonRepository,
         serviceRepository: ServiceRepository,
         specialistRepository: SpecialistRepository,
         bookingRepository: BookingRepository,
         specialistServiceRepository: SpecialistServiceRepository,
-    ) = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository)
+        specialistAvailabilityValidator: SpecialistAvailabilityValidator,
+    ) = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, specialistAvailabilityValidator)
 
     @Bean
     fun confirmBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =
@@ -50,7 +61,8 @@ class BookingUseCaseConfig {
         bookingRepository: BookingRepository,
         serviceRepository: ServiceRepository,
         salonPermissionResolver: SalonPermissionResolver,
-    ) = RescheduleBookingUseCase(bookingRepository, serviceRepository, salonPermissionResolver)
+        specialistAvailabilityValidator: SpecialistAvailabilityValidator,
+    ) = RescheduleBookingUseCase(bookingRepository, serviceRepository, salonPermissionResolver, specialistAvailabilityValidator)
 
     @Bean
     fun getAvailableSlotsUseCase(

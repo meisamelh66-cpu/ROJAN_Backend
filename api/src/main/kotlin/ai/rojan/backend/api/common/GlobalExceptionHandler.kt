@@ -56,6 +56,7 @@ import ai.rojan.backend.domain.common.ServiceCategoryNotFoundException
 import ai.rojan.backend.domain.common.ServiceNotFoundException
 import ai.rojan.backend.domain.common.SpecialistBlockNotFoundException
 import ai.rojan.backend.domain.common.SpecialistLeaveNotFoundException
+import ai.rojan.backend.domain.common.SpecialistNotAvailableException
 import ai.rojan.backend.domain.common.SpecialistNotEligibleForServiceException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.common.InvalidVerificationDocumentException
@@ -190,6 +191,7 @@ class GlobalExceptionHandler {
         CustomerAlreadyLinkedException::class,
         UserAlreadyLinkedToCustomerException::class,
         SpecialistNotEligibleForServiceException::class,
+        SpecialistNotAvailableException::class,
         SalonSlugAlreadyTakenException::class,
         SalonNotReadyForActivationException::class,
         InvalidMembershipAssignmentException::class,
@@ -305,6 +307,7 @@ class GlobalExceptionHandler {
         is CustomerAlreadyLinkedException -> "CUSTOMER_ALREADY_LINKED"
         is UserAlreadyLinkedToCustomerException -> "USER_ALREADY_LINKED_TO_CUSTOMER"
         is SpecialistNotEligibleForServiceException -> "SPECIALIST_NOT_ELIGIBLE_FOR_SERVICE"
+        is SpecialistNotAvailableException -> "SPECIALIST_NOT_AVAILABLE"
         is SalonSlugAlreadyTakenException -> "SALON_SLUG_ALREADY_TAKEN"
         is SalonNotReadyForActivationException -> "SALON_NOT_READY_FOR_ACTIVATION"
         is InvalidMembershipAssignmentException -> "INVALID_MEMBERSHIP_ASSIGNMENT"

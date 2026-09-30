@@ -149,7 +149,8 @@ class GetAvailableSlotsUseCaseTest {
     fun `an existing booking removes the overlapping slot`() {
         workingHoursRepository.save(WorkingHours.create(salon.id, DayOfWeek.MONDAY, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(10, 0)))))
         weeklyAvailabilityRepository.save(SpecialistWeeklyAvailability.create(specialist.id, DayOfWeek.MONDAY, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(10, 0)))))
-        val createBookingUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository)
+        val availabilityValidator = SpecialistAvailabilityValidator(workingHoursRepository, weeklyAvailabilityRepository, overrideRepository, leaveRepository, blockRepository)
+        val createBookingUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, availabilityValidator)
         createBookingUseCase.execute(CreateBookingCommand(salon.id, service.id, specialist.id, UserId.new(), monday.atTime(9, 0), null))
 
         val slots = useCase.execute(query())
