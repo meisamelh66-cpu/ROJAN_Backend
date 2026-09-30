@@ -15,6 +15,7 @@ import ai.rojan.backend.domain.common.BookingRoleNotAllowedException
 import ai.rojan.backend.domain.common.BranchNotFoundException
 import ai.rojan.backend.domain.common.CustomerAccessDeniedException
 import ai.rojan.backend.domain.common.CustomerAlreadyExistsException
+import ai.rojan.backend.domain.common.CustomerAlreadyLinkedException
 import ai.rojan.backend.domain.common.CustomerNotFoundException
 import ai.rojan.backend.domain.common.CustomerNotLinkedToAccountException
 import ai.rojan.backend.domain.common.CustomerTagNotFoundException
@@ -58,6 +59,7 @@ import ai.rojan.backend.domain.common.SpecialistLeaveNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotEligibleForServiceException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.common.InvalidVerificationDocumentException
+import ai.rojan.backend.domain.common.UserAlreadyLinkedToCustomerException
 import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.common.VerificationAlreadyPendingException
 import ai.rojan.backend.domain.common.WeeklyAvailabilityNotFoundException
@@ -185,6 +187,8 @@ class GlobalExceptionHandler {
         InvalidCustomerStateException::class,
         CustomerAlreadyExistsException::class,
         CustomerNotLinkedToAccountException::class,
+        CustomerAlreadyLinkedException::class,
+        UserAlreadyLinkedToCustomerException::class,
         SpecialistNotEligibleForServiceException::class,
         SalonSlugAlreadyTakenException::class,
         SalonNotReadyForActivationException::class,
@@ -298,6 +302,8 @@ class GlobalExceptionHandler {
         is InvalidCustomerStateException -> "INVALID_CUSTOMER_STATE"
         is CustomerAlreadyExistsException -> "CUSTOMER_ALREADY_EXISTS"
         is CustomerNotLinkedToAccountException -> "CUSTOMER_NOT_LINKED_TO_ACCOUNT"
+        is CustomerAlreadyLinkedException -> "CUSTOMER_ALREADY_LINKED"
+        is UserAlreadyLinkedToCustomerException -> "USER_ALREADY_LINKED_TO_CUSTOMER"
         is SpecialistNotEligibleForServiceException -> "SPECIALIST_NOT_ELIGIBLE_FOR_SERVICE"
         is SalonSlugAlreadyTakenException -> "SALON_SLUG_ALREADY_TAKEN"
         is SalonNotReadyForActivationException -> "SALON_NOT_READY_FOR_ACTIVATION"

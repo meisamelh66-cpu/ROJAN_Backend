@@ -10,6 +10,8 @@ import ai.rojan.backend.application.customer.CreateCustomerUseCase
 import ai.rojan.backend.application.customer.EnsureCustomerAssociationUseCase
 import ai.rojan.backend.application.customer.GetCustomerBookingsUseCase
 import ai.rojan.backend.application.customer.GetCustomerTimelineUseCase
+import ai.rojan.backend.application.customer.LinkCustomerToUserUseCase
+import ai.rojan.backend.application.customer.LookupUserForCustomerLinkUseCase
 import ai.rojan.backend.application.customer.RemoveCustomerTagUseCase
 import ai.rojan.backend.application.customer.UpdateCustomerUseCase
 import ai.rojan.backend.application.salon.SalonPermissionResolver
@@ -106,4 +108,21 @@ class CustomerUseCaseConfig {
         customerRepository: CustomerRepository,
         userRepository: UserRepository,
     ) = EnsureCustomerAssociationUseCase(salonRepository, customerRepository, userRepository)
+
+    @Bean
+    fun linkCustomerToUserUseCase(
+        salonRepository: SalonRepository,
+        customerRepository: CustomerRepository,
+        userRepository: UserRepository,
+        customerActivityRepository: CustomerActivityRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = LinkCustomerToUserUseCase(salonRepository, customerRepository, userRepository, customerActivityRepository, salonPermissionResolver)
+
+    @Bean
+    fun lookupUserForCustomerLinkUseCase(
+        salonRepository: SalonRepository,
+        customerRepository: CustomerRepository,
+        userRepository: UserRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = LookupUserForCustomerLinkUseCase(salonRepository, customerRepository, userRepository, salonPermissionResolver)
 }

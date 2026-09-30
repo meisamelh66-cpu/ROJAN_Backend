@@ -23,6 +23,9 @@ enum class CustomerActivityType {
     STATUS_CHANGED,
     TAG_ADDED,
     TAG_REMOVED,
+
+    /** Recorded by `LinkCustomerToUserUseCase` - the explicit, Owner/Manager-initiated reconciliation of a walk-in record to a real account. */
+    USER_LINKED,
 }
 
 data class CustomerActivity(
