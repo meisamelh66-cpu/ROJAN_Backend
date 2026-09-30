@@ -68,6 +68,18 @@ data class LinkCustomerToUserRequest(
     val userId: UUID,
 )
 
+/**
+ * Result of resolving the User account matching a customer's own phone number - see
+ * `LookupUserForCustomerLinkUseCase`'s own doc comment. Deliberately minimal: only enough for a
+ * Manager to visually confirm the match before calling [LinkCustomerToUserRequest] - no email,
+ * role, or other account data.
+ */
+data class UserLinkCandidateResponse(
+    val userId: UUID,
+    val fullName: String,
+    val phoneNumber: String,
+)
+
 data class AddCustomerNoteRequest(
     @field:NotBlank
     @field:Size(max = 2000)

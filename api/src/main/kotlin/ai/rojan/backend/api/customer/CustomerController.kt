@@ -19,6 +19,8 @@ import ai.rojan.backend.application.customer.GetCustomerTimelineCommand
 import ai.rojan.backend.application.customer.GetCustomerTimelineUseCase
 import ai.rojan.backend.application.customer.LinkCustomerToUserCommand
 import ai.rojan.backend.application.customer.LinkCustomerToUserUseCase
+import ai.rojan.backend.application.customer.LookupUserForCustomerLinkCommand
+import ai.rojan.backend.application.customer.LookupUserForCustomerLinkUseCase
 import ai.rojan.backend.application.customer.RemoveCustomerTagCommand
 import ai.rojan.backend.application.customer.RemoveCustomerTagUseCase
 import ai.rojan.backend.application.customer.UpdateCustomerCommand
@@ -92,6 +94,7 @@ class CustomerController(
     private val createCustomerIdentityUseCase: CreateCustomerIdentityUseCase,
     private val updateCustomerUseCase: UpdateCustomerUseCase,
     private val linkCustomerToUserUseCase: LinkCustomerToUserUseCase,
+    private val lookupUserForCustomerLinkUseCase: LookupUserForCustomerLinkUseCase,
     private val addCustomerNoteUseCase: AddCustomerNoteUseCase,
     private val addCustomerTagUseCase: AddCustomerTagUseCase,
     private val removeCustomerTagUseCase: RemoveCustomerTagUseCase,
@@ -307,6 +310,28 @@ class CustomerController(
             ),
         )
         return updated.toResponse()
+    }
+
+    /**
+     * Read-only counterpart to [link] - resolves the User account matching this customer's own
+     * already-on-file phone number, for a Manager to visually confirm before calling [link]. The
+     * phone number always comes from the Customer record itself, never from a request parameter -
+     * see `LookupUserForCustomerLinkUseCase`'s own doc comment for why that is the one thing that
+     * keeps this from becoming a global phone-number lookup.
+     */
+    @GetMapping("/{customerId}/link/lookup")
+    @Operation(summary = "Resolve the User account matching this customer's own phone number, for explicit link confirmation (owner only)")
+    fun lookupLinkCandidate(
+        @PathVariable salonId: UUID,
+        @PathVariable customerId: UUID,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): UserLinkCandidateResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        findCustomerOrThrow(salonId, customerId)
+        val candidate = lookupUserForCustomerLinkUseCase.execute(
+            LookupUserForCustomerLinkCommand(customerId = CustomerId(customerId), callerId = callerId),
+        )
+        return UserLinkCandidateResponse(userId = candidate.userId.value, fullName = candidate.fullName, phoneNumber = candidate.phoneNumber)
     }
 
     /**
