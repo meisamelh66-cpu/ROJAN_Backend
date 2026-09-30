@@ -7,21 +7,31 @@ import ai.rojan.backend.application.salon.InMemoryServiceRepository
 import ai.rojan.backend.application.salon.InMemorySpecialistRepository
 import ai.rojan.backend.application.salon.InMemorySpecialistServiceRepository
 import ai.rojan.backend.application.salon.SalonPermissionResolver
+import ai.rojan.backend.application.schedule.InMemoryBlockRepository
+import ai.rojan.backend.application.schedule.InMemoryLeaveRepository
+import ai.rojan.backend.application.schedule.InMemoryScheduleOverrideRepository
+import ai.rojan.backend.application.schedule.InMemoryWeeklyAvailabilityRepository
+import ai.rojan.backend.application.schedule.InMemoryWorkingHoursRepository
 import ai.rojan.backend.domain.booking.BookingId
 import ai.rojan.backend.domain.booking.BookingStatus
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.BookingConflictException
 import ai.rojan.backend.domain.common.InvalidBookingStateException
+import ai.rojan.backend.domain.common.SpecialistNotAvailableException
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.Service
 import ai.rojan.backend.domain.salon.ServiceCategory
 import ai.rojan.backend.domain.salon.Specialist
+import ai.rojan.backend.domain.schedule.SpecialistWeeklyAvailability
+import ai.rojan.backend.domain.schedule.TimeInterval
+import ai.rojan.backend.domain.schedule.WorkingHours
 import ai.rojan.backend.domain.user.UserId
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.LocalDateTime
+import java.time.LocalTime
 
 class BookingUseCasesTest {
 
@@ -33,6 +43,12 @@ class BookingUseCasesTest {
     private val specialistServiceRepository = InMemorySpecialistServiceRepository()
     private val membershipRepository = InMemorySalonMembershipRepository()
     private val salonPermissionResolver = SalonPermissionResolver(salonRepository, membershipRepository, specialistRepository)
+    private val workingHoursRepository = InMemoryWorkingHoursRepository()
+    private val weeklyAvailabilityRepository = InMemoryWeeklyAvailabilityRepository()
+    private val overrideRepository = InMemoryScheduleOverrideRepository()
+    private val leaveRepository = InMemoryLeaveRepository()
+    private val blockRepository = InMemoryBlockRepository()
+    private val availabilityValidator = SpecialistAvailabilityValidator(workingHoursRepository, weeklyAvailabilityRepository, overrideRepository, leaveRepository, blockRepository)
 
     private val owner = UserId.new()
     private val customer = UserId.new()
@@ -45,13 +61,24 @@ class BookingUseCasesTest {
     )
     private val specialist: Specialist = specialistRepository.save(Specialist.create(salon.id, null, "Jamie", null, null))
 
-    private val createUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository)
+    private val createUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, availabilityValidator)
     private val confirmUseCase = ConfirmBookingUseCase(bookingRepository, salonPermissionResolver)
     private val cancelUseCase = CancelBookingUseCase(bookingRepository, salonPermissionResolver)
     private val completeUseCase = CompleteBookingUseCase(bookingRepository, salonPermissionResolver)
-    private val rescheduleUseCase = RescheduleBookingUseCase(bookingRepository, serviceRepository, salonPermissionResolver)
+    private val rescheduleUseCase = RescheduleBookingUseCase(bookingRepository, serviceRepository, salonPermissionResolver, availabilityValidator)
 
     private val start = LocalDateTime.of(2026, 8, 10, 9, 0)
+
+    init {
+        // Master Integration Repair, Pass 3: CreateBookingUseCase/RescheduleBookingUseCase now
+        // validate working hours/specialist availability (see SpecialistAvailabilityValidator) - wide
+        // open for every test above that predates this check and never configured any, so their exact
+        // pre-existing times keep working unchanged. Tests that specifically exercise the new
+        // validation below configure their own narrower hours.
+        val allDay = TimeInterval(LocalTime.of(0, 0), LocalTime.MAX)
+        workingHoursRepository.save(WorkingHours.create(salon.id, start.dayOfWeek, listOf(allDay)))
+        weeklyAvailabilityRepository.save(SpecialistWeeklyAvailability.create(specialist.id, start.dayOfWeek, listOf(allDay)))
+    }
 
     private fun createBooking(customerId: UserId = customer, startTime: LocalDateTime = start) = createUseCase.execute(
         CreateBookingCommand(salon.id, service.id, specialist.id, customerId, startTime, "First visit"),
@@ -194,6 +221,46 @@ class BookingUseCasesTest {
     fun `unknown booking id yields a not-found error`() {
         assertThrows(ai.rojan.backend.domain.common.BookingNotFoundException::class.java) {
             confirmUseCase.execute(ConfirmBookingCommand(BookingId.new(), owner))
+        }
+    }
+
+    // ---- Master Integration Repair, Pass 3: booking creation/reschedule now validates working
+    // ---- hours/specialist availability (previously only overlap with other bookings was checked).
+
+    @Test
+    fun `rejects a new booking outside the salon's configured working hours`() {
+        // Replace the wide-open default from init{} with a narrow real working-hours window - the
+        // in-memory fakes key by id, not (salon, dayOfWeek), so the old wide-open row must be deleted
+        // first or find() would keep returning it.
+        workingHoursRepository.deleteBySalonIdAndDayOfWeek(salon.id, start.dayOfWeek)
+        weeklyAvailabilityRepository.deleteBySpecialistIdAndDayOfWeek(specialist.id, start.dayOfWeek)
+        workingHoursRepository.save(WorkingHours.create(salon.id, start.dayOfWeek, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(17, 0)))))
+        weeklyAvailabilityRepository.save(SpecialistWeeklyAvailability.create(specialist.id, start.dayOfWeek, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(17, 0)))))
+
+        assertThrows(SpecialistNotAvailableException::class.java) {
+            createBooking(startTime = start.withHour(20))
+        }
+    }
+
+    @Test
+    fun `rejects a new booking while the specialist is on leave, even though the salon and specialist calendars are otherwise wide open`() {
+        leaveRepository.save(ai.rojan.backend.domain.schedule.SpecialistLeave.create(specialist.id, start.toLocalDate(), start.toLocalDate(), "Vacation"))
+
+        assertThrows(SpecialistNotAvailableException::class.java) {
+            createBooking()
+        }
+    }
+
+    @Test
+    fun `rejects rescheduling a booking to a time outside the salon's configured working hours`() {
+        val booking = createBooking()
+        workingHoursRepository.deleteBySalonIdAndDayOfWeek(salon.id, start.dayOfWeek)
+        weeklyAvailabilityRepository.deleteBySpecialistIdAndDayOfWeek(specialist.id, start.dayOfWeek)
+        workingHoursRepository.save(WorkingHours.create(salon.id, start.dayOfWeek, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(17, 0)))))
+        weeklyAvailabilityRepository.save(SpecialistWeeklyAvailability.create(specialist.id, start.dayOfWeek, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(17, 0)))))
+
+        assertThrows(SpecialistNotAvailableException::class.java) {
+            rescheduleUseCase.execute(RescheduleBookingCommand(booking.id, customer, start.withHour(20)))
         }
     }
 }

@@ -36,6 +36,7 @@ class CreateBookingUseCase(
     private val specialistRepository: SpecialistRepository,
     private val bookingRepository: BookingRepository,
     private val specialistServiceRepository: SpecialistServiceRepository,
+    private val specialistAvailabilityValidator: SpecialistAvailabilityValidator,
 ) {
     fun execute(command: CreateBookingCommand): Booking {
         val salon = salonRepository.findById(command.salonId)?.takeIf { it.active }
@@ -54,6 +55,8 @@ class CreateBookingUseCase(
         }
 
         val endTime = command.startTime.plusMinutes(service.durationMinutes.toLong())
+        specialistAvailabilityValidator.requireAvailable(salon.id, specialist.id, command.startTime, endTime)
+
         val booking = Booking.create(
             salonId = salon.id,
             serviceId = service.id,
@@ -119,6 +122,7 @@ class RescheduleBookingUseCase(
     private val bookingRepository: BookingRepository,
     private val serviceRepository: ServiceRepository,
     private val salonPermissionResolver: SalonPermissionResolver,
+    private val specialistAvailabilityValidator: SpecialistAvailabilityValidator,
 ) {
     fun execute(command: RescheduleBookingCommand): Booking {
         val booking = findBookingOrThrow(bookingRepository, command.bookingId)
@@ -127,6 +131,8 @@ class RescheduleBookingUseCase(
             ?: throw ServiceNotFoundException(booking.serviceId.value.toString())
 
         val newEndTime = command.newStartTime.plusMinutes(service.durationMinutes.toLong())
+        specialistAvailabilityValidator.requireAvailable(booking.salonId, booking.specialistId, command.newStartTime, newEndTime)
+
         booking.reschedule(command.newStartTime, newEndTime)
         return bookingRepository.reserve(booking, excludeBookingId = booking.id)
     }

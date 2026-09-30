@@ -18,6 +18,7 @@ import ai.rojan.backend.api.salon.ServiceResponse
 import ai.rojan.backend.api.salon.SpecialistResponse
 import ai.rojan.backend.api.schedule.CreateLeaveRequest
 import ai.rojan.backend.api.schedule.LeaveResponse
+import ai.rojan.backend.api.schedule.SetWeeklyAvailabilityRequest
 import ai.rojan.backend.api.schedule.SetWorkingHoursRequest
 import ai.rojan.backend.api.schedule.TimeIntervalDto
 import ai.rojan.backend.domain.user.UserRole
@@ -38,6 +39,7 @@ import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -62,13 +64,34 @@ class ApiHardeningIntegrationTest {
 
     private fun bearer(token: String) = HttpHeaders().apply { setBearerAuth(token) }
 
+    /**
+     * Master Integration Repair, Pass 3: sets working hours for every day of the week (not just
+     * Monday) - `CreateBookingUseCase`/`RescheduleBookingUseCase` now validate the salon's real
+     * working hours (`SpecialistAvailabilityValidator`), and this file's booking tests use
+     * `LocalDateTime.now().plusDays(N)`, whose day-of-week varies by whatever day the test suite
+     * happens to run on. Wide-open hours make that irrelevant, without changing any test's actual
+     * assertions.
+     */
     private fun activateSalon(ownerToken: String, salonId: java.util.UUID) {
-        restTemplate.exchange(
-            url("/api/v1/salons/$salonId/working-hours/MONDAY"), HttpMethod.PUT,
-            HttpEntity(SetWorkingHoursRequest(listOf(TimeIntervalDto(LocalTime.of(9, 0), LocalTime.of(17, 0)))), bearer(ownerToken)),
-            String::class.java,
-        )
+        DayOfWeek.entries.forEach { day ->
+            restTemplate.exchange(
+                url("/api/v1/salons/$salonId/working-hours/$day"), HttpMethod.PUT,
+                HttpEntity(SetWorkingHoursRequest(listOf(TimeIntervalDto(LocalTime.of(0, 0), LocalTime.of(23, 59)))), bearer(ownerToken)),
+                String::class.java,
+            )
+        }
         restTemplate.exchange(url("/api/v1/salons/$salonId/activate"), HttpMethod.POST, HttpEntity<Void>(bearer(ownerToken)), SalonResponse::class.java)
+    }
+
+    /** Master Integration Repair, Pass 3: same wide-open-every-day rationale as [activateSalon], for the specialist side of `SpecialistAvailabilityValidator`. */
+    private fun setSpecialistWideOpen(ownerToken: String, salonId: java.util.UUID, specialistId: java.util.UUID) {
+        DayOfWeek.entries.forEach { day ->
+            restTemplate.exchange(
+                url("/api/v1/salons/$salonId/specialists/$specialistId/schedule/weekly-availability/$day"), HttpMethod.PUT,
+                HttpEntity(SetWeeklyAvailabilityRequest(listOf(TimeIntervalDto(LocalTime.of(0, 0), LocalTime.of(23, 59)))), bearer(ownerToken)),
+                String::class.java,
+            )
+        }
     }
 
     /** Full activation from a bare salon: activation requires >=1 active service, >=1 active specialist, and >=1 working-hours day. */
@@ -207,6 +230,7 @@ class ApiHardeningIntegrationTest {
                 SpecialistResponse::class.java,
             ).body,
         )
+        setSpecialistWideOpen(managerToken, salon.id, specialist.id)
         activateSalon(managerToken, salon.id)
 
         val start = LocalDateTime.now().plusDays(60).withHour(9).withMinute(0).withSecond(0).withNano(0)
@@ -405,6 +429,7 @@ class ApiHardeningIntegrationTest {
                 SpecialistResponse::class.java,
             ).body,
         )
+        setSpecialistWideOpen(managerToken, salon.id, specialist.id)
         activateSalon(managerToken, salon.id)
         return BookableSalon(salon, service, specialist)
     }

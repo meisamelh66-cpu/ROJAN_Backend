@@ -23,6 +23,7 @@ import ai.rojan.backend.api.salon.SalonResponse
 import ai.rojan.backend.api.salon.ServiceCategoryResponse
 import ai.rojan.backend.api.salon.ServiceResponse
 import ai.rojan.backend.api.salon.SpecialistResponse
+import ai.rojan.backend.api.schedule.SetWeeklyAvailabilityRequest
 import ai.rojan.backend.api.schedule.SetWorkingHoursRequest
 import ai.rojan.backend.api.schedule.TimeIntervalDto
 import ai.rojan.backend.domain.auth.PhoneNumber
@@ -47,6 +48,7 @@ import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
+import java.time.DayOfWeek
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.util.UUID
@@ -118,12 +120,15 @@ class CustomerCrmFlowIntegrationTest {
         ).body,
     )
 
+    /** Master Integration Repair, Pass 3: every day of the week, not just Monday - see `ApiHardeningIntegrationTest.activateSalon`'s own doc comment for why. */
     private fun activateSalon(ownerToken: String, salonId: UUID) {
-        restTemplate.exchange(
-            url("/api/v1/salons/$salonId/working-hours/MONDAY"), HttpMethod.PUT,
-            HttpEntity(SetWorkingHoursRequest(listOf(TimeIntervalDto(LocalTime.of(9, 0), LocalTime.of(17, 0)))), bearer(ownerToken)),
-            String::class.java,
-        )
+        DayOfWeek.entries.forEach { day ->
+            restTemplate.exchange(
+                url("/api/v1/salons/$salonId/working-hours/$day"), HttpMethod.PUT,
+                HttpEntity(SetWorkingHoursRequest(listOf(TimeIntervalDto(LocalTime.of(0, 0), LocalTime.of(23, 59)))), bearer(ownerToken)),
+                String::class.java,
+            )
+        }
         restTemplate.exchange(url("/api/v1/salons/$salonId/activate"), HttpMethod.POST, HttpEntity<Void>(bearer(ownerToken)), SalonResponse::class.java)
     }
 
@@ -152,6 +157,15 @@ class CustomerCrmFlowIntegrationTest {
                 SpecialistResponse::class.java,
             ).body,
         )
+        // Master Integration Repair, Pass 3: wide-open weekly availability for every day - see
+        // ApiHardeningIntegrationTest.setSpecialistWideOpen's own doc comment for why.
+        DayOfWeek.entries.forEach { day ->
+            restTemplate.exchange(
+                url("/api/v1/salons/$salonId/specialists/${specialist.id}/schedule/weekly-availability/$day"), HttpMethod.PUT,
+                HttpEntity(SetWeeklyAvailabilityRequest(listOf(TimeIntervalDto(LocalTime.of(0, 0), LocalTime.of(23, 59)))), bearer(ownerToken)),
+                String::class.java,
+            )
+        }
         return service to specialist
     }
 

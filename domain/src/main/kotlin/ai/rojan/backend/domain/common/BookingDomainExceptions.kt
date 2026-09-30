@@ -21,6 +21,10 @@ class BookingNotFoundException(identifier: String) :
 class BookingConflictException(specialistId: String, start: String, end: String) :
     DomainException("Specialist $specialistId already has a booking overlapping $start - $end")
 
+/** Thrown by `SpecialistAvailabilityValidator` when a requested booking window falls outside salon working hours, the specialist's effective availability, or during their leave/a manual block - independent of [BookingConflictException], which covers overlap with another existing booking. */
+class SpecialistNotAvailableException(specialistId: String, start: String, end: String) :
+    DomainException("Specialist $specialistId is not available $start - $end")
+
 class InvalidBookingStateException(message: String) : DomainException(message)
 
 class BookingAccessDeniedException(bookingId: String) :

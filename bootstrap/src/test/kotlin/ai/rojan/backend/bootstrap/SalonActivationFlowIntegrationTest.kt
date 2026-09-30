@@ -311,12 +311,31 @@ class SalonActivationFlowIntegrationTest {
     private data class BookableFixture(val salon: SalonResponse, val service: ServiceResponse, val specialist: SpecialistResponse)
 
     /** Fully setup for activation (readiness requirements all met) but deliberately never activated - isolates the activation guard itself from any other 404/validation the fixture could otherwise trigger. */
+    /**
+     * Master Integration Repair, Pass 3: wide-open working hours/specialist availability for every
+     * day of the week - `CreateBookingUseCase` now validates both (`SpecialistAvailabilityValidator`),
+     * and this fixture's own real booking tests use `LocalDate.now().plusDays(N)`, whose day-of-week
+     * varies by whenever the suite runs. Deliberately not just calling [setMondayWorkingHours] (kept
+     * exactly as-is - it's also used standalone by the activation-readiness tests above, which
+     * specifically need only one working day configured).
+     */
     private fun setUpDraftButBookableSalon(ownerToken: String, name: String): BookableFixture {
         val salon = createSalon(ownerToken, name)
         val hair = createCategory(ownerToken, salon.id, "Hair")
         val service = createService(ownerToken, salon.id, hair.id, "Women's Haircut")
         val specialist = createSpecialist(ownerToken, salon.id, "Mariam Karimi")
-        setMondayWorkingHours(ownerToken, salon.id)
+        DayOfWeek.entries.forEach { day ->
+            restTemplate.exchange(
+                url("/api/v1/salons/${salon.id}/working-hours/$day"), HttpMethod.PUT,
+                HttpEntity(SetWorkingHoursRequest(listOf(TimeIntervalDto(LocalTime.of(0, 0), LocalTime.of(23, 59)))), bearer(ownerToken)),
+                String::class.java,
+            )
+            restTemplate.exchange(
+                url("/api/v1/salons/${salon.id}/specialists/${specialist.id}/schedule/weekly-availability/$day"), HttpMethod.PUT,
+                HttpEntity(SetWeeklyAvailabilityRequest(listOf(TimeIntervalDto(LocalTime.of(0, 0), LocalTime.of(23, 59)))), bearer(ownerToken)),
+                String::class.java,
+            )
+        }
         return BookableFixture(salon, service, specialist)
     }
 
