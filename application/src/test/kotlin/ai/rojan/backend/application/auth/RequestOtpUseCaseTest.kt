@@ -93,6 +93,19 @@ class RequestOtpUseCaseTest {
     }
 
     @Test
+    fun `tracks the short and long per-phone windows under distinct keys, not one shared counter`() {
+        val rateLimiter = RecordingRateLimiter()
+
+        useCase(rateLimiter).execute(RequestOtpCommand(phoneNumber = "+989123456789", callerIp = "1.2.3.4"))
+
+        val phoneKeys = rateLimiter.consumedKeys.filter { it.startsWith("otp:request:phone:") }
+        assertEquals(2, phoneKeys.size)
+        assertEquals(2, phoneKeys.toSet().size)
+        assertTrue(phoneKeys.any { it.startsWith("otp:request:phone:short:") })
+        assertTrue(phoneKeys.any { it.startsWith("otp:request:phone:long:") })
+    }
+
+    @Test
     fun `enforces the per-IP request rate limit`() {
         val rateLimiter = RecordingRateLimiter(deniedKeyPrefixes = setOf("otp:request:ip:"))
 

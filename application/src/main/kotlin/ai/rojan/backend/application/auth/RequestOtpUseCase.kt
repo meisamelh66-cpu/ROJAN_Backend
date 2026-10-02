@@ -45,11 +45,28 @@ class RequestOtpUseCase(
         return OtpIssuedResult(phone.value, policy.ttlSeconds, policy.resendCooldownSeconds)
     }
 
-    /** Deliberately consumes every applicable budget regardless of which one is already exhausted — a rejected attempt still happened and still counts against every window it touches. */
+    /**
+     * Deliberately consumes every applicable budget regardless of which one
+     * is already exhausted — a rejected attempt still happened and still
+     * counts against every window it touches. The short and long per-phone
+     * windows use distinct Redis keys (`:short:`/`:long:`) - sharing one key
+     * between two [RateLimiterPort.tryConsume] calls with different
+     * limits/TTLs made every real request silently consume the shared
+     * counter twice and bound the long window's expiry to whichever TTL the
+     * short-window call happened to set first, tripping the short-window
+     * limit after far fewer real requests than configured.
+     */
     private fun enforceRateLimits(phone: PhoneNumber, callerIp: String?) {
-        val phoneKey = "otp:request:phone:${phone.value}"
-        val withinShortWindow = rateLimiter.tryConsume(phoneKey, policy.requestLimitPerPhoneShortWindow, Duration.ofSeconds(policy.requestShortWindowSeconds))
-        val withinLongWindow = rateLimiter.tryConsume(phoneKey, policy.requestLimitPerPhoneLongWindow, Duration.ofSeconds(policy.requestLongWindowSeconds))
+        val withinShortWindow = rateLimiter.tryConsume(
+            "otp:request:phone:short:${phone.value}",
+            policy.requestLimitPerPhoneShortWindow,
+            Duration.ofSeconds(policy.requestShortWindowSeconds),
+        )
+        val withinLongWindow = rateLimiter.tryConsume(
+            "otp:request:phone:long:${phone.value}",
+            policy.requestLimitPerPhoneLongWindow,
+            Duration.ofSeconds(policy.requestLongWindowSeconds),
+        )
         if (!withinShortWindow || !withinLongWindow) {
             throw OtpRateLimitExceededException(phone.value)
         }
