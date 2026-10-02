@@ -28,6 +28,15 @@ interface SalonSpringDataRepository : JpaRepository<SalonJpaEntity, UUID> {
     ): Page<SalonJpaEntity>
 
 
+    // Platform Authority oversight (Admin Salon Visibility): every salon regardless of status -
+    // see SalonRepository.findAllForPlatform. `findAll(pageable)` (no filter) is already inherited
+    // from JpaRepository, so only the name-filtered variant needs a new derived query here.
+    fun findByNameContainingIgnoreCase(
+        name: String,
+        pageable: Pageable,
+    ): Page<SalonJpaEntity>
+
+
     // Public Salon Marketplace + Booking safety:
     // Only active salons with the requested onboarding status
     fun findByActiveTrueAndOnboardingStatus(

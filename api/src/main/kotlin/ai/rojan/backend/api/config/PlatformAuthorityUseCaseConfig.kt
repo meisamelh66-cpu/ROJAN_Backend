@@ -7,6 +7,7 @@ import ai.rojan.backend.application.platformauthority.DeactivatePlatformReviewer
 import ai.rojan.backend.application.platformauthority.ListPlatformCustomerAccountsUseCase
 import ai.rojan.backend.application.platformauthority.ListPlatformManagersUseCase
 import ai.rojan.backend.application.platformauthority.ListPlatformReviewersUseCase
+import ai.rojan.backend.application.platformauthority.ListPlatformSalonsUseCase
 import ai.rojan.backend.application.platformauthority.PlatformAuthorizationResolver
 import ai.rojan.backend.application.platformauthority.ReactivatePlatformCustomerAccountUseCase
 import ai.rojan.backend.application.platformauthority.ReactivatePlatformManagerUseCase
@@ -75,6 +76,12 @@ class PlatformAuthorityUseCaseConfig {
         userRepository: UserRepository,
         platformAuthorization: PlatformAuthorizationResolver,
     ) = ReactivatePlatformManagerUseCase(userRepository, platformAuthorization)
+
+    @Bean
+    fun listPlatformSalonsUseCase(
+        salonRepository: SalonRepository,
+        platformAuthorization: PlatformAuthorizationResolver,
+    ) = ListPlatformSalonsUseCase(salonRepository, platformAuthorization)
 
     @Bean
     fun listPlatformCustomerAccountsUseCase(
