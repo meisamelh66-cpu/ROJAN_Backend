@@ -20,6 +20,17 @@ server:
   # of being cut off mid-response when Docker sends SIGTERM on
   # `docker compose stop`/a rolling restart.
   shutdown: graceful
+  # docker/nginx/conf.d/rojan.conf already sets X-Forwarded-For/X-Real-IP/
+  # X-Forwarded-Proto correctly for every request it proxies to this app -
+  # without this, Spring never reads them, so HttpServletRequest.remoteAddr
+  # resolves to Nginx's own container address for every caller alike,
+  # collapsing the per-IP OTP request rate limit (RequestOtpUseCase) into
+  # one shared bucket for the whole service instead of one per real client.
+  # Scoped to this prod-only profile, not the base application.yml: local/
+  # dev Docker exposes the app's port directly with no reverse proxy in
+  # front, so trusting these headers there would mean trusting whatever a
+  # caller sends unchecked.
+  forward-headers-strategy: framework
 
 spring:
   lifecycle:
