@@ -142,6 +142,24 @@ class SalonRepositoryAdapter(
         )
     }
 
+    override fun findAllForPlatform(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon> {
+        val direction = if (sortDirection == SortDirection.ASC) Sort.Direction.ASC else Sort.Direction.DESC
+        val pageable = SpringPageRequest.of(pageRequest.page, pageRequest.size, Sort.by(direction, "name"))
+        // Platform Authority oversight: deliberately no active/onboardingStatus predicate at all -
+        // every salon, any status, unlike findAllActive/findAllPubliclyDiscoverable above.
+        val page = if (nameFilter.isNullOrBlank()) {
+            jpaRepository.findAll(pageable)
+        } else {
+            jpaRepository.findByNameContainingIgnoreCase(nameFilter, pageable)
+        }
+        return PageResult(
+            content = page.content.map { it.toDomain() },
+            page = page.number,
+            size = page.size,
+            totalElements = page.totalElements,
+        )
+    }
+
     override fun findNearby(lat: Double, lng: Double, radiusKm: Double, pageRequest: PageRequest): PageResult<NearbySalonResult> {
         val pageable = SpringPageRequest.of(pageRequest.page, pageRequest.size)
         val rows = jpaRepository.findNearbyIdsWithDistance(lat, lng, radiusKm, SalonOnboardingStatus.ACTIVE.name, pageable)

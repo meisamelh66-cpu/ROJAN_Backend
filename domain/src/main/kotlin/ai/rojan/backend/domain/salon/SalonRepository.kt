@@ -52,6 +52,18 @@ interface SalonRepository {
      * of a "nearby" query. [radiusKm] is a hard cutoff, not a soft ranking signal.
      */
     fun findNearby(lat: Double, lng: Double, radiusKm: Double, pageRequest: PageRequest): PageResult<NearbySalonResult>
+
+    /**
+     * Platform Authority oversight (Admin Salon Visibility): deliberately bypasses every
+     * customer-facing discoverability gate [findAllActive]/[findAllPubliclyDiscoverable] enforce -
+     * returns every salon regardless of [Salon.active]/[SalonOnboardingStatus], so a platform
+     * operator can see a salon exists (and its real status) the moment it's created, DRAFT
+     * included. This port itself enforces no access control, same contract every other method here
+     * already follows - the caller (`ListPlatformSalonsUseCase`) is solely responsible for
+     * requiring PLATFORM_ADMIN/PLATFORM_REVIEWER before ever reaching this. Sorted by name, same as
+     * [findAllActive], so an Admin UI already wired to that sort control keeps working unchanged.
+     */
+    fun findAllForPlatform(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon>
 }
 
 /** One [findNearby] result row - the real [Salon] paired with its real, computed distance from the query point. */
