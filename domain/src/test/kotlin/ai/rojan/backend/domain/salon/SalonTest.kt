@@ -115,4 +115,42 @@ class SalonTest {
         assertNull(salon.logoMediaId)
         assertEquals(coverId, salon.coverMediaId)
     }
+
+    @Test
+    fun `deactivate flips active to false without touching onboardingStatus`() {
+        val salon = newSalon(SalonOnboardingStatus.ACTIVE)
+
+        salon.deactivate()
+
+        assertEquals(false, salon.active)
+        assertEquals(SalonOnboardingStatus.ACTIVE, salon.onboardingStatus, "deactivate must never touch onboardingStatus")
+    }
+
+    @Test
+    fun `deactivate is idempotent for an already inactive salon`() {
+        val salon = newSalon().also { it.deactivate() }
+
+        salon.deactivate()
+
+        assertEquals(false, salon.active)
+    }
+
+    @Test
+    fun `reactivate flips active back to true without touching onboardingStatus`() {
+        val salon = newSalon(SalonOnboardingStatus.DRAFT).also { it.deactivate() }
+
+        salon.reactivate()
+
+        assertEquals(true, salon.active)
+        assertEquals(SalonOnboardingStatus.DRAFT, salon.onboardingStatus, "reactivate must only undo the soft-delete, never finish onboarding on the owner's behalf")
+    }
+
+    @Test
+    fun `reactivate is idempotent for an already active salon`() {
+        val salon = newSalon()
+
+        salon.reactivate()
+
+        assertEquals(true, salon.active)
+    }
 }

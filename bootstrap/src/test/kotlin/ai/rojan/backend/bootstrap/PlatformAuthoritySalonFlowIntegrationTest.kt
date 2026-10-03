@@ -7,8 +7,12 @@ import ai.rojan.backend.api.auth.RegisterRequest
 import ai.rojan.backend.api.auth.LoginRequest
 import ai.rojan.backend.api.auth.UserResponse
 import ai.rojan.backend.api.common.PagedResponse
+import ai.rojan.backend.api.platformauthority.PlatformSalonResponse
+import ai.rojan.backend.api.platformauthority.SuspendPlatformSalonRequest
+import ai.rojan.backend.api.platformauthority.UpdatePlatformSalonRequest
 import ai.rojan.backend.api.publicsalon.PublicSalonListResponse
 import ai.rojan.backend.api.salon.CreateSalonRequest
+import ai.rojan.backend.api.salon.SalonCompletenessResponse
 import ai.rojan.backend.api.salon.SalonResponse
 import ai.rojan.backend.domain.auth.PhoneNumber
 import ai.rojan.backend.domain.salon.SalonOnboardingStatus
@@ -142,6 +146,51 @@ class PlatformAuthoritySalonFlowIntegrationTest {
         return restTemplate.exchange(
             uri, HttpMethod.GET, HttpEntity<Void>(bearer(token)),
             object : org.springframework.core.ParameterizedTypeReference<PagedResponse<SalonResponse>>() {},
+        )
+    }
+
+    /** Same endpoint as [listPlatformSalons], deserialized into the real [PlatformSalonResponse] (with [PlatformSalonResponse.ownerName]) instead of the bare [SalonResponse] every other test here uses - only where a test actually needs to assert on `ownerName`/the richer filters. */
+    private fun listPlatformSalonsFull(
+        token: String,
+        name: String? = null,
+        owner: String? = null,
+        phone: String? = null,
+        status: String? = null,
+        verified: Boolean? = null,
+        city: String? = null,
+        sort: String? = null,
+    ): PagedResponse<PlatformSalonResponse> {
+        // Builds the query string as a plain string, each value encoded with java.net.URLEncoder
+        // (application/x-www-form-urlencoded) - UriComponentsBuilder was tried first and rejected:
+        // its RFC-3986 `.encode()` leaves a literal `+` unescaped (legal there per RFC 3986), but
+        // the servlet container decodes query strings using the older x-www-form-urlencoded
+        // convention where `+` means space, so `.encode()` alone silently turned "+98…" into " 98…"
+        // server-side (confirmed by a real failing run and a Hibernate parameter-binding trace);
+        // pre-encoding with URLEncoder and then also calling `.build()` without `.encode()` instead
+        // double-encoded the value (`%2B` became `%252B`, also confirmed by trace) - `UriComponents`
+        // re-escapes an already-encoded `%` unless `.encode()` is told the value is pre-encoded, a
+        // distinction awkward enough in this version to be worth avoiding entirely. A plain
+        // `java.net.URI.create(...)` of an already-correctly-escaped string has no such ambiguity -
+        // every character in the query string is or isn't a legal URI character, full stop, and
+        // URLEncoder is the same real encoding convention the Website's own client uses too (via
+        // `URLSearchParams`) - this whole class of bug is specific to this test helper, not to any
+        // real caller.
+        fun enc(value: String) = java.net.URLEncoder.encode(value, "UTF-8")
+        val params = buildList {
+            if (name != null) add("name=${enc(name)}")
+            if (owner != null) add("owner=${enc(owner)}")
+            if (phone != null) add("phone=${enc(phone)}")
+            if (status != null) add("status=${enc(status)}")
+            if (verified != null) add("verified=$verified")
+            if (city != null) add("city=${enc(city)}")
+            if (sort != null) add("sort=${enc(sort)}")
+        }
+        val uri = java.net.URI.create(url("/api/v1/platform-authority/salons") + "?" + params.joinToString("&"))
+        return requireNotNull(
+            restTemplate.exchange(
+                uri, HttpMethod.GET, HttpEntity<Void>(bearer(token)),
+                object : org.springframework.core.ParameterizedTypeReference<PagedResponse<PlatformSalonResponse>>() {},
+            ).body,
         )
     }
 
@@ -302,5 +351,208 @@ class PlatformAuthoritySalonFlowIntegrationTest {
         assertEquals(1, secondPage.content.size)
         val allNames = (firstPage.content + secondPage.content).map { it.name }
         assertEquals(names.sorted(), allNames.sorted())
+    }
+
+    @Test
+    fun `the full filter set - owner, phone, status, verified, city - and sort all work against a real Postgres, and ownerName is resolved`() {
+        val adminToken = seedPlatformAdmin("Admin Salon Four")
+        val marker = System.nanoTime()
+        val ownerToken = registerAndLoginManager("Filterable Owner $marker")
+        val salon = createSalon(ownerToken, "Filter Target Salon $marker")
+        // A clean, unambiguous E.164-style phone (no spaces) - the `createSalon` helper's own
+        // default "+1 555 0100" is pre-existing fixture data shared with other tests, deliberately
+        // left unchanged here; this filter test needs its own, cleanly-formatted value instead of
+        // reusing it.
+        val cleanPhone = randomPhone()
+        restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}"), HttpMethod.PUT,
+            HttpEntity(
+                ai.rojan.backend.api.salon.UpdateSalonRequest(salon.name, null, cleanPhone, null, salon.address, city = "Shiraz $marker"),
+                bearer(ownerToken),
+            ),
+            SalonResponse::class.java,
+        )
+
+        val byOwner = listPlatformSalonsFull(adminToken, owner = "Filterable Owner $marker")
+        assertTrue(byOwner.content.any { it.id == salon.id })
+        assertEquals("Filterable Owner $marker", byOwner.content.first { it.id == salon.id }.ownerName, "ownerName must be the real owner's full name")
+
+        val byPhone = listPlatformSalonsFull(adminToken, phone = cleanPhone)
+        assertTrue(byPhone.content.any { it.id == salon.id })
+
+        val byStatusDraft = listPlatformSalonsFull(adminToken, name = salon.name, status = "DRAFT")
+        assertTrue(byStatusDraft.content.any { it.id == salon.id }, "a freshly created salon is DRAFT")
+        val byStatusPublished = listPlatformSalonsFull(adminToken, name = salon.name, status = "PUBLISHED")
+        assertFalse(byStatusPublished.content.any { it.id == salon.id })
+
+        val byVerifiedFalse = listPlatformSalonsFull(adminToken, name = salon.name, verified = false)
+        assertTrue(byVerifiedFalse.content.any { it.id == salon.id }, "a freshly created salon is not ROJAN-verified")
+        val byVerifiedTrue = listPlatformSalonsFull(adminToken, name = salon.name, verified = true)
+        assertFalse(byVerifiedTrue.content.any { it.id == salon.id })
+
+        val byCity = listPlatformSalonsFull(adminToken, city = "Shiraz $marker")
+        assertTrue(byCity.content.any { it.id == salon.id })
+
+        val sortedByNameAsc = listPlatformSalonsFull(adminToken, name = salon.name, sort = "name,asc")
+        assertTrue(sortedByNameAsc.content.any { it.id == salon.id })
+    }
+
+    @Test
+    fun `PLATFORM_ADMIN can suspend a salon with a reason, it disappears from public discovery, and PLATFORM_ADMIN can reinstate it`() {
+        val adminToken = seedPlatformAdmin("Admin Suspend One")
+        val ownerToken = registerAndLoginManager("Owner Suspend One")
+        val marker = System.nanoTime()
+        val salon = createSalon(ownerToken, "Suspend Target $marker")
+        // Activate it first so it is genuinely publicly discoverable before the suspend.
+        restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/categories"), HttpMethod.POST,
+            HttpEntity(ai.rojan.backend.api.salon.CreateServiceCategoryRequest("Hair", null), bearer(ownerToken)),
+            ai.rojan.backend.api.salon.ServiceCategoryResponse::class.java,
+        ).body!!.let { category ->
+            restTemplate.exchange(
+                url("/api/v1/salons/${salon.id}/categories/${category.id}/services"), HttpMethod.POST,
+                HttpEntity(
+                    ai.rojan.backend.api.salon.CreateServiceRequest("Haircut", null, 30, java.math.BigDecimal("25.00")),
+                    bearer(ownerToken),
+                ),
+                ai.rojan.backend.api.salon.ServiceResponse::class.java,
+            )
+        }
+        restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/specialists"), HttpMethod.POST,
+            HttpEntity(
+                ai.rojan.backend.api.salon.CreateSpecialistRequest(null, "Stylist Suspend", null, null, "+989120000098", "Stylist"),
+                bearer(ownerToken),
+            ),
+            ai.rojan.backend.api.salon.SpecialistResponse::class.java,
+        )
+        restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/working-hours/MONDAY"), HttpMethod.PUT,
+            HttpEntity(
+                ai.rojan.backend.api.schedule.SetWorkingHoursRequest(
+                    listOf(ai.rojan.backend.api.schedule.TimeIntervalDto(java.time.LocalTime.of(9, 0), java.time.LocalTime.of(17, 0))),
+                ),
+                bearer(ownerToken),
+            ),
+            String::class.java,
+        )
+        restTemplate.exchange(url("/api/v1/salons/${salon.id}/activate"), HttpMethod.POST, HttpEntity<Void>(bearer(ownerToken)), SalonResponse::class.java)
+        assertTrue(listPublicSalons(search = salon.name).any { it.id == salon.id }, "sanity check: it is publicly discoverable before suspend")
+
+        val suspend = restTemplate.exchange(
+            url("/api/v1/platform-authority/salons/${salon.id}/suspend"), HttpMethod.POST,
+            HttpEntity(SuspendPlatformSalonRequest("تکراری است"), bearer(adminToken)),
+            PlatformSalonResponse::class.java,
+        )
+        assertEquals(HttpStatus.OK, suspend.statusCode)
+        assertFalse(suspend.body!!.active)
+
+        assertFalse(listPublicSalons(search = salon.name).any { it.id == salon.id }, "a suspended salon must disappear from public discovery")
+
+        val reinstate = restTemplate.exchange(
+            url("/api/v1/platform-authority/salons/${salon.id}/reinstate"), HttpMethod.POST,
+            HttpEntity<Void>(bearer(adminToken)), PlatformSalonResponse::class.java,
+        )
+        assertEquals(HttpStatus.OK, reinstate.statusCode)
+        assertTrue(reinstate.body!!.active)
+        assertTrue(listPublicSalons(search = salon.name).any { it.id == salon.id }, "a reinstated, already-activated salon must reappear in public discovery")
+    }
+
+    @Test
+    fun `suspend requires a non-blank reason and is PLATFORM_ADMIN only - PLATFORM_REVIEWER gets 403`() {
+        val adminToken = seedPlatformAdmin("Admin Suspend Two")
+        val reviewerToken = seedPlatformReviewer("Reviewer Suspend Two")
+        val ownerToken = registerAndLoginManager("Owner Suspend Two")
+        val salon = createSalon(ownerToken, "Suspend Validation Target ${System.nanoTime()}")
+
+        val blankReason = restTemplate.exchange(
+            url("/api/v1/platform-authority/salons/${salon.id}/suspend"), HttpMethod.POST,
+            HttpEntity(SuspendPlatformSalonRequest("   "), bearer(adminToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.BAD_REQUEST, blankReason.statusCode)
+
+        val reviewerAttempt = restTemplate.exchange(
+            url("/api/v1/platform-authority/salons/${salon.id}/suspend"), HttpMethod.POST,
+            HttpEntity(SuspendPlatformSalonRequest("a reason"), bearer(reviewerToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, reviewerAttempt.statusCode)
+    }
+
+    @Test
+    fun `PLATFORM_ADMIN can edit a salon's identity, location and business-profile fields in one call`() {
+        val adminToken = seedPlatformAdmin("Admin Edit One")
+        val ownerToken = registerAndLoginManager("Owner Edit One")
+        val salon = createSalon(ownerToken, "Edit Target ${System.nanoTime()}")
+
+        val response = restTemplate.exchange(
+            url("/api/v1/platform-authority/salons/${salon.id}"), HttpMethod.PUT,
+            HttpEntity(
+                UpdatePlatformSalonRequest(
+                    name = "Edited By Admin",
+                    description = "Edited description",
+                    phone = "+15559990000",
+                    email = "edited@example.com",
+                    address = "Edited address",
+                    latitude = 35.7,
+                    longitude = 51.3,
+                    city = "Tehran",
+                    activityStartJalaliYear = 1395,
+                    hasInternalExtensions = true,
+                    sellsProducts = true,
+                    hasCafe = false,
+                    hasStaffUniform = null,
+                    isNeighborhoodSalon = null,
+                    isCityCenterSalon = null,
+                ),
+                bearer(adminToken),
+            ),
+            PlatformSalonResponse::class.java,
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        assertEquals("Edited By Admin", response.body!!.name)
+        assertEquals("Tehran", response.body!!.city)
+
+        val getAfter = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}"), HttpMethod.GET, HttpEntity<Void>(bearer(adminToken)), SalonResponse::class.java,
+        )
+        assertEquals("Edited By Admin", getAfter.body!!.name, "the edit must really be persisted")
+    }
+
+    @Test
+    fun `PLATFORM_ADMIN can clear an invalid logo without deleting the salon or the cover`() {
+        val adminToken = seedPlatformAdmin("Admin Media One")
+        val ownerToken = registerAndLoginManager("Owner Media One")
+        val salon = createSalon(ownerToken, "Media Target ${System.nanoTime()}")
+
+        val response = restTemplate.exchange(
+            url("/api/v1/platform-authority/salons/${salon.id}/identity-media/LOGO"), HttpMethod.DELETE,
+            HttpEntity<Void>(bearer(adminToken)), PlatformSalonResponse::class.java,
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        assertEquals(null, response.body!!.logoMediaId)
+        assertEquals(salon.id, response.body!!.id, "the salon itself must still exist, only its logo slot is cleared")
+    }
+
+    @Test
+    fun `PLATFORM_ADMIN can read a salon's completeness even though the owner-scoped route would 403 them`() {
+        val adminToken = seedPlatformAdmin("Admin Completeness One")
+        val ownerToken = registerAndLoginManager("Owner Completeness One")
+        val salon = createSalon(ownerToken, "Completeness Target ${System.nanoTime()}")
+
+        val ownerScopedAttempt = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/completeness"), HttpMethod.GET, HttpEntity<Void>(bearer(adminToken)), String::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, ownerScopedAttempt.statusCode, "a platform admin is not a member of this salon")
+
+        val response = restTemplate.exchange(
+            url("/api/v1/platform-authority/salons/${salon.id}/completeness"), HttpMethod.GET,
+            HttpEntity<Void>(bearer(adminToken)), SalonCompletenessResponse::class.java,
+        )
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        assertEquals(salon.id, response.body!!.salonId)
+        assertEquals(3, response.body!!.missingForActivation.size, "a brand-new salon is missing all three activation requirements")
     }
 }

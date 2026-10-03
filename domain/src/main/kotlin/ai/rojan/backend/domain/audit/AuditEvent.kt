@@ -24,6 +24,12 @@ enum class AuditActionType {
     VERIFICATION_SUBMITTED,
     VERIFICATION_APPROVED,
     VERIFICATION_REJECTED,
+
+    /** Platform Authority oversight (Admin Salon Suspend/Reinstate) - always [ActorType.PLATFORM_AUTHORITY]; an owner's own [ai.rojan.backend.domain.salon.Salon.deactivate] (`DELETE /api/v1/salons/{id}`) is reported as [SALON_UPDATED] like every other owner self-service change, never this value - this one specifically means "a platform admin suspended someone else's salon." */
+    SALON_SUSPENDED,
+
+    /** The reverse of [SALON_SUSPENDED] - always [ActorType.PLATFORM_AUTHORITY]. */
+    SALON_REINSTATED,
 }
 
 enum class AuditEntityType { SALON, MEDIA_ASSET, SALON_DOCUMENT, SALON_VERIFICATION }

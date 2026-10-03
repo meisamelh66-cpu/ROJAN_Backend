@@ -20,6 +20,11 @@ import ai.rojan.backend.domain.salon.SalonInviteId
 import ai.rojan.backend.domain.salon.SalonInviteRepository
 import ai.rojan.backend.domain.salon.SalonInviteStatus
 import ai.rojan.backend.domain.salon.NearbySalonResult
+import ai.rojan.backend.domain.salon.PlatformSalonFilter
+import ai.rojan.backend.domain.salon.PlatformSalonResult
+import ai.rojan.backend.domain.salon.PlatformSalonSort
+import ai.rojan.backend.domain.salon.PlatformSalonSortField
+import ai.rojan.backend.domain.salon.PlatformSalonStatus
 import ai.rojan.backend.domain.salon.SalonMembership
 import ai.rojan.backend.domain.salon.SalonMembershipRepository
 import ai.rojan.backend.domain.salon.SalonOnboardingStatus
@@ -72,16 +77,45 @@ internal class InMemorySalonRepository : SalonRepository {
         )
     }
 
-    /** Platform Authority oversight: mirrors [findAllActive] exactly, minus the active/onboardingStatus predicate - every salon, any status. */
-    override fun findAllForPlatform(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon> {
+    /** Test-only: lets a test register the owner name [findAllForPlatform] should report for a given owner, mirroring the real adapter's `users.full_name` join without needing a real [UserRepository] fake wired into this one. Unregistered owners resolve to `null`, same as the real adapter would for a genuinely missing user row. */
+    val ownerNames = mutableMapOf<UserId, String>()
+
+    /**
+     * Platform Authority oversight (Admin Salon Visibility, Enterprise Scale Preparation): mirrors
+     * [findAllActive] exactly, minus the active/onboardingStatus predicate (every salon, any
+     * status), plus the full owner/phone/status/verified/city filter set and createdAt/name sort -
+     * the exact same semantics `SalonRepositoryAdapter`'s real native query applies, so a use-case
+     * test exercising this path gets real, correct results.
+     */
+    override fun findAllForPlatform(pageRequest: PageRequest, filter: PlatformSalonFilter, sort: PlatformSalonSort): PageResult<PlatformSalonResult> {
+        fun statusOf(salon: Salon): PlatformSalonStatus = when {
+            !salon.active -> PlatformSalonStatus.INACTIVE
+            salon.onboardingStatus == SalonOnboardingStatus.ACTIVE -> PlatformSalonStatus.PUBLISHED
+            else -> PlatformSalonStatus.DRAFT
+        }
+
+        val name = filter.name
+        val owner = filter.owner
+        val phone = filter.phone
+        val city = filter.city
         val filtered = store.values
-            .filter { nameFilter.isNullOrBlank() || it.name.contains(nameFilter, ignoreCase = true) }
-            .sortedBy { it.name }
-            .let { if (sortDirection == SortDirection.DESC) it.reversed() else it }
+            .filter { name.isNullOrBlank() || it.name.contains(name, ignoreCase = true) }
+            .filter { owner.isNullOrBlank() || (ownerNames[it.ownerId]?.contains(owner, ignoreCase = true) ?: false) }
+            .filter { phone.isNullOrBlank() || it.phone.startsWith(phone) }
+            .filter { filter.status == null || statusOf(it) == filter.status }
+            .filter { filter.verified == null || it.rojanVerified == filter.verified }
+            .filter { city.isNullOrBlank() || (it.city?.equals(city, ignoreCase = true) ?: false) }
+            .sortedWith(
+                when (sort.field) {
+                    PlatformSalonSortField.NAME -> compareBy { it.name }
+                    PlatformSalonSortField.CREATED_AT -> compareBy { it.createdAt }
+                },
+            )
+            .let { if (sort.direction == SortDirection.DESC) it.reversed() else it }
         val fromIndex = (pageRequest.page * pageRequest.size).coerceAtMost(filtered.size)
         val toIndex = (fromIndex + pageRequest.size).coerceAtMost(filtered.size)
         return PageResult(
-            content = filtered.subList(fromIndex, toIndex),
+            content = filtered.subList(fromIndex, toIndex).map { PlatformSalonResult(it, ownerNames[it.ownerId]) },
             page = pageRequest.page,
             size = pageRequest.size,
             totalElements = filtered.size.toLong(),

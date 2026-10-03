@@ -1,9 +1,12 @@
 package ai.rojan.backend.api.config
 
+import ai.rojan.backend.application.audit.RecordAuditEventUseCase
 import ai.rojan.backend.application.platformauthority.CreatePlatformReviewerUseCase
 import ai.rojan.backend.application.platformauthority.DeactivatePlatformCustomerAccountUseCase
 import ai.rojan.backend.application.platformauthority.DeactivatePlatformManagerUseCase
 import ai.rojan.backend.application.platformauthority.DeactivatePlatformReviewerUseCase
+import ai.rojan.backend.application.platformauthority.GetPlatformManagerUseCase
+import ai.rojan.backend.application.platformauthority.GetPlatformSalonCompletenessUseCase
 import ai.rojan.backend.application.platformauthority.ListPlatformCustomerAccountsUseCase
 import ai.rojan.backend.application.platformauthority.ListPlatformManagersUseCase
 import ai.rojan.backend.application.platformauthority.ListPlatformReviewersUseCase
@@ -12,8 +15,15 @@ import ai.rojan.backend.application.platformauthority.PlatformAuthorizationResol
 import ai.rojan.backend.application.platformauthority.ReactivatePlatformCustomerAccountUseCase
 import ai.rojan.backend.application.platformauthority.ReactivatePlatformManagerUseCase
 import ai.rojan.backend.application.platformauthority.ReactivatePlatformReviewerUseCase
+import ai.rojan.backend.application.platformauthority.ReinstatePlatformSalonUseCase
+import ai.rojan.backend.application.platformauthority.RemovePlatformSalonMediaUseCase
+import ai.rojan.backend.application.platformauthority.SuspendPlatformSalonUseCase
+import ai.rojan.backend.application.platformauthority.UpdatePlatformSalonUseCase
 import ai.rojan.backend.domain.salon.SalonMembershipRepository
 import ai.rojan.backend.domain.salon.SalonRepository
+import ai.rojan.backend.domain.salon.ServiceRepository
+import ai.rojan.backend.domain.salon.SpecialistRepository
+import ai.rojan.backend.domain.schedule.WorkingHoursRepository
 import ai.rojan.backend.domain.user.UserRepository
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -78,10 +88,55 @@ class PlatformAuthorityUseCaseConfig {
     ) = ReactivatePlatformManagerUseCase(userRepository, platformAuthorization)
 
     @Bean
+    fun getPlatformManagerUseCase(
+        userRepository: UserRepository,
+        salonRepository: SalonRepository,
+        salonMembershipRepository: SalonMembershipRepository,
+        platformAuthorization: PlatformAuthorizationResolver,
+    ) = GetPlatformManagerUseCase(userRepository, salonRepository, salonMembershipRepository, platformAuthorization)
+
+    @Bean
     fun listPlatformSalonsUseCase(
         salonRepository: SalonRepository,
         platformAuthorization: PlatformAuthorizationResolver,
     ) = ListPlatformSalonsUseCase(salonRepository, platformAuthorization)
+
+    @Bean
+    fun suspendPlatformSalonUseCase(
+        salonRepository: SalonRepository,
+        platformAuthorization: PlatformAuthorizationResolver,
+        recordAuditEventUseCase: RecordAuditEventUseCase,
+    ) = SuspendPlatformSalonUseCase(salonRepository, platformAuthorization, recordAuditEventUseCase)
+
+    @Bean
+    fun reinstatePlatformSalonUseCase(
+        salonRepository: SalonRepository,
+        platformAuthorization: PlatformAuthorizationResolver,
+        recordAuditEventUseCase: RecordAuditEventUseCase,
+    ) = ReinstatePlatformSalonUseCase(salonRepository, platformAuthorization, recordAuditEventUseCase)
+
+    @Bean
+    fun updatePlatformSalonUseCase(
+        salonRepository: SalonRepository,
+        platformAuthorization: PlatformAuthorizationResolver,
+        recordAuditEventUseCase: RecordAuditEventUseCase,
+    ) = UpdatePlatformSalonUseCase(salonRepository, platformAuthorization, recordAuditEventUseCase)
+
+    @Bean
+    fun removePlatformSalonMediaUseCase(
+        salonRepository: SalonRepository,
+        platformAuthorization: PlatformAuthorizationResolver,
+        recordAuditEventUseCase: RecordAuditEventUseCase,
+    ) = RemovePlatformSalonMediaUseCase(salonRepository, platformAuthorization, recordAuditEventUseCase)
+
+    @Bean
+    fun getPlatformSalonCompletenessUseCase(
+        salonRepository: SalonRepository,
+        serviceRepository: ServiceRepository,
+        specialistRepository: SpecialistRepository,
+        workingHoursRepository: WorkingHoursRepository,
+        platformAuthorization: PlatformAuthorizationResolver,
+    ) = GetPlatformSalonCompletenessUseCase(salonRepository, serviceRepository, specialistRepository, workingHoursRepository, platformAuthorization)
 
     @Bean
     fun listPlatformCustomerAccountsUseCase(

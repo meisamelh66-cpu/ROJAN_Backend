@@ -84,6 +84,38 @@ class ListPlatformManagersUseCase(
     }
 }
 
+data class GetPlatformManagerQuery(val callerId: UserId, val managerId: UserId)
+
+/**
+ * Admin Salon Visibility (owner inspection): a single-account lookup, the one piece
+ * [ListPlatformManagersUseCase] cannot serve directly - a salon detail page knows its owner's real
+ * [UserId] ([ai.rojan.backend.domain.salon.Salon.ownerId]) but has no name/phone to text-search
+ * the list endpoint with. Resolves the same real salon associations
+ * [ListPlatformManagersUseCase] already computes per-row, for this one manager, so the salon
+ * detail page's "owner" section and the manager list's own row never present different data for
+ * the same account.
+ */
+class GetPlatformManagerUseCase(
+    private val userRepository: UserRepository,
+    private val salonRepository: SalonRepository,
+    private val salonMembershipRepository: SalonMembershipRepository,
+    private val platformAuthorization: PlatformAuthorizationResolver,
+) {
+    fun execute(query: GetPlatformManagerQuery): PlatformManagerAccount {
+        platformAuthorization.requirePlatformReviewerOrAdmin(query.callerId)
+        val manager = findManager(query.managerId, userRepository)
+        val owned = salonRepository.findByOwnerId(manager.id).map { salon ->
+            ManagerSalonAssociation(salon.id, salon.name, ManagerSalonAccessType.OWNER, null)
+        }
+        val memberships = salonMembershipRepository.findByUserId(manager.id).mapNotNull { membership ->
+            salonRepository.findById(membership.salonId)?.let { salon ->
+                ManagerSalonAssociation(salon.id, salon.name, ManagerSalonAccessType.MEMBER, membership.role)
+            }
+        }
+        return PlatformManagerAccount(manager, owned + memberships)
+    }
+}
+
 data class DeactivatePlatformManagerCommand(val callerId: UserId, val managerId: UserId)
 
 /** Admin-only. [User.deactivate] blocks login/refresh ([ai.rojan.backend.application.auth.AuthenticateUserUseCase]/[ai.rojan.backend.application.auth.RefreshTokenUseCase] both check [User.active]) - it never touches [ai.rojan.backend.domain.salon.Salon.active]/activation status for any salon this manager owns, a deliberately separate field on a deliberately separate aggregate. */

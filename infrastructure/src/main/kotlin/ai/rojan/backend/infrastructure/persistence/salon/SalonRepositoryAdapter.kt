@@ -5,6 +5,10 @@ import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.media.MediaAssetId
 import ai.rojan.backend.domain.salon.NearbySalonResult
+import ai.rojan.backend.domain.salon.PlatformSalonFilter
+import ai.rojan.backend.domain.salon.PlatformSalonResult
+import ai.rojan.backend.domain.salon.PlatformSalonSort
+import ai.rojan.backend.domain.salon.PlatformSalonSortField
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonMembershipId
@@ -142,22 +146,44 @@ class SalonRepositoryAdapter(
         )
     }
 
-    override fun findAllForPlatform(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon> {
-        val direction = if (sortDirection == SortDirection.ASC) Sort.Direction.ASC else Sort.Direction.DESC
-        val pageable = SpringPageRequest.of(pageRequest.page, pageRequest.size, Sort.by(direction, "name"))
-        // Platform Authority oversight: deliberately no active/onboardingStatus predicate at all -
-        // every salon, any status, unlike findAllActive/findAllPubliclyDiscoverable above.
-        val page = if (nameFilter.isNullOrBlank()) {
-            jpaRepository.findAll(pageable)
-        } else {
-            jpaRepository.findByNameContainingIgnoreCase(nameFilter, pageable)
+    override fun findAllForPlatform(pageRequest: PageRequest, filter: PlatformSalonFilter, sort: PlatformSalonSort): PageResult<PlatformSalonResult> {
+        // Blank optional text filters are treated as absent, same convention every other finder in
+        // this adapter already follows (isNullOrBlank(), never an empty-string bind value that
+        // would make `ILIKE '%' || :owner || '%'` match every row).
+        val name = filter.name?.trim()?.ifBlank { null }
+        val owner = filter.owner?.trim()?.ifBlank { null }
+        val phone = filter.phone?.trim()?.ifBlank { null }
+        val city = filter.city?.trim()?.ifBlank { null }
+        val status = filter.status?.name
+        val pageable = SpringPageRequest.of(pageRequest.page, pageRequest.size)
+
+        // Platform Authority oversight: deliberately no active/onboardingStatus predicate baked
+        // into the query shape itself - every salon, any status, unlike findAllActive/
+        // findAllPubliclyDiscoverable above. `status` is instead one optional filter among the
+        // others, derived server-side inside PLATFORM_SALON_SELECT/_COUNT.
+        val idPage = when (sort.field to sort.direction) {
+            PlatformSalonSortField.NAME to SortDirection.ASC ->
+                jpaRepository.findForPlatformOrderByNameAsc(name, owner, phone, status, filter.verified, city, pageable)
+            PlatformSalonSortField.NAME to SortDirection.DESC ->
+                jpaRepository.findForPlatformOrderByNameDesc(name, owner, phone, status, filter.verified, city, pageable)
+            PlatformSalonSortField.CREATED_AT to SortDirection.ASC ->
+                jpaRepository.findForPlatformOrderByCreatedAtAsc(name, owner, phone, status, filter.verified, city, pageable)
+            else ->
+                jpaRepository.findForPlatformOrderByCreatedAtDesc(name, owner, phone, status, filter.verified, city, pageable)
         }
-        return PageResult(
-            content = page.content.map { it.toDomain() },
-            page = page.number,
-            size = page.size,
-            totalElements = page.totalElements,
-        )
+
+        // Hydrates the real, full entities for exactly the paged ids the native query returned,
+        // reusing the same `toDomain()` mapping every other finder already uses - same precedent
+        // findNearby below already establishes for native-query result hydration. `findAllById`
+        // does not preserve the native query's own order, so the real order (and each row's real
+        // ownerName) comes from `idPage.content` itself, not from re-deriving it.
+        val ownerNameById = idPage.content.associate { it.getId() to it.getOwnerName() }
+        val entityById = jpaRepository.findAllById(idPage.content.map { it.getId() }).associateBy { it.id }
+        val content = idPage.content.mapNotNull { row ->
+            entityById[row.getId()]?.let { PlatformSalonResult(it.toDomain(), ownerNameById[row.getId()]) }
+        }
+
+        return PageResult(content = content, page = idPage.number, size = idPage.size, totalElements = idPage.totalElements)
     }
 
     override fun findNearby(lat: Double, lng: Double, radiusKm: Double, pageRequest: PageRequest): PageResult<NearbySalonResult> {

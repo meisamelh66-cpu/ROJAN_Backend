@@ -54,17 +54,50 @@ interface SalonRepository {
     fun findNearby(lat: Double, lng: Double, radiusKm: Double, pageRequest: PageRequest): PageResult<NearbySalonResult>
 
     /**
-     * Platform Authority oversight (Admin Salon Visibility): deliberately bypasses every
-     * customer-facing discoverability gate [findAllActive]/[findAllPubliclyDiscoverable] enforce -
-     * returns every salon regardless of [Salon.active]/[SalonOnboardingStatus], so a platform
-     * operator can see a salon exists (and its real status) the moment it's created, DRAFT
-     * included. This port itself enforces no access control, same contract every other method here
-     * already follows - the caller (`ListPlatformSalonsUseCase`) is solely responsible for
-     * requiring PLATFORM_ADMIN/PLATFORM_REVIEWER before ever reaching this. Sorted by name, same as
-     * [findAllActive], so an Admin UI already wired to that sort control keeps working unchanged.
+     * Platform Authority oversight (Admin Salon Visibility, Enterprise Scale Preparation):
+     * deliberately bypasses every customer-facing discoverability gate
+     * [findAllActive]/[findAllPubliclyDiscoverable] enforce - returns every salon regardless of
+     * [Salon.active]/[SalonOnboardingStatus], so a platform operator can see a salon exists (and
+     * its real status) the moment it's created, DRAFT included. This port itself enforces no access
+     * control, same contract every other method here already follows - the caller
+     * (`ListPlatformSalonsUseCase`) is solely responsible for requiring PLATFORM_ADMIN/
+     * PLATFORM_REVIEWER before ever reaching this.
+     *
+     * Every [PlatformSalonFilter] field is optional and strictly allowlisted (never a free-form
+     * query string) - see `docs/backend-requirements/platform-admin-scalability.md` §3/§4 on the
+     * Website, which this signature matches field-for-field: [PlatformSalonFilter.status] is
+     * derived server-side exactly like the Website's own `salonStatus()` helper (`INACTIVE` when
+     * `!active`, else `PUBLISHED`/`DRAFT` from [SalonOnboardingStatus]), [PlatformSalonFilter.city]
+     * is an exact, case-insensitive match (same convention [findAllPubliclyDiscoverable] already
+     * uses), [PlatformSalonFilter.owner]/`name` stay case-insensitive substrings, and
+     * [PlatformSalonFilter.phone] is a prefix match (never `LIKE '%…%'` - see that doc's §5 phone
+     * note). Each [PlatformSalonResult.ownerName] is the owning [ai.rojan.backend.domain.user.User.fullName]
+     * - resolved here (a cross-aggregate join, intentionally confined to this one infrastructure
+     * adapter) so the Website's admin directory never needs a per-row owner lookup.
      */
-    fun findAllForPlatform(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon>
+    fun findAllForPlatform(pageRequest: PageRequest, filter: PlatformSalonFilter, sort: PlatformSalonSort): PageResult<PlatformSalonResult>
 }
 
-/** One [findNearby] result row - the real [Salon] paired with its real, computed distance from the query point. */
+/** One [SalonRepository.findNearby] result row - the real [Salon] paired with its real, computed distance from the query point. */
 data class NearbySalonResult(val salon: Salon, val distanceKm: Double)
+
+/** One [SalonRepository.findAllForPlatform] result row - the real [Salon] paired with its owning [ai.rojan.backend.domain.user.User.fullName], or `null` if that user record is somehow missing (never fabricated). */
+data class PlatformSalonResult(val salon: Salon, val ownerName: String?)
+
+/** Directory status buckets the Website's admin salon directory filters by - derived from [Salon.active] + [SalonOnboardingStatus], never a stored column of its own. Mirrors `SALON_DIRECTORY_STATUSES` (`lib/types/platform-salon.ts`) exactly. */
+enum class PlatformSalonStatus { PUBLISHED, DRAFT, INACTIVE }
+
+/** Every field optional and strictly allowlisted - see [SalonRepository.findAllForPlatform]'s own doc comment. */
+data class PlatformSalonFilter(
+    val name: String? = null,
+    val owner: String? = null,
+    val phone: String? = null,
+    val status: PlatformSalonStatus? = null,
+    val verified: Boolean? = null,
+    val city: String? = null,
+)
+
+/** The allowlisted sort fields the Website's admin salon directory may request - mirrors `SALON_SORT_FIELDS` (`lib/types/platform-salon.ts`) exactly; each must be backed by an index (scalability doc §5). */
+enum class PlatformSalonSortField { CREATED_AT, NAME }
+
+data class PlatformSalonSort(val field: PlatformSalonSortField, val direction: SortDirection)

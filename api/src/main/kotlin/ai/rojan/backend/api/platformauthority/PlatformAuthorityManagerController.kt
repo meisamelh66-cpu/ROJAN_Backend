@@ -5,6 +5,8 @@ import ai.rojan.backend.api.common.PagedResponse
 import ai.rojan.backend.api.common.toPagedResponse
 import ai.rojan.backend.application.platformauthority.DeactivatePlatformManagerCommand
 import ai.rojan.backend.application.platformauthority.DeactivatePlatformManagerUseCase
+import ai.rojan.backend.application.platformauthority.GetPlatformManagerQuery
+import ai.rojan.backend.application.platformauthority.GetPlatformManagerUseCase
 import ai.rojan.backend.application.platformauthority.ListPlatformManagersQuery
 import ai.rojan.backend.application.platformauthority.ListPlatformManagersUseCase
 import ai.rojan.backend.application.platformauthority.PlatformManagerAccount
@@ -42,6 +44,7 @@ import java.util.UUID
 @Tag(name = "Platform Authority - Managers")
 class PlatformAuthorityManagerController(
     private val listPlatformManagersUseCase: ListPlatformManagersUseCase,
+    private val getPlatformManagerUseCase: GetPlatformManagerUseCase,
     private val deactivatePlatformManagerUseCase: DeactivatePlatformManagerUseCase,
     private val reactivatePlatformManagerUseCase: ReactivatePlatformManagerUseCase,
     private val currentUserResolver: CurrentUserResolver,
@@ -61,6 +64,13 @@ class PlatformAuthorityManagerController(
             ListPlatformManagersQuery(callerId, page, size, search, SortDirection.valueOf(sortDirection.uppercase())),
         )
         return result.toPagedResponse { it.toResponse() }
+    }
+
+    @GetMapping("/{managerId}")
+    @Operation(summary = "Get one MANAGER account by id, with real salon associations - for a salon detail page's own owner section (PLATFORM_ADMIN or PLATFORM_REVIEWER)")
+    fun get(@PathVariable managerId: UUID, @AuthenticationPrincipal principal: UserDetails): PlatformManagerResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        return getPlatformManagerUseCase.execute(GetPlatformManagerQuery(callerId, UserId(managerId))).toResponse()
     }
 
     @PostMapping("/{managerId}/deactivate")

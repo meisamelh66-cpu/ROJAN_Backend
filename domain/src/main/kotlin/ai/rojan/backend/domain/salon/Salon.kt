@@ -286,6 +286,20 @@ class Salon private constructor(
         updatedAt = Instant.now()
     }
 
+    /**
+     * Platform Authority oversight (Admin Salon Suspend/Reinstate) - the reverse of [deactivate],
+     * same idempotent shape [ai.rojan.backend.domain.user.User] already has for its own
+     * deactivate/reactivate pair. Never touches [onboardingStatus] - a DRAFT salon reinstated by a
+     * platform admin stays DRAFT (still not publicly discoverable) until its owner actually
+     * finishes onboarding and calls [activate] themselves; reinstating only undoes the soft-delete,
+     * it does not also finish onboarding on the owner's behalf.
+     */
+    fun reactivate() {
+        if (active) return
+        active = true
+        updatedAt = Instant.now()
+    }
+
     companion object {
         /**
          * [slug] defaults to a random, always-valid fallback (mirroring the
