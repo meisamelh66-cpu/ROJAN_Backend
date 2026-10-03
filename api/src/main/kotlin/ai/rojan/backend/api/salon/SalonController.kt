@@ -11,6 +11,8 @@ import ai.rojan.backend.application.salon.ActivateSalonCommand
 import ai.rojan.backend.application.salon.ActivateSalonUseCase
 import ai.rojan.backend.application.salon.ChangeSalonSlugCommand
 import ai.rojan.backend.application.salon.ChangeSalonSlugUseCase
+import ai.rojan.backend.application.salon.CreatePublicSalonCommand
+import ai.rojan.backend.application.salon.CreatePublicSalonUseCase
 import ai.rojan.backend.application.salon.CreateSalonCommand
 import ai.rojan.backend.application.salon.CreateSalonUseCase
 import ai.rojan.backend.application.salon.DeactivateSalonCommand
@@ -58,6 +60,7 @@ import java.util.UUID
 class SalonController(
     private val salonRepository: SalonRepository,
     private val createSalonUseCase: CreateSalonUseCase,
+    private val createPublicSalonUseCase: CreatePublicSalonUseCase,
     private val updateSalonUseCase: UpdateSalonUseCase,
     private val deactivateSalonUseCase: DeactivateSalonUseCase,
     private val changeSalonSlugUseCase: ChangeSalonSlugUseCase,
@@ -97,6 +100,43 @@ class SalonController(
             ),
         )
         return salon.toResponse()
+    }
+
+    @PostMapping("/onboarding")
+    @Operation(
+        summary = "Create the authenticated user's salon via the public onboarding flow - one salon per account",
+        description = "Unlike POST /api/v1/salons (unrestricted - used by internal/admin/platform flows and multi-salon accounts), " +
+            "this is the real end-user signup/dashboard \"create my salon\" flow: if the caller already owns a salon (any status), " +
+            "no new salon is created - their existing one is returned instead with alreadyHasSalon=true. Concurrency-safe against " +
+            "simultaneous duplicate requests from the same account.",
+    )
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "The caller already had a salon - returned as-is, nothing created"),
+        ApiResponse(responseCode = "201", description = "A new salon was created"),
+        ApiResponse(
+            responseCode = "400",
+            description = "Validation failed",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+        ApiResponse(responseCode = "401", description = "Missing or invalid bearer token"),
+    )
+    fun createOnboarding(
+        @Valid @RequestBody request: CreateSalonRequest,
+        @AuthenticationPrincipal principal: UserDetails,
+    ): ResponseEntity<CreatePublicSalonResponse> {
+        val ownerId = currentUserResolver.resolve(principal)
+        val result = createPublicSalonUseCase.execute(
+            CreatePublicSalonCommand(
+                ownerId = ownerId,
+                name = request.name,
+                description = request.description,
+                phone = request.phone,
+                email = request.email,
+                address = request.address,
+            ),
+        )
+        val body = CreatePublicSalonResponse(salon = result.salon.toResponse(), alreadyHasSalon = !result.created)
+        return ResponseEntity.status(if (result.created) HttpStatus.CREATED else HttpStatus.OK).body(body)
     }
 
     @GetMapping("/mine")

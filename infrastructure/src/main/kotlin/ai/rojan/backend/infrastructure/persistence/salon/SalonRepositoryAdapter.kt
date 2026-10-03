@@ -13,10 +13,14 @@ import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonMembershipId
 import ai.rojan.backend.domain.salon.SalonOnboardingStatus
+import ai.rojan.backend.domain.salon.SalonOwnershipOutcome
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.user.UserId
 import org.springframework.data.domain.Sort
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import org.springframework.data.domain.PageRequest as SpringPageRequest
 
@@ -24,7 +28,26 @@ import org.springframework.data.domain.PageRequest as SpringPageRequest
 @Repository
 class SalonRepositoryAdapter(
     private val jpaRepository: SalonSpringDataRepository,
+    private val jdbcTemplate: JdbcTemplate,
 ) : SalonRepository {
+
+    /**
+     * Public Salon Onboarding - one-salon-per-account: takes a Postgres transaction-scoped
+     * advisory lock keyed by [ownerId] before checking, so the "does this owner already have a
+     * salon" check and the insert are effectively atomic under concurrency - same pattern
+     * [ai.rojan.backend.infrastructure.persistence.booking.BookingRepositoryAdapter.reserve]
+     * already establishes (that method's own doc comment explains why an advisory lock rather
+     * than an external DB extension). Reuses [save] for the actual insert - no second,
+     * possibly-drifting entity-mapping path.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    override fun createForOwnerIfAbsent(ownerId: UserId, candidate: Salon): SalonOwnershipOutcome {
+        val lockKey = ownerId.value.leastSignificantBits
+        jdbcTemplate.execute("SELECT pg_advisory_xact_lock($lockKey)")
+        val existing = jpaRepository.findByOwnerId(ownerId.value).map { it.toDomain() }.minByOrNull { it.createdAt }
+        if (existing != null) return SalonOwnershipOutcome.AlreadyExists(existing)
+        return SalonOwnershipOutcome.Created(save(candidate))
+    }
 
     override fun save(salon: Salon): Salon {
         val entity = jpaRepository.findById(salon.id.value).orElse(null)

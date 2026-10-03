@@ -18,6 +18,21 @@ interface SalonRepository {
     fun existsBySlug(slug: String): Boolean
 
     /**
+     * Public Salon Onboarding - one-salon-per-account (forward-only, new creation only; see
+     * [ai.rojan.backend.application.salon.CreatePublicSalonUseCase]'s own doc comment for the full
+     * policy). If [ownerId] already owns at least one salon (any status - suspended or DRAFT still
+     * counts), returns the earliest of them ([SalonOwnershipOutcome.AlreadyExists]) without
+     * persisting [candidate] at all. Otherwise persists [candidate] and returns
+     * [SalonOwnershipOutcome.Created]. Concurrency-safe: two simultaneous onboarding requests for
+     * the same owner can never both create a salon (the real adapter takes a Postgres
+     * transaction-scoped advisory lock keyed by [ownerId] before checking, the same pattern
+     * [ai.rojan.backend.domain.booking.BookingRepository.reserve] already establishes for
+     * specialist-keyed booking conflicts - see that method's own doc comment). Never touches,
+     * migrates, or alters any pre-existing salon.
+     */
+    fun createForOwnerIfAbsent(ownerId: UserId, candidate: Salon): SalonOwnershipOutcome
+
+    /**
      * The customer-facing salon directory: salons that are both `active` (not soft-deleted) AND
      * `onboardingStatus == ACTIVE` (finished onboarding). DRAFT salons are excluded - a customer
      * must never be shown a salon they cannot then book against. Optionally filtered by a
@@ -76,6 +91,12 @@ interface SalonRepository {
      * adapter) so the Website's admin directory never needs a per-row owner lookup.
      */
     fun findAllForPlatform(pageRequest: PageRequest, filter: PlatformSalonFilter, sort: PlatformSalonSort): PageResult<PlatformSalonResult>
+}
+
+/** The result of [SalonRepository.createForOwnerIfAbsent] - see that method's own doc comment. */
+sealed class SalonOwnershipOutcome {
+    data class Created(val salon: Salon) : SalonOwnershipOutcome()
+    data class AlreadyExists(val salon: Salon) : SalonOwnershipOutcome()
 }
 
 /** One [SalonRepository.findNearby] result row - the real [Salon] paired with its real, computed distance from the query point. */

@@ -38,6 +38,17 @@ data class CreateSalonRequest(
     val address: String,
 )
 
+/**
+ * Response of `POST /api/v1/salons/onboarding` - the public salon-creation/onboarding flow's
+ * one-salon-per-account result. [alreadyHasSalon] is `true` when [salon] is the caller's
+ * pre-existing salon (nothing new was created) - the Web layer uses this to show that salon with
+ * an "edit" action instead of treating the response as a freshly created salon.
+ */
+data class CreatePublicSalonResponse(
+    val salon: SalonResponse,
+    val alreadyHasSalon: Boolean,
+)
+
 /** [latitude]/[longitude]/[city] follow "null means leave unchanged" merge semantics - see `UpdateSalonCommand`'s own doc comment. Logo/cover are set exclusively through `PUT /salons/{salonId}/identity-media`, by `MediaAssetId`, never a URL here - see [SalonResponse.logoMediaId]. */
 data class UpdateSalonRequest(
     @field:NotBlank

@@ -28,6 +28,7 @@ import ai.rojan.backend.domain.salon.PlatformSalonStatus
 import ai.rojan.backend.domain.salon.SalonMembership
 import ai.rojan.backend.domain.salon.SalonMembershipRepository
 import ai.rojan.backend.domain.salon.SalonOnboardingStatus
+import ai.rojan.backend.domain.salon.SalonOwnershipOutcome
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.SalonRole
 import kotlin.math.acos
@@ -60,6 +61,13 @@ internal class InMemorySalonRepository : SalonRepository {
     override fun findByOwnerId(ownerId: UserId): List<Salon> = store.values.filter { it.ownerId == ownerId }
     override fun findBySlug(slug: String): Salon? = store.values.find { it.slug == slug }
     override fun existsBySlug(slug: String): Boolean = store.values.any { it.slug == slug }
+
+    /** No real concurrency in this in-memory fake - a plain check-then-insert is sufficient (the real adapter's advisory lock is what matters for the genuine race, exercised instead by the bootstrap integration test). */
+    override fun createForOwnerIfAbsent(ownerId: UserId, candidate: Salon): SalonOwnershipOutcome {
+        val existing = findByOwnerId(ownerId).minByOrNull { it.createdAt }
+        if (existing != null) return SalonOwnershipOutcome.AlreadyExists(existing)
+        return SalonOwnershipOutcome.Created(save(candidate))
+    }
 
     override fun findAllActive(pageRequest: PageRequest, nameFilter: String?, sortDirection: SortDirection): PageResult<Salon> {
         val filtered = store.values

@@ -8,6 +8,7 @@ import ai.rojan.backend.application.salon.AssignMembershipUseCase
 import ai.rojan.backend.application.salon.AssignServiceToSpecialistUseCase
 import ai.rojan.backend.application.salon.ChangeSalonSlugUseCase
 import ai.rojan.backend.application.salon.CreateBranchUseCase
+import ai.rojan.backend.application.salon.CreatePublicSalonUseCase
 import ai.rojan.backend.application.salon.CreateSalonUseCase
 import ai.rojan.backend.application.salon.CreateSalonInviteUseCase
 import ai.rojan.backend.application.salon.CreateServiceCategoryUseCase
@@ -65,6 +66,10 @@ class SalonUseCaseConfig {
     @Bean
     fun createSalonUseCase(salonRepository: SalonRepository) =
         CreateSalonUseCase(salonRepository)
+
+    @Bean
+    fun createPublicSalonUseCase(salonRepository: SalonRepository) =
+        CreatePublicSalonUseCase(salonRepository)
 
     @Bean
     fun updateSalonUseCase(salonRepository: SalonRepository, salonPermissionResolver: SalonPermissionResolver) =
