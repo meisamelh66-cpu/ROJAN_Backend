@@ -16,7 +16,6 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Sort
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
-import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDateTime
@@ -38,7 +37,7 @@ class BookingRepositoryAdapter(
     private val jdbcTemplate: JdbcTemplate,
 ) : BookingRepository {
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     override fun reserve(booking: Booking, excludeBookingId: BookingId?): Booking {
         val lockKey = booking.specialistId.value.leastSignificantBits
         jdbcTemplate.execute("SELECT pg_advisory_xact_lock($lockKey)")
@@ -60,6 +59,7 @@ class BookingRepositoryAdapter(
         return persist(booking)
     }
 
+    @Transactional
     override fun save(booking: Booking): Booking = persist(booking)
 
     override fun findById(id: BookingId): Booking? =

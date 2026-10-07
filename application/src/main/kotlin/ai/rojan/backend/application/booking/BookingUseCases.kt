@@ -9,6 +9,10 @@ import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.ServiceNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotEligibleForServiceException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
+import ai.rojan.backend.domain.notification.Notification
+import ai.rojan.backend.domain.notification.NotificationRepository
+import ai.rojan.backend.domain.notification.NotificationSeverity
+import ai.rojan.backend.domain.notification.NotificationType
 import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
@@ -37,6 +41,7 @@ class CreateBookingUseCase(
     private val bookingRepository: BookingRepository,
     private val specialistServiceRepository: SpecialistServiceRepository,
     private val specialistAvailabilityValidator: SpecialistAvailabilityValidator,
+    private val notificationRepository: NotificationRepository? = null,
 ) {
     fun execute(command: CreateBookingCommand): Booking {
         val salon = salonRepository.findById(command.salonId)?.takeIf { it.active }
@@ -66,7 +71,30 @@ class CreateBookingUseCase(
             endTime = endTime,
             notes = command.notes,
         )
-        return bookingRepository.reserve(booking)
+        val savedBooking = bookingRepository.reserve(booking)
+        if (notificationRepository != null) {
+            val exists = notificationRepository.existsByReference(
+                salon.id,
+                "BOOKING",
+                savedBooking.id.value.toString(),
+                NotificationType.BOOKING_CREATED,
+            )
+            if (!exists) {
+                notificationRepository.save(
+                    Notification.create(
+                        salonId = salon.id,
+                        type = NotificationType.BOOKING_CREATED,
+                        title = "نوبت جدید ثبت شد",
+                        message = "نوبت جدید برای ${service.name} در ساعت ${savedBooking.startTime} ثبت شد.",
+                        severity = NotificationSeverity.INFO,
+                        category = "bookings",
+                        referenceId = savedBooking.id.value.toString(),
+                        referenceType = "BOOKING",
+                    )
+                )
+            }
+        }
+        return savedBooking
     }
 }
 
@@ -89,12 +117,36 @@ data class CancelBookingCommand(val bookingId: BookingId, val callerId: UserId)
 class CancelBookingUseCase(
     private val bookingRepository: BookingRepository,
     private val salonPermissionResolver: SalonPermissionResolver,
+    private val notificationRepository: NotificationRepository? = null,
 ) {
     fun execute(command: CancelBookingCommand): Booking {
         val booking = findBookingOrThrow(bookingRepository, command.bookingId)
         requireCustomerOrBookingPermission(salonPermissionResolver, booking, command.callerId)
         booking.cancel()
-        return bookingRepository.save(booking)
+        val savedBooking = bookingRepository.save(booking)
+        if (notificationRepository != null) {
+            val exists = notificationRepository.existsByReference(
+                savedBooking.salonId,
+                "BOOKING",
+                savedBooking.id.value.toString(),
+                NotificationType.BOOKING_CANCELLED,
+            )
+            if (!exists) {
+                notificationRepository.save(
+                    Notification.create(
+                        salonId = savedBooking.salonId,
+                        type = NotificationType.BOOKING_CANCELLED,
+                        title = "نوبت لغو شد",
+                        message = "نوبت در ساعت ${savedBooking.startTime} لغو شد.",
+                        severity = NotificationSeverity.WARNING,
+                        category = "bookings",
+                        referenceId = savedBooking.id.value.toString(),
+                        referenceType = "BOOKING",
+                    )
+                )
+            }
+        }
+        return savedBooking
     }
 }
 

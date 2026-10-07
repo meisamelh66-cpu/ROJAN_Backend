@@ -9,6 +9,7 @@ import ai.rojan.backend.application.booking.RescheduleBookingUseCase
 import ai.rojan.backend.application.booking.SpecialistAvailabilityValidator
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.BookingRepository
+import ai.rojan.backend.domain.notification.NotificationRepository
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.ServiceRepository
 import ai.rojan.backend.domain.salon.SpecialistRepository
@@ -42,15 +43,27 @@ class BookingUseCaseConfig {
         bookingRepository: BookingRepository,
         specialistServiceRepository: SpecialistServiceRepository,
         specialistAvailabilityValidator: SpecialistAvailabilityValidator,
-    ) = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, specialistAvailabilityValidator)
+        notificationRepository: NotificationRepository,
+    ) = CreateBookingUseCase(
+        salonRepository,
+        serviceRepository,
+        specialistRepository,
+        bookingRepository,
+        specialistServiceRepository,
+        specialistAvailabilityValidator,
+        notificationRepository,
+    )
 
     @Bean
     fun confirmBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =
         ConfirmBookingUseCase(bookingRepository, salonPermissionResolver)
 
     @Bean
-    fun cancelBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =
-        CancelBookingUseCase(bookingRepository, salonPermissionResolver)
+    fun cancelBookingUseCase(
+        bookingRepository: BookingRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+        notificationRepository: NotificationRepository,
+    ) = CancelBookingUseCase(bookingRepository, salonPermissionResolver, notificationRepository)
 
     @Bean
     fun completeBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =
