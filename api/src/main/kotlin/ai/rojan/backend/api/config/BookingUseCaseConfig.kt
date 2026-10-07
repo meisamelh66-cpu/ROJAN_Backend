@@ -8,6 +8,7 @@ import ai.rojan.backend.application.booking.GetAvailableSlotsUseCase
 import ai.rojan.backend.application.booking.RescheduleBookingUseCase
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.BookingRepository
+import ai.rojan.backend.domain.notification.NotificationRepository
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.ServiceRepository
 import ai.rojan.backend.domain.salon.SpecialistRepository
@@ -31,15 +32,19 @@ class BookingUseCaseConfig {
         specialistRepository: SpecialistRepository,
         bookingRepository: BookingRepository,
         specialistServiceRepository: SpecialistServiceRepository,
-    ) = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository)
+        notificationRepository: NotificationRepository,
+    ) = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, notificationRepository)
 
     @Bean
     fun confirmBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =
         ConfirmBookingUseCase(bookingRepository, salonPermissionResolver)
 
     @Bean
-    fun cancelBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =
-        CancelBookingUseCase(bookingRepository, salonPermissionResolver)
+    fun cancelBookingUseCase(
+        bookingRepository: BookingRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+        notificationRepository: NotificationRepository,
+    ) = CancelBookingUseCase(bookingRepository, salonPermissionResolver, notificationRepository)
 
     @Bean
     fun completeBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =

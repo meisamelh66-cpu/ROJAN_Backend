@@ -31,6 +31,7 @@ import ai.rojan.backend.domain.common.MediaSizeExceededException
 import ai.rojan.backend.domain.common.MediaTargetRequiredException
 import ai.rojan.backend.domain.common.MediaTypeInvalidException
 import ai.rojan.backend.domain.common.MediaTypeMismatchException
+import ai.rojan.backend.domain.common.NotificationNotFoundException
 import ai.rojan.backend.domain.common.OtpRateLimitExceededException
 import ai.rojan.backend.domain.common.OtpVerifyRateLimitExceededException
 import ai.rojan.backend.domain.common.PhoneNumberAlreadyRegisteredException
@@ -150,6 +151,7 @@ class GlobalExceptionHandler {
         SalonVerificationNotFoundException::class,
         BannerNotFoundException::class,
         AppReleaseNotFoundException::class,
+        NotificationNotFoundException::class,
         NoResourceFoundException::class,
     )
     fun handleNotFound(ex: Exception, request: WebRequest) =
@@ -273,6 +275,7 @@ class GlobalExceptionHandler {
         is BannerNotFoundException -> "BANNER_NOT_FOUND"
         is BannerReorderMismatchException -> "BANNER_REORDER_MISMATCH"
         is AppReleaseNotFoundException -> "APP_RELEASE_NOT_FOUND"
+        is NotificationNotFoundException -> "NOTIFICATION_NOT_FOUND"
         is AppReleaseVersionCodeAlreadyExistsException -> "APP_RELEASE_VERSION_CODE_ALREADY_EXISTS"
         is InvalidApplicationIdException -> "INVALID_APPLICATION_ID"
         is SalonDocumentNotFoundException -> "SALON_DOCUMENT_NOT_FOUND"
