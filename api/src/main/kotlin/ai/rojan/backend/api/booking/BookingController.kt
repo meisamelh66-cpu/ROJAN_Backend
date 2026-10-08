@@ -43,6 +43,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.core.userdetails.UserDetails
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PatchMapping
@@ -95,6 +96,7 @@ class BookingController(
             content = [Content(schema = Schema(implementation = ApiError::class))],
         ),
     )
+    @Transactional
     fun create(
         @Valid @RequestBody request: CreateBookingRequest,
         @RequestHeader(IDEMPOTENCY_KEY_HEADER, required = false) idempotencyKey: String?,
@@ -195,6 +197,7 @@ class BookingController(
         ),
         ApiResponse(responseCode = "403", description = "Caller is neither the customer nor the salon owner"),
     )
+    @Transactional
     fun cancel(@PathVariable bookingId: UUID, @AuthenticationPrincipal principal: UserDetails): BookingResponse {
         val callerId = currentUserResolver.resolve(principal)
         return cancelBookingUseCase.execute(CancelBookingCommand(BookingId(bookingId), callerId)).toResponse()

@@ -19,6 +19,7 @@ now just points here.)
 7. [Specialists](#specialists)
 8. [Availability](#availability) — working hours, specialist schedule, computed slots
 9. [Booking](#booking)
+10. [Notifications](#notifications)
 
 ---
 
@@ -395,6 +396,39 @@ then an overlap query runs inside that lock before the row is written. Two
 customers racing for the same specialist/time always resolve to exactly
 one `201` and the rest `409` — proven under real concurrent HTTP load in
 `BookingConflictConcurrencyIntegrationTest`.
+
+---
+
+## Notifications
+
+Operational alerts feed for salon staff (Phase 5). All endpoints require authentication and `Permission.MANAGE_BOOKINGS` at the target salon (owner, manager, or receptionist).
+
+### Endpoints
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `GET` | `/api/v1/salons/{salonId}/notifications` | `MANAGE_BOOKINGS` | List salon notifications, paginated (`page`, `size` ≤ 100), optionally filtered by `unreadOnly` (boolean) or `category` (string, e.g. `bookings`). Sort is always newest first (`createdAt DESC`). |
+| `GET` | `/api/v1/salons/{salonId}/notifications/unread-count` | `MANAGE_BOOKINGS` | Get unread notifications count for badge display. Returns `{ "salonId": "...", "unreadCount": 3 }`. |
+| `PATCH` | `/api/v1/salons/{salonId}/notifications/{notificationId}/read` | `MANAGE_BOOKINGS` | Mark a single notification as read. Returns the updated `NotificationResponse`. |
+| `POST` | `/api/v1/salons/{salonId}/notifications/mark-all-read` | `MANAGE_BOOKINGS` | Mark all unread notifications for the salon as read. Returns `{ "salonId": "...", "markedCount": 3 }`. |
+
+### Notification shape
+
+`NotificationResponse`:
+- `id`: UUID
+- `salonId`: UUID
+- `userId`: UUID? (nullable, targeted recipient or null for all salon staff)
+- `type`: String (`BOOKING_CREATED`, `BOOKING_CANCELLED`)
+- `title`: String
+- `message`: String
+- `severity`: String (`INFO`, `SUCCESS`, `WARNING`, `ERROR`)
+- `category`: String (`bookings`)
+- `referenceId`: String? (e.g. `bookingId`)
+- `referenceType`: String? (`BOOKING`)
+- `isRead`: Boolean
+- `readAt`: TIMESTAMPTZ?
+- `readBy`: UUID?
+- `createdAt`: TIMESTAMPTZ
 
 ---
 
