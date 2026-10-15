@@ -4,6 +4,7 @@ import ai.rojan.backend.api.booking.TimeSlotResponse
 import ai.rojan.backend.application.booking.GetAvailableSlotsQuery
 import ai.rojan.backend.application.booking.GetAvailableSlotsUseCase
 import ai.rojan.backend.application.port.MediaStoragePort
+import ai.rojan.backend.application.salon.GetPublicCategoryServicesUseCase
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.ServiceNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
@@ -56,6 +57,7 @@ class PublicSalonController(
     private val mediaAssetRepository: MediaAssetRepository,
     private val getAvailableSlotsUseCase: GetAvailableSlotsUseCase,
     private val mediaStoragePort: MediaStoragePort,
+    private val getPublicCategoryServicesUseCase: GetPublicCategoryServicesUseCase,
 ) {
 
     @GetMapping
@@ -73,9 +75,7 @@ class PublicSalonController(
     @Operation(summary = "Browse a salon's active services within a category")
     fun services(@PathVariable slug: String, @PathVariable categoryId: UUID): List<PublicServiceResponse> {
         val salon = findSalonOrThrow(slug)
-        return serviceRepository.findByCategoryId(ServiceCategoryId(categoryId))
-            .filter { it.salonId == salon.id && it.active }
-            .map { it.toResponse() }
+        return getPublicCategoryServicesUseCase.execute(salon.id, ServiceCategoryId(categoryId)).map { it.toResponse() }
     }
 
     @GetMapping("/specialists")
