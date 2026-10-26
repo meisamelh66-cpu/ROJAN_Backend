@@ -31,8 +31,15 @@ class BookingTest {
 
     @Test
     fun `rejects a start time that is not before end`() {
+        // A single captured instant reused for both arguments, rather than two separate
+        // LocalDateTime.now() calls - those are only "equal" on a clock coarse enough that
+        // back-to-back calls coincide, which doesn't hold on every platform/JVM (this was
+        // flaky: reliably passed on a coarser local clock, reliably failed on Linux CI's
+        // finer-grained one, since two separate now() calls there are always strictly
+        // increasing - i.e. a *valid* start-before-end, which must NOT throw).
+        val instant = LocalDateTime.now()
         assertThrows(IllegalArgumentException::class.java) {
-            Booking.create(SalonId.new(), ServiceId.new(), SpecialistId.new(), UserId.new(), LocalDateTime.now(), LocalDateTime.now(), null)
+            Booking.create(SalonId.new(), ServiceId.new(), SpecialistId.new(), UserId.new(), instant, instant, null)
         }
     }
 

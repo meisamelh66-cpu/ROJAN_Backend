@@ -63,6 +63,9 @@ zonky-embedded-database-spring-test = { module = "io.zonky.test:embedded-databas
 # no-Docker) provider implementation itself is this separate artifact.
 zonky-embedded-postgres = { module = "io.zonky.test:embedded-postgres", version.ref = "zonkyEmbeddedPostgres" }
 zonky-postgres-binaries-windows-amd64 = { module = "io.zonky.test.postgres:embedded-postgres-binaries-windows-amd64", version.ref = "zonkyPostgresBinaries" }
+# Same artifact family, Linux (glibc) classifier — needed because CI runs on ubuntu-latest,
+# which has no matching entry above; verified present on Maven Central at the same version.
+zonky-postgres-binaries-linux-amd64 = { module = "io.zonky.test.postgres:embedded-postgres-binaries-linux-amd64", version.ref = "zonkyPostgresBinaries" }
 # Spring Boot's BOM pins an older commons-compress than embedded-postgres's
 # tar/xz extraction needs (NoSuchMethodError on TarArchiveEntry at runtime);
 # override it explicitly for the test classpath.

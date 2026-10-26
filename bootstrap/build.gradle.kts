@@ -30,9 +30,11 @@ dependencies {
     testImplementation(libs.zonky.embedded.postgres)
     // Pinned explicitly (rather than left to the library's own downloader)
     // so it resolves through Gradle's normal, already-proven-reliable Maven
-    // Central path. Windows-only for now, matching local dev — revisit if
-    // CI ever runs this on Linux.
+    // Central path. Windows for local dev; Linux added alongside it (not
+    // replacing it) because CI (ubuntu-latest) needs a matching pinned
+    // binary too — Gradle resolves whichever one matches the running OS.
     testRuntimeOnly(libs.zonky.postgres.binaries.windows.amd64)
+    testRuntimeOnly(libs.zonky.postgres.binaries.linux.amd64)
     testRuntimeOnly(libs.commons.compress)
     testRuntimeOnly(libs.commons.lang3)
 }
