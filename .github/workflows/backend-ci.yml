@@ -1,0 +1,64 @@
+name: Backend CI (baseline)
+
+# Runs the Backend's build+test pipeline automatically on every pull request
+# targeting `main` and on every push to `main`, plus on-demand via manual
+# dispatch. Supersedes the original Sprint 1 scoping (push-only to
+# sprint1/backend-ci-baseline, no pull_request trigger) now that this
+# workflow is being introduced on `main` itself as a real release gate. The
+# job id (build-test-report) is left unchanged so the check-run name GitHub
+# reports stays stable across this change.
+#
+# Pipeline: Checkout -> JDK Setup -> Gradle Build -> Test -> Report.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  build-test-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Gradle build
+        run: ./gradlew build -x test --no-daemon --console=plain
+
+      - name: Gradle test
+        run: ./gradlew test --no-daemon --console=plain
+
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-test-results
+          path: '**/build/test-results/test/*.xml'
+          retention-days: 14
+
+      - name: Summarize results
+        if: always()
+        run: |
+          echo "## Backend CI (baseline) - test summary" >> "$GITHUB_STEP_SUMMARY"
+          total=0
+          failed=0
+          for f in $(find . -path '*/build/test-results/test/*.xml' 2>/dev/null); do
+            t=$(grep -o 'tests="[0-9]*"' "$f" | head -1 | grep -o '[0-9]*')
+            fl=$(grep -o 'failures="[0-9]*"' "$f" | head -1 | grep -o '[0-9]*')
+            total=$((total + ${t:-0}))
+            failed=$((failed + ${fl:-0}))
+          done
+          echo "Total: $total, Failed: $failed" >> "$GITHUB_STEP_SUMMARY"
