@@ -282,7 +282,7 @@ externally-observable outcome is confirmed healthy.
 - [ ] Verify health + smoke-test as in "Startup" above
 
 ### Rollback
-- [ ] `sudo ./scripts/rollback.sh` — reverts application code to the previous deploy's commit
+- [ ] `sudo ./scripts/rollback.sh` — reverts application code to the previous deploy's commit. **Known gap (fix pending review, not yet merged — see `fix/rollback-rebuild-jar-from-source`):** the script's own `git checkout` does not rebuild the application jar, since the Dockerfile only `COPY`s whatever jar already exists on disk. Confirmed via a real rollback test in a disposable environment (sha256 comparison) that this silently redeploys the pre-rollback code while reporting success. **Until the fix lands, do this manually first**: `cat "$DATA_ROOT/backups/last-deployed-commit.txt.previous"`, `git checkout <that commit>`, `./gradlew :bootstrap:bootJar` — *then* run `rollback.sh` as normal (its own checkout of the same commit will be a no-op, and the image build will now use the correct, freshly-built jar).
 - [ ] If the upgrade being rolled back included a schema migration, also restore the pre-upgrade backup (see "Restore" above) — `rollback.sh` intentionally does not do this for you (§8)
 
 ### Ongoing
