@@ -1,6 +1,11 @@
 [versions]
 kotlin = "2.0.21"
-springBoot = "3.3.5"
+# F6 (ROJAN_BACKEND_SECURITY_AUDIT_v1.md, GHSA-rc42-6c7j-7h5r): 3.3.13 is the
+# latest, and last ever published, 3.3.x release (confirmed against Maven
+# Central's own metadata - the 3.3.x line is fully EOL) - fixes
+# EndpointRequest.to()'s wrong-matcher bug, patched at 3.3.11. Same-minor-
+# line patch bump, not a framework migration.
+springBoot = "3.3.13"
 springDependencyManagement = "1.1.6"
 springdoc = "2.6.0"
 jjwt = "0.12.6"
