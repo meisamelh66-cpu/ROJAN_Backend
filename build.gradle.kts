@@ -46,6 +46,32 @@ subprojects {
             // (no channelBinding=require anywhere in this repo's JDBC config), bumped
             // anyway as free hygiene with zero behavior change.
             dependency("org.postgresql:postgresql:42.7.14")
+            // F12 ATTEMPTED, REVERTED: jackson-databind 2.18.12 broke a real endpoint
+            // (GET /v3/api-docs -> 500, "OpenAPI docs describe the auth and dashboard
+            // endpoints" test) - springdoc-openapi-starter-webmvc-ui 2.6.0 (gradle/
+            // libs.versions.toml) predates Jackson 2.18.x and is not compatible with it.
+            // Isolating this bump (Netty kept, tested separately) rather than reverting
+            // both findings' fixes at once. F12 itself remains open, `UPSTREAM_FIX_
+            // UNAVAILABLE_WITHOUT_FURTHER_WORK` - a real fix needs either a springdoc
+            // version bump (itself needing its own compatibility check, not attempted
+            // this pass) or confirming this specific failure mode is otherwise safe to
+            // accept, neither decided here.
+            // dependency("com.fasterxml.jackson.core:jackson-databind:2.18.12")
+            // F15: netty-* 4.1.114.Final (pulled in transitively via lettuce-core's
+            // Redis client and the AWS SDK's netty-nio-client) carries several real
+            // TLS/SNI-handling advisories (GHSA-c653-97m9-rcg9, GHSA-x4gw-5cx5-pgmh,
+            // GHSA-3qp7-7mw8-wx86, GHSA-4g8c-wm8x-jfhw), fixed at 4.1.135-4.1.137.Final.
+            // 4.1.139.Final is the latest 4.1.x release (same major line).
+            dependency("io.netty:netty-common:4.1.139.Final")
+            dependency("io.netty:netty-handler:4.1.139.Final")
+            dependency("io.netty:netty-buffer:4.1.139.Final")
+            dependency("io.netty:netty-transport:4.1.139.Final")
+            dependency("io.netty:netty-codec:4.1.139.Final")
+            dependency("io.netty:netty-codec-http:4.1.139.Final")
+            dependency("io.netty:netty-codec-http2:4.1.139.Final")
+            dependency("io.netty:netty-resolver:4.1.139.Final")
+            dependency("io.netty:netty-transport-native-unix-common:4.1.139.Final")
+            dependency("io.netty:netty-transport-classes-epoll:4.1.139.Final")
         }
     }
 
