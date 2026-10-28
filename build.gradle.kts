@@ -46,16 +46,15 @@ subprojects {
             // (no channelBinding=require anywhere in this repo's JDBC config), bumped
             // anyway as free hygiene with zero behavior change.
             dependency("org.postgresql:postgresql:42.7.14")
-            // F12 ATTEMPTED, REVERTED: jackson-databind 2.18.12 broke a real endpoint
-            // (GET /v3/api-docs -> 500, "OpenAPI docs describe the auth and dashboard
-            // endpoints" test) - springdoc-openapi-starter-webmvc-ui 2.6.0 (gradle/
-            // libs.versions.toml) predates Jackson 2.18.x and is not compatible with it.
-            // Isolating this bump (Netty kept, tested separately) rather than reverting
-            // both findings' fixes at once. F12 itself remains open, `UPSTREAM_FIX_
-            // UNAVAILABLE_WITHOUT_FURTHER_WORK` - a real fix needs either a springdoc
-            // version bump (itself needing its own compatibility check, not attempted
-            // this pass) or confirming this specific failure mode is otherwise safe to
-            // accept, neither decided here.
+            // F12, RE-ATTEMPTED AND REVERTED AGAIN (Pass 33): tried jackson-databind
+            // 2.18.12 together with springdoc 2.10.0, then with springdoc 2.7.0 (both in
+            // gradle/libs.versions.toml, now both reverted too) - both combinations fail
+            // identically on a missing Spring Framework 6.1.21 class
+            // (LiteWebJarsResourceResolver), proving this is not actually a Jackson-
+            // version question: no springdoc release past 2.6.x supports this project's
+            // current Spring Framework line at all. F12 is UPSTREAM_FIX_UNAVAILABLE
+            // within the current Boot 3.3.x/Framework 6.1.x line, same as F1/F4/F7/
+            // F8-F11 - not independently fixable without that same larger migration.
             // dependency("com.fasterxml.jackson.core:jackson-databind:2.18.12")
             // F15: netty-* 4.1.114.Final (pulled in transitively via lettuce-core's
             // Redis client and the AWS SDK's netty-nio-client) carries several real
