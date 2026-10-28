@@ -82,7 +82,14 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: OWASP Dependency-Check (report-only baseline)
-        run: ./gradlew dependencyCheckAggregate --no-daemon --console=plain
+        # --no-parallel works around a real, filed upstream bug
+        # (dependency-check/DependencyCheck#8375) - the plugin's own
+        # dependencyCheckAggregate task resolves subproject configurations in a
+        # way Gradle 9 now rejects outright ("...was attempted without an
+        # exclusive lock") when run in parallel. Reproduced identically on this
+        # exact GitHub Actions runner before this flag was added - not a
+        # local-sandbox-only artifact.
+        run: ./gradlew dependencyCheckAggregate --no-daemon --console=plain --no-parallel
 
       - name: Publish dependency-check report
         if: always()
