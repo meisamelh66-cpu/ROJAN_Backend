@@ -89,6 +89,14 @@ jobs:
         # exclusive lock") when run in parallel. Reproduced identically on this
         # exact GitHub Actions runner before this flag was added - not a
         # local-sandbox-only artifact.
+        # NVD_API_KEY: read from a GitHub Actions secret, never printed or logged - GitHub
+        # masks any matching value in step output automatically regardless. ROJAN_BACKEND_
+        # SECURITY_AUDIT_v1.md §12.6: this plugin hard-requires a real key (confirmed on this
+        # exact runner); until the secret exists, this resolves to an empty string and the
+        # job fails with the same clear "Invalid API Key" error it does today - never a
+        # silently-skipped or partial scan, and no key value is ever invented here.
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: ./gradlew dependencyCheckAggregate --no-daemon --console=plain --no-parallel
 
       - name: Publish dependency-check report

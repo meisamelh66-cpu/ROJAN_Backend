@@ -32,9 +32,16 @@ dependencyCheck {
     // every suppression"), a suppressions file is added only once a specific false positive has
     // actually been triaged against this baseline - not pre-emptively.
     nvd {
-        // No NVD API key is configured in this environment - the plugin falls back to its own
-        // unauthenticated, heavily-rate-limited public feed, which is known to be extremely slow or to
-        // time out entirely for a first run. This is reported honestly in the audit, not worked around.
+        // ROJAN_BACKEND_SECURITY_AUDIT_v1.md §12.6 (Pass 32): this plugin's NvdApiDataSource
+        // hard-requires a real key - confirmed on real GitHub-hosted runners
+        // (NvdApiException: "Invalid API Key, length of 0..."), not just locally. Reads from
+        // the environment, never hardcoded or invented - `NVD_API_KEY` is populated in CI
+        // (backend-ci.yml) from a GitHub Actions secret of the same name via `env:` on that
+        // one step only, which GitHub's own log redaction also masks automatically. Until that
+        // secret exists (an owner-provisioning step - see the audit's own §12.6 for how to get
+        // one), this resolves to null and the plugin behaves exactly as it does today: it
+        // fails fast with the same clear error, not a silent partial scan.
+        apiKey = System.getenv("NVD_API_KEY")
     }
     // KNOWN, UNRESOLVED LOCAL-VERIFICATION LIMITATION (not fixed in this pass - see
     // ROJAN_BACKEND_SECURITY_AUDIT_v1.md §12.4): this environment's outbound requests to
