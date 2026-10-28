@@ -1,18 +1,32 @@
 name: Backend CI (baseline)
 
-# Sprint 1, Task 3 (Backend CI/CD Foundation): first run is deliberately
-# non-blocking - it only triggers on this branch and on manual dispatch, not
-# on pull_request/push against release/production-v24 or main. Nothing
-# currently depends on this workflow passing. Converting it into a real
-# release gate (adding it to branch protection as a required check) is a
-# separate, later decision - see the ROFI Sprint 1 report for this task.
+# Runs the Backend's build+test pipeline automatically on every pull request
+# targeting `release/production-v24` and on every push to
+# `release/production-v24`, plus on-demand via manual dispatch. Supersedes
+# the original Sprint 1 scoping (push-only to sprint1/backend-ci-baseline,
+# no pull_request trigger) now that this workflow is being introduced on
+# `release/production-v24` itself as a real release gate - the same change
+# `main`'s own copy of this file already made (see its own header comment).
+# ROJAN_MASTER_INTEGRATION_MATRIX_v2.md §XX.2.1 found that, before this
+# change, every PR against this branch (including #8/#10/#11/#12) had no
+# automatic pull_request-triggered run at all - the only green checks that
+# existed were workflow_dispatch (manual). This closes that specific gap for
+# every PR opened against this branch from now on; it does not retroactively
+# create a run for a PR opened before this workflow version lands on this
+# branch - that still needs a fresh push/synchronize on the PR's own branch,
+# or a manual dispatch, after this merges. The job id (build-test-report) is
+# left unchanged so the check-run name GitHub reports stays stable across
+# this change, matching `main`'s own copy exactly.
 #
 # Pipeline: Checkout -> JDK Setup -> Gradle Build -> Test -> Report.
 
 on:
+  pull_request:
+    branches:
+      - release/production-v24
   push:
     branches:
-      - sprint1/backend-ci-baseline
+      - release/production-v24
   workflow_dispatch: {}
 
 jobs:
