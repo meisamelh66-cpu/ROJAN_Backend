@@ -7,16 +7,14 @@ kotlin = "2.0.21"
 # line patch bump, not a framework migration.
 springBoot = "3.3.13"
 springDependencyManagement = "1.1.6"
-#  F12 (ROJAN_BACKEND_SECURITY_AUDIT_v1.md): 2.6.0 kept, reverted back from 2 real
-#  attempts (2.10.0, then 2.7.0 - Pass 33). Both fail identically: NoClassDefFoundError/
-#  ClassNotFoundException on org.springframework.web.servlet.resource.
-#  LiteWebJarsResourceResolver, a class that does not exist in Spring Framework 6.1.21
-#  (this project's current line). This is not a Jackson-version question at all - no
-#  springdoc release past 2.6.x supports Spring Framework 6.1.x, confirmed by the same
-#  failure recurring at two different springdoc versions. F12 genuinely needs the same
-#  Spring Boot 3.4.x/3.5.x+ migration already blocking F1/F4/F7/F8-F11 - not a smaller,
-#  independently-fixable item.
-springdoc = "2.6.0"
+#  F12 remediation (this pass): the earlier 2.10.0/2.7.0 attempts failed only because
+#  Spring Framework was still 6.1.21 (LiteWebJarsResourceResolver, needed by springdoc
+#  >2.6.0, was introduced in Framework 6.2). This worktree's own build.gradle.kts now
+#  overrides Framework to 6.2.19 (for F1/F4's Security 6.5.11 pairing) - and springdoc
+#  2.6.0 itself then breaks instead (NoSuchMethodError on ControllerAdviceBean's
+#  constructor, binary-incompatible with 6.2.19). 2.7.0 is retried now that its real
+#  prerequisite (Framework >=6.2) is actually present - not re-guessed blindly.
+springdoc = "2.7.0"
 jjwt = "0.12.6"
 junit = "5.11.3"
 mockk = "1.13.13"
