@@ -9,11 +9,50 @@ plugins {
     alias(libs.plugins.kotlin.jpa) apply false
     alias(libs.plugins.spring.boot) apply false
     alias(libs.plugins.spring.dependency.management) apply false
+    id("org.owasp.dependencycheck") version "13.0.0"
 }
 
 allprojects {
     group = "ai.rojan.backend"
     version = "1.0.0"
+}
+
+// ROJAN_BACKEND_SECURITY_AUDIT_v1.md §9 / §11.3 (the proposed-but-not-implemented CI gap): no
+// dependency-vulnerability scan exists anywhere in backend-ci.yml. This is deliberately report-only
+// for now (failBuildOnCVSS set above the real maximum, so it can never fail a build) - per the audit's
+// own instruction to "establish a baseline report before enforcing a blocking threshold." Switching to
+// a real gate (a finite failBuildOnCVSS) is its own separate decision, once this baseline has actually
+// been reviewed - not performed by this pass. `dependencyCheckAggregate` scans every subproject from
+// the root in one pass (the plugin's own recommended entry point for a multi-module Gradle build).
+dependencyCheck {
+    failBuildOnCVSS = 11.0f
+    formats = listOf("HTML", "JSON")
+    // No suppression file yet - none has been reviewed/authorized. Per the audit's own requirement
+    // ("no blanket suppressions... documented justification, scope, owner, and expiry/review date for
+    // every suppression"), a suppressions file is added only once a specific false positive has
+    // actually been triaged against this baseline - not pre-emptively.
+    nvd {
+        // ROJAN_BACKEND_SECURITY_AUDIT_v1.md §12.6 (Pass 32): this plugin's NvdApiDataSource
+        // hard-requires a real key - confirmed on real GitHub-hosted runners
+        // (NvdApiException: "Invalid API Key, length of 0..."), not just locally. Reads from
+        // the environment, never hardcoded or invented - `NVD_API_KEY` is populated in CI
+        // (backend-ci.yml) from a GitHub Actions secret of the same name via `env:` on that
+        // one step only, which GitHub's own log redaction also masks automatically. Until that
+        // secret exists (an owner-provisioning step - see the audit's own §12.6 for how to get
+        // one), this resolves to null and the plugin behaves exactly as it does today: it
+        // fails fast with the same clear error, not a silent partial scan.
+        apiKey = System.getenv("NVD_API_KEY")
+    }
+    // KNOWN, UNRESOLVED LOCAL-VERIFICATION LIMITATION (not fixed in this pass - see
+    // ROJAN_BACKEND_SECURITY_AUDIT_v1.md §12.4): this environment's outbound requests to
+    // https://www.cisa.gov/.../known_exploited_vulnerabilities.json return 403 Forbidden (a known,
+    // documented upstream issue - dependency-check/DependencyCheck#5711, #7929). The standard fix is
+    // disabling the supplementary CISA KEV analyzer, but this pass could not locate the correct Gradle
+    // DSL property to do so within a reasonable number of attempts (2 different AI-summarized doc
+    // answers for the property name - `knownExploited.enabled` and `kev.enabled` - both failed to
+    // compile against this plugin's real extension; a direct source read of the Gradle extension class
+    // found no KEV-related property exposed there at all). Reported honestly as unresolved rather than
+    // guessed a 3rd time. NVD remains the primary, unaffected vulnerability source either way.
 }
 
 subprojects {
