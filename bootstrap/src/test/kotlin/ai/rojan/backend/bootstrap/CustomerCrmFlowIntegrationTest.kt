@@ -35,6 +35,7 @@ import ai.rojan.backend.domain.user.UserId
 import ai.rojan.backend.domain.user.UserRole
 import io.zonky.test.db.AutoConfigureEmbeddedDatabase
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -42,6 +43,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.client.TestRestTemplate
 import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.core.ParameterizedTypeReference
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
@@ -301,6 +303,26 @@ class CustomerCrmFlowIntegrationTest {
 
         assertEquals(HttpStatus.CONFLICT, duplicate.statusCode)
         assertTrue(duplicate.body!!.contains("CUSTOMER_ALREADY_EXISTS"))
+    }
+
+    // ROJAN_MASTER_INTEGRATION_MATRIX_v2.md §TT: the race V12__customers_unique_linked_user_per_salon.sql
+    // closes (two concurrent first-time associations for the same (salonId, userId) both passing the
+    // find-check before either save completes) is deliberately NOT simulated with a fake repository -
+    // see §SS.1 for why that would invent behavior. This proves it against the real constraint instead,
+    // on this class's real (embedded, no-Docker) Postgres - the two linkedCustomer() saves below share
+    // salonId+userId but use different phone numbers, so the only thing that can make the second save
+    // fail is uq_customers_salon_user itself, not uq_customers_salon_phone.
+    @Test
+    fun `the real salon+user uniqueness constraint rejects a concurrent duplicate customer`() {
+        val ownerToken = registerAndLogin()
+        val salon = createSalon(ownerToken, "Constraint Test Salon")
+        val (_, customerUserId) = registerAndLoginWithId(UserRole.CUSTOMER)
+
+        linkedCustomer(salon.id, customerUserId, "+989444444441")
+
+        assertThrows(DataIntegrityViolationException::class.java) {
+            linkedCustomer(salon.id, customerUserId, "+989444444442")
+        }
     }
 
     @Test
