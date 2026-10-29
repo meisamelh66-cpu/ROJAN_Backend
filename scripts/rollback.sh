@@ -37,6 +37,16 @@ fi
 echo "==> Rolling back application code: $CURRENT_COMMIT -> $PREVIOUS_COMMIT"
 git checkout "$PREVIOUS_COMMIT"
 
+# The Dockerfile only COPYs a pre-built jar (Gradle does not run inside Docker, by design - see
+# the Dockerfile's own comment) - `git checkout` alone changes the source tree but never touches
+# the already-built jar still sitting in bootstrap/build/libs/, which is NOT tracked by git. Without
+# this step, `docker compose build app` below silently re-packages the CURRENT (not-yet-rolled-
+# -back) jar into a new image layer while this script reports success at $PREVIOUS_COMMIT - a real,
+# reproduced defect (confirmed via sha256 of the resulting image's jar: identical to the
+# pre-rollback jar, not a fresh build of $PREVIOUS_COMMIT's own source).
+echo "==> Rebuilding the application jar from $PREVIOUS_COMMIT's own source"
+./gradlew :bootstrap:bootJar --no-daemon --console=plain
+
 echo "==> Rebuilding and restarting the app on the previous commit"
 "${COMPOSE[@]}" build app
 # 2026-08-29 deploy hardening: same fix as deploy.sh - `up -d app` alone only recreates the
