@@ -1,22 +1,25 @@
 [versions]
 kotlin = "2.0.21"
-# F6 (ROJAN_BACKEND_SECURITY_AUDIT_v1.md, GHSA-rc42-6c7j-7h5r): 3.3.13 is the
-# latest, and last ever published, 3.3.x release (confirmed against Maven
-# Central's own metadata - the 3.3.x line is fully EOL) - fixes
-# EndpointRequest.to()'s wrong-matcher bug, patched at 3.3.11. Same-minor-
-# line patch bump, not a framework migration.
-springBoot = "3.3.13"
+# F7 (ROJAN_BACKEND_SECURITY_AUDIT_v1.md, GHSA-wwpq-f5c3-7hvx): no fix exists
+# anywhere in the 3.3.x or 3.4.x lines (first_patched_version: null for both,
+# confirmed via the real GitHub Advisory API) - the real fix floor is 3.5.14;
+# 3.5.16 is the latest published 3.5.x release (confirmed against Maven
+# Central's own metadata). Still Spring Boot 3.x - not the 4.x line explicitly
+# excluded from this remediation. Boot 3.5.16's own BOM independently confirmed
+# (via its real pom.xml) to manage spring-framework 6.2.19 and
+# spring-security 6.5.11 - the exact same versions PR #16 already overrides
+# manually - and to keep EntityScan/TestRestTemplate in their classic packages
+# (no Boot-4.x-style autoconfigure/test module restructuring at this line).
+springBoot = "3.5.16"
 springDependencyManagement = "1.1.6"
-#  F12 (ROJAN_BACKEND_SECURITY_AUDIT_v1.md): 2.6.0 kept, reverted back from 2 real
-#  attempts (2.10.0, then 2.7.0 - Pass 33). Both fail identically: NoClassDefFoundError/
-#  ClassNotFoundException on org.springframework.web.servlet.resource.
-#  LiteWebJarsResourceResolver, a class that does not exist in Spring Framework 6.1.21
-#  (this project's current line). This is not a Jackson-version question at all - no
-#  springdoc release past 2.6.x supports Spring Framework 6.1.x, confirmed by the same
-#  failure recurring at two different springdoc versions. F12 genuinely needs the same
-#  Spring Boot 3.4.x/3.5.x+ migration already blocking F1/F4/F7/F8-F11 - not a smaller,
-#  independently-fixable item.
-springdoc = "2.6.0"
+#  F12 remediation (this pass): the earlier 2.10.0/2.7.0 attempts failed only because
+#  Spring Framework was still 6.1.21 (LiteWebJarsResourceResolver, needed by springdoc
+#  >2.6.0, was introduced in Framework 6.2). This worktree's own build.gradle.kts now
+#  overrides Framework to 6.2.19 (for F1/F4's Security 6.5.11 pairing) - and springdoc
+#  2.6.0 itself then breaks instead (NoSuchMethodError on ControllerAdviceBean's
+#  constructor, binary-incompatible with 6.2.19). 2.7.0 is retried now that its real
+#  prerequisite (Framework >=6.2) is actually present - not re-guessed blindly.
+springdoc = "2.7.0"
 jjwt = "0.12.6"
 junit = "5.11.3"
 mockk = "1.13.13"
