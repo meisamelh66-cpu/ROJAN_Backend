@@ -1,5 +1,6 @@
 package ai.rojan.backend.api.auth
 
+import ai.rojan.backend.api.common.Utf8ByteSize
 import ai.rojan.backend.domain.user.UserRole
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.Email
@@ -15,9 +16,25 @@ data class RegisterRequest(
     @field:Schema(example = "jane.doe@example.com")
     val email: String,
 
+    // GHSA-mg83-c7gq-rv5c (ROJAN_BACKEND_SECURITY_AUDIT_v1.md F5): BCrypt's real
+    // limit, confirmed empirically against the resolved encoder
+    // (BCryptPasswordEncoderAdapterTest), is 72 *UTF-8 bytes*, not 72
+    // characters - the encoder itself now throws IllegalArgumentException
+    // past that (fixed in spring-security-crypto 6.3.8+, see this module's
+    // root build.gradle.kts dependencyManagement override), but relying on
+    // that alone would surface as an unhandled-looking 400 with no clear
+    // field-level message. @Size validates String.length (UTF-16 code
+    // units/roughly characters), the wrong unit here - ROJAN is an
+    // RTL-Persian-first platform, and a 72-character Farsi password is
+    // already 144 UTF-8 bytes (2 bytes/char), well past this boundary
+    // despite satisfying any character-count @Size. @Utf8ByteSize checks
+    // the actual byte count BCrypt cares about, for every script, not just
+    // ASCII. min=8 is still a plain character-count floor - no multibyte
+    // concern on a *lower* bound.
     @field:NotBlank
-    @field:Size(min = 8, max = 128)
-    @field:Schema(example = "supersecret123", minLength = 8)
+    @field:Size(min = 8)
+    @field:Utf8ByteSize(max = 72)
+    @field:Schema(example = "supersecret123", minLength = 8, description = "8-72 bytes when UTF-8 encoded (not 72 characters - see Utf8ByteSize)")
     val password: String,
 
     @field:NotBlank
