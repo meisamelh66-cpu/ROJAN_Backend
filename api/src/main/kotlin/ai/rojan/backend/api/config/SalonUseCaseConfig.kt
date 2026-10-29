@@ -21,6 +21,7 @@ import ai.rojan.backend.application.salon.DeactivateServiceUseCase
 import ai.rojan.backend.application.salon.DeactivateSpecialistUseCase
 import ai.rojan.backend.application.salon.GenerateSalonInviteQrCodeUseCase
 import ai.rojan.backend.application.salon.GenerateSalonQrCodeUseCase
+import ai.rojan.backend.application.salon.GetPublicCategoryServicesUseCase
 import ai.rojan.backend.application.salon.GetSalonCompletenessUseCase
 import ai.rojan.backend.application.salon.GetSalonInviteUseCase
 import ai.rojan.backend.application.salon.ListSalonInvitesUseCase
@@ -130,6 +131,10 @@ class SalonUseCaseConfig {
         serviceCategoryRepository: ServiceCategoryRepository,
         salonPermissionResolver: SalonPermissionResolver,
     ) = DeactivateServiceCategoryUseCase(salonRepository, serviceCategoryRepository, salonPermissionResolver)
+
+    @Bean
+    fun getPublicCategoryServicesUseCase(serviceCategoryRepository: ServiceCategoryRepository, serviceRepository: ServiceRepository) =
+        GetPublicCategoryServicesUseCase(serviceCategoryRepository, serviceRepository)
 
     @Bean
     fun createServiceUseCase(
