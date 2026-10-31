@@ -138,24 +138,31 @@ jobs:
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: ./gradlew dependencyCheckAggregate --no-daemon --console=plain --no-parallel
-    - name: Locate dependency-check reports
-      if: always()
-      run: |
-        echo "Dependency-Check report files:"
-        if [ -d build/reports ]; then
-          find build/reports -type f \
-            \( -iname '*dependency-check*.html' \
-            -o -iname '*dependency-check*.json' \) \
-            -print
-        else
-          echo "build/reports directory does not exist"
-        fi
 
-    - name: Publish dependency-check report
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: dependency-check-report
-        path: build/reports/
-        if-no-files-found: warn
-        retention-days: 30
+      - name: Locate dependency-check reports
+        # Searches the whole workspace, not just build/reports - the previous attempt assumed
+        # the aggregate report lands at build/reports/dependency-check-report.* and that path
+        # was confirmed empty on a real run even though the scan itself completed (logged
+        # "Found 381 vulnerabilities"), so the real output location is not yet confirmed. Prints
+        # only matched file paths - no secret, no report content.
+        if: always()
+        run: |
+          echo "Dependency-Check report files found anywhere in the workspace:"
+          find . -type f \( -iname 'dependency-check-report.html' -o -iname 'dependency-check-report.json' \) -print || true
+          echo "(if nothing was printed above, no matching report file exists anywhere in the workspace)"
+
+      - name: Publish dependency-check report
+        # Scoped to the actual report filenames, searched from the workspace root - not the
+        # whole build/reports/ directory, which would also contain unrelated Gradle reports
+        # (test results, the Gradle problems-report.html, etc.) mislabeled as this artifact.
+        # if-no-files-found: warn keeps a visible warning instead of a false "success" claim
+        # when the real location still isn't confirmed.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: |
+            **/dependency-check-report.html
+            **/dependency-check-report.json
+          if-no-files-found: warn
+          retention-days: 30
