@@ -72,3 +72,97 @@ jobs:
             failed=$((failed + ${fl:-0}))
           done
           echo "Total: $total, Failed: $failed" >> "$GITHUB_STEP_SUMMARY"
+
+  # Pass 47 (scanner readiness prep, owner-authorized): staged, not yet active on any pushed
+  # branch. Deliberately a separate job from build-test-report, same as PR #15's own version -
+  # this job's own exit code must never be masked by, or confused with, the build/test job's
+  # result. When this branch is the ref a run is dispatched against, `actions/checkout@v4` (no
+  # `ref:` override, same as the job above) checks out THIS exact SHA - not PR #15's branch, not
+  # `release/production-v24`. Mirrors PR #15's own job, plus an added NVD-data cache step (ROJAN_
+  # BACKEND_SECURITY_AUDIT_v1.md §12.6 / Pass 47): the plugin's own data.directory (set in
+  # build.gradle.kts) is cached across runs so the NVD feed isn't re-downloaded from scratch every
+  # time, reducing rate-limit/runtime risk once a real key exists.
+  dependency-check-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Compute cache week
+        id: week
+        run: echo "value=$(date -u +%Y-%U)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache NVD data feed
+        uses: actions/cache@v4
+        with:
+          path: .dependency-check-data
+          # Cache key is built from the current UTC week. This reduces, but does not guarantee
+          # the age of, redundant NVD downloads: if no cache exists for the exact current-week
+          # key, `restore-keys` (prefix match on `nvd-data-`) may restore whatever older cache
+          # entry it finds - which could be substantially older than one week if this job has not
+          # run recently, or if prior weeks' entries were evicted out of order. A weekly key by
+          # itself does not guarantee the restored data's freshness or completeness. Actual
+          # freshness and completeness of whatever data is restored must be checked at the
+          # authorized-execution stage (e.g. from the scan's own output/log), not assumed from the
+          # cache key's name.
+          key: nvd-data-${{ steps.week.outputs.value }}
+          restore-keys: |
+            nvd-data-
+
+      - name: OWASP Dependency-Check (report-only baseline)
+        # --no-parallel works around a real, filed upstream bug
+        # (dependency-check/DependencyCheck#8375) - the plugin's own
+        # dependencyCheckAggregate task resolves subproject configurations in a
+        # way Gradle 9 now rejects outright ("...was attempted without an
+        # exclusive lock") when run in parallel. Reproduced identically on this
+        # exact GitHub Actions runner before this flag was added - not a
+        # local-sandbox-only artifact (same finding as PR #15, re-applied here).
+        # NVD_API_KEY is read from a GitHub Actions secret of the same name - never hardcoded,
+        # never printed, never logged. GitHub's own log redaction also masks any matching secret
+        # value in step output automatically. Whether this secret currently exists on the
+        # repository has NOT been confirmed from this diff. The exact behavior of this tool
+        # version when the value is absent or empty - whether it fails outright, how, or with what
+        # message - has not been confirmed from this exact configuration either; it must not be
+        # stated as certain. No key value is invented, assumed, or substituted here. A real scan
+        # is not permitted until the secret's presence is confirmed and this diff's prerequisites
+        # are separately reviewed and authorized for execution.
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: ./gradlew dependencyCheckAggregate --no-daemon --console=plain --no-parallel
+
+      - name: Locate dependency-check reports
+        # Searches the whole workspace, not just build/reports - the previous attempt assumed
+        # the aggregate report lands at build/reports/dependency-check-report.* and that path
+        # was confirmed empty on a real run even though the scan itself completed (logged
+        # "Found 381 vulnerabilities"), so the real output location is not yet confirmed. Prints
+        # only matched file paths - no secret, no report content.
+        if: always()
+        run: |
+          echo "Dependency-Check report files found anywhere in the workspace:"
+          find . -type f \( -iname 'dependency-check-report.html' -o -iname 'dependency-check-report.json' \) -print || true
+          echo "(if nothing was printed above, no matching report file exists anywhere in the workspace)"
+
+      - name: Publish dependency-check report
+        # Scoped to the actual report filenames, searched from the workspace root - not the
+        # whole build/reports/ directory, which would also contain unrelated Gradle reports
+        # (test results, the Gradle problems-report.html, etc.) mislabeled as this artifact.
+        # if-no-files-found: warn keeps a visible warning instead of a false "success" claim
+        # when the real location still isn't confirmed.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: |
+            **/dependency-check-report.html
+            **/dependency-check-report.json
+          if-no-files-found: warn
+          retention-days: 30
