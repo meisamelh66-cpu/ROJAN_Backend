@@ -9,6 +9,69 @@ plugins {
     alias(libs.plugins.kotlin.jpa) apply false
     alias(libs.plugins.spring.boot) apply false
     alias(libs.plugins.spring.dependency.management) apply false
+    // Pass 47 (scanner readiness prep, owner-authorized): mirrors PR #15's own plugin declaration
+    // exactly (same version, same artifact) - PR #17's own build.gradle.kts has no trace of this
+    // plugin at all (confirmed, Pass 46), so dependencyCheckAggregate does not exist here without
+    // this line. NOT pushed to PR #17's branch yet - staged in an isolated local branch
+    // (prep/dependency-check-on-pr17) pending owner review of this exact diff.
+    id("org.owasp.dependencycheck") version "13.0.0"
+}
+
+// Pass 47: OWASP Dependency-Check config, staged for owner review - not yet active on any pushed
+// branch. Mirrors PR #15's own config with 2 differences, both flagged for owner decision below:
+//
+// 1. failBuildOnCVSS stays at 11.0f (above the real CVSS ceiling of 10) - same as PR #15. This is a
+//    POLICY decision (report-only vs. a real blocking gate) and is NOT changed here without
+//    separate, explicit owner authorization - ROJAN_BACKEND_SECURITY_AUDIT_v1.md §11.3 already
+//    frames this as its own future decision, not performed by this pass either.
+//
+// 2. The CISA KEV analyzer is left at its default (enabled = true), NOT silently disabled, even
+//    though a real, verified way to disable it now exists (see the comment on `kev { }` below) -
+//    confirmed this pass by decompiling the actual dependency-check-gradle 13.0.0 plugin jar's real
+//    extension classes (DependencyCheckExtension -> AnalyzerExtension.kev() -> KEVExtension.
+//    setEnabled(Boolean)), not by trusting a search-engine summary (2 earlier, wrong guesses -
+//    `knownExploited.enabled` and a top-level `kev.enabled` - are documented in
+//    ROJAN_BACKEND_SECURITY_AUDIT_v1.md §12.4). Disabling it is a real, available option, but
+//    disabling a security analyzer is a policy choice for the owner to make explicitly, not
+//    something this prep silently does to make a future run look cleaner.
+dependencyCheck {
+    failBuildOnCVSS = 11.0f
+    formats = listOf("HTML", "JSON")
+    nvd {
+        // Reads NVD_API_KEY from a GitHub Actions secret, via the workflow's own `env:` block -
+        // never hardcoded here or anywhere else, never printed, never logged, never read outside
+        // of this one pass-through at CI time. Whether this secret currently exists on the
+        // repository has NOT been confirmed from this diff alone. The exact behavior of this
+        // plugin version when the value is absent or empty is similarly not confirmed by this
+        // diff - it has not been exercised from this exact configuration. A real scan is not
+        // permitted until the secret's presence is confirmed and execution is separately
+        // authorized.
+        apiKey = System.getenv("NVD_API_KEY")
+    }
+    // KNOWN, DOCUMENTED LIMITATION (ROJAN_BACKEND_SECURITY_AUDIT_v1.md §12.4): this environment's
+    // outbound requests to the CISA KEV feed return 403 Forbidden (a known, filed upstream issue -
+    // dependency-check/DependencyCheck#5711, #7929). Left at its default (enabled) deliberately -
+    // see the comment above this block. If the owner authorizes disabling it, the real, verified
+    // DSL (confirmed against the plugin's actual compiled extension classes this pass, not a
+    // doc/search summary) is:
+    //     analyzers {
+    //         kev {
+    //             enabled = false
+    //         }
+    //     }
+    // (KEVExtension also exposes a `url` property - pointing it at a private mirror of the CISA
+    // feed is a second, untested-in-this-environment alternative to disabling it outright.)
+    //
+    // NVD data-feed caching (investigated per this pass's explicit request, not applied without a
+    // matching workflow change - see the prepared backend-ci.yml diff): the plugin's real
+    // `data { directory = "..." }` property (confirmed via DataExtension's compiled class) is the
+    // path a GitHub Actions `actions/cache` step should target to persist the downloaded NVD feed
+    // across runs. `cache { }` (CacheExtension) only toggles caching of the OSS Index/Central/
+    // NodeAudit analyzer results, NOT the NVD feed itself - a materially different thing than what
+    // its name might suggest; not used for this purpose.
+    data {
+        directory = "${rootProject.projectDir}/.dependency-check-data"
+    }
 }
 
 allprojects {
