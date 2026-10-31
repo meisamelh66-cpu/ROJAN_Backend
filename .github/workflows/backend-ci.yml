@@ -138,11 +138,24 @@ jobs:
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: ./gradlew dependencyCheckAggregate --no-daemon --console=plain --no-parallel
+    - name: Locate dependency-check reports
+      if: always()
+      run: |
+        echo "Dependency-Check report files:"
+        if [ -d build/reports ]; then
+          find build/reports -type f \
+            \( -iname '*dependency-check*.html' \
+            -o -iname '*dependency-check*.json' \) \
+            -print
+        else
+          echo "build/reports directory does not exist"
+        fi
 
-      - name: Publish dependency-check report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-report
-          path: build/reports/dependency-check-report.*
-          retention-days: 30
+    - name: Publish dependency-check report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dependency-check-report
+        path: build/reports/
+        if-no-files-found: warn
+        retention-days: 30
