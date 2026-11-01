@@ -160,6 +160,13 @@ subprojects {
             // listed individually below, not just jackson-databind - avoiding the exact
             // mismatch (jackson-core/module-kotlin silently staying at 2.17.3) that broke
             // the first 2 real test runs of this remediation.
+            // CVE-2026-116803 (Pass 60): springdoc 2.7.0 bundles org.webjars:swagger-ui:5.18.2,
+            // whose vendored DOMPurify (3.1.6) has an incomplete IN_PLACE-hook fix for
+            // GHSA-p98j-92pf-mc4p. Real fix confirmed (5.34.1's bundle contains
+            // `DOMPurify.version="3.4.17"`, the patched release, verified by extracting and
+            // grepping the actual webjar jar - not assumed from a changelog). 5.34.1 stays
+            // within swagger-ui's 5.x line - not a springdoc major-version bump.
+            dependency("org.webjars:swagger-ui:5.34.1")
             dependency("com.fasterxml.jackson.core:jackson-databind:2.18.11")
             dependency("com.fasterxml.jackson.core:jackson-core:2.18.11")
             dependency("com.fasterxml.jackson.core:jackson-annotations:2.18.11")
