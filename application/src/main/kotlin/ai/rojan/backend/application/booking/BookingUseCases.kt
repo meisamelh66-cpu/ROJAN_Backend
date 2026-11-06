@@ -1,10 +1,12 @@
 package ai.rojan.backend.application.booking
 
+import ai.rojan.backend.application.port.RateLimiterPort
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.booking.BookingId
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.common.BookingNotFoundException
+import ai.rojan.backend.domain.common.BookingRateLimitExceededException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.ServiceNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotEligibleForServiceException
@@ -23,6 +25,7 @@ import ai.rojan.backend.domain.salon.SpecialistRepository
 import ai.rojan.backend.domain.salon.SpecialistServiceRepository
 import ai.rojan.backend.domain.salon.isSpecialistEligibleForService
 import ai.rojan.backend.domain.user.UserId
+import java.time.Duration
 import java.time.LocalDateTime
 
 data class CreateBookingCommand(
@@ -32,6 +35,7 @@ data class CreateBookingCommand(
     val customerId: UserId,
     val startTime: LocalDateTime,
     val notes: String?,
+    val callerIp: String? = null,
 )
 
 class CreateBookingUseCase(
@@ -41,9 +45,12 @@ class CreateBookingUseCase(
     private val bookingRepository: BookingRepository,
     private val specialistServiceRepository: SpecialistServiceRepository,
     private val specialistAvailabilityValidator: SpecialistAvailabilityValidator,
+    private val rateLimiter: RateLimiterPort,
     private val notificationRepository: NotificationRepository? = null,
 ) {
     fun execute(command: CreateBookingCommand): Booking {
+        enforceRateLimit(command.customerId, command.callerIp)
+
         val salon = salonRepository.findById(command.salonId)?.takeIf { it.active }
             ?: throw SalonNotFoundException(command.salonId.value.toString())
         salon.requireActivated()
@@ -95,6 +102,40 @@ class CreateBookingUseCase(
             }
         }
         return savedBooking
+    }
+
+    /**
+     * D11: self-service booking creation had zero rate limiting at any layer (Risk Register §M.1) -
+     * this reuses the exact dual-key pattern [ai.rojan.backend.application.auth.AuthenticateUserUseCase.enforceRateLimit]
+     * already establishes for login: a per-customer budget plus an optional per-IP budget, both
+     * always consumed regardless of which is already exhausted (same reasoning as that method's own
+     * doc comment - a rejected attempt still counts), and the thrown exception always cites the
+     * customer id, never the IP, so a caller can't tell which check failed. Limits/windows are the
+     * owner's own dated decision for D11 (10 per customer / 30 per IP, both per 15 minutes) - not
+     * empirically tuned, not configurable via env var (unlike [ai.rojan.backend.infrastructure.security.AuthRateLimitProperties]),
+     * same fixed-constant shape [ai.rojan.backend.application.salon.SalonInviteUseCases]'s own
+     * `ACCEPT_ATTEMPT_LIMIT` uses.
+     */
+    private fun enforceRateLimit(customerId: UserId, callerIp: String?) {
+        val withinCustomerWindow = rateLimiter.tryConsume(
+            "booking:create:customer:${customerId.value}",
+            CUSTOMER_LIMIT,
+            CUSTOMER_WINDOW,
+        )
+        val withinIpWindow = callerIp?.let {
+            rateLimiter.tryConsume("booking:create:ip:$it", IP_LIMIT, IP_WINDOW)
+        } ?: true
+
+        if (!withinCustomerWindow || !withinIpWindow) {
+            throw BookingRateLimitExceededException(customerId.value.toString())
+        }
+    }
+
+    private companion object {
+        const val CUSTOMER_LIMIT = 10
+        val CUSTOMER_WINDOW: Duration = Duration.ofMinutes(15)
+        const val IP_LIMIT = 30
+        val IP_WINDOW: Duration = Duration.ofMinutes(15)
     }
 }
 

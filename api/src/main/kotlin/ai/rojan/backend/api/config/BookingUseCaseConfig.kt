@@ -7,6 +7,7 @@ import ai.rojan.backend.application.booking.CreateBookingUseCase
 import ai.rojan.backend.application.booking.GetAvailableSlotsUseCase
 import ai.rojan.backend.application.booking.RescheduleBookingUseCase
 import ai.rojan.backend.application.booking.SpecialistAvailabilityValidator
+import ai.rojan.backend.application.port.RateLimiterPort
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.BookingRepository
 import ai.rojan.backend.domain.notification.NotificationRepository
@@ -43,6 +44,7 @@ class BookingUseCaseConfig {
         bookingRepository: BookingRepository,
         specialistServiceRepository: SpecialistServiceRepository,
         specialistAvailabilityValidator: SpecialistAvailabilityValidator,
+        rateLimiter: RateLimiterPort,
         notificationRepository: NotificationRepository,
     ) = CreateBookingUseCase(
         salonRepository,
@@ -51,6 +53,7 @@ class BookingUseCaseConfig {
         bookingRepository,
         specialistServiceRepository,
         specialistAvailabilityValidator,
+        rateLimiter,
         notificationRepository,
     )
 

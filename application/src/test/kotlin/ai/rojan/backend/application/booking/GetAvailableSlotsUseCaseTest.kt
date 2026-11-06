@@ -1,5 +1,6 @@
 package ai.rojan.backend.application.booking
 
+import ai.rojan.backend.application.auth.RecordingRateLimiter
 import ai.rojan.backend.application.salon.InMemorySalonRepository
 import ai.rojan.backend.application.salon.InMemoryServiceCategoryRepository
 import ai.rojan.backend.application.salon.InMemoryServiceRepository
@@ -150,7 +151,7 @@ class GetAvailableSlotsUseCaseTest {
         workingHoursRepository.save(WorkingHours.create(salon.id, DayOfWeek.MONDAY, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(10, 0)))))
         weeklyAvailabilityRepository.save(SpecialistWeeklyAvailability.create(specialist.id, DayOfWeek.MONDAY, listOf(TimeInterval(LocalTime.of(9, 0), LocalTime.of(10, 0)))))
         val availabilityValidator = SpecialistAvailabilityValidator(workingHoursRepository, weeklyAvailabilityRepository, overrideRepository, leaveRepository, blockRepository)
-        val createBookingUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, availabilityValidator)
+        val createBookingUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, availabilityValidator, RecordingRateLimiter())
         createBookingUseCase.execute(CreateBookingCommand(salon.id, service.id, specialist.id, UserId.new(), monday.atTime(9, 0), null))
 
         val slots = useCase.execute(query())
