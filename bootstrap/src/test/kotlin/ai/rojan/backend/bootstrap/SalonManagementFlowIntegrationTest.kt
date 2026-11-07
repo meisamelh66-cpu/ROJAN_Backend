@@ -4,19 +4,23 @@ import ai.rojan.backend.api.auth.AuthResponse
 import ai.rojan.backend.api.auth.LoginRequest
 import ai.rojan.backend.api.auth.RegisterRequest
 import ai.rojan.backend.api.auth.UserResponse
+import ai.rojan.backend.api.common.ApiError
 import ai.rojan.backend.api.common.PagedResponse
+import ai.rojan.backend.api.salon.AssignMembershipRequest
 import ai.rojan.backend.api.salon.BranchResponse
 import ai.rojan.backend.api.salon.CreateBranchRequest
 import ai.rojan.backend.api.salon.CreateSalonRequest
 import ai.rojan.backend.api.salon.CreateServiceCategoryRequest
 import ai.rojan.backend.api.salon.CreateServiceRequest
 import ai.rojan.backend.api.salon.CreateSpecialistRequest
+import ai.rojan.backend.api.salon.SalonMembershipResponse
 import ai.rojan.backend.api.salon.SalonResponse
 import ai.rojan.backend.api.salon.ServiceCategoryResponse
 import ai.rojan.backend.api.salon.ServiceResponse
 import ai.rojan.backend.api.salon.SpecialistResponse
 import ai.rojan.backend.api.salon.UpdateSalonRequest
 import ai.rojan.backend.api.salon.UpdateSpecialistRequest
+import ai.rojan.backend.domain.salon.SalonRole
 import ai.rojan.backend.domain.user.UserRole
 import io.zonky.test.db.AutoConfigureEmbeddedDatabase
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -33,6 +37,7 @@ import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
+import java.util.UUID
 
 /**
  * End-to-end verification of the salon-management vertical against a real
@@ -67,6 +72,23 @@ class SalonManagementFlowIntegrationTest {
             AuthResponse::class.java,
         )
         return requireNotNull(login.body).accessToken
+    }
+
+    /** Like [registerAndLogin], but also returns the caller's own user id - needed to assign them a [SalonRole] or link them as a [CreateSpecialistRequest]'s `userId`. */
+    private fun registerAndLoginWithId(): Pair<String, UUID> {
+        val email = "salon.${System.nanoTime()}@example.com"
+        restTemplate.postForEntity(
+            url("/api/v1/auth/register"),
+            RegisterRequest(email = email, password = "supersecret123", fullName = "Owner", role = UserRole.MANAGER),
+            UserResponse::class.java,
+        )
+        val login = restTemplate.postForEntity(
+            url("/api/v1/auth/login"),
+            LoginRequest(email = email, password = "supersecret123"),
+            AuthResponse::class.java,
+        )
+        val body = requireNotNull(login.body)
+        return body.accessToken to body.user.id
     }
 
     @Test
@@ -256,6 +278,99 @@ class SalonManagementFlowIntegrationTest {
         )
 
         assertEquals(HttpStatus.FORBIDDEN, response.statusCode)
+    }
+
+    /**
+     * D7 (ROJAN Master Integration Matrix, Decision Register) - closes the authorization/IDOR gap
+     * in `GET /api/v1/salons/{salonId}`: before this fix the endpoint required only a valid bearer
+     * token (any authenticated user), not any relationship to the salon, so any logged-in caller
+     * could read any other owner's salon (including DRAFT/suspended ones) by UUID. Owner, an
+     * assigned [SalonRole] member, and a [CreateSpecialistRequest]-linked specialist must still see
+     * it (including while DRAFT - the existing, intentional "owner can view their own draft"
+     * contract); an authenticated caller with none of those three relationships must get
+     * `403 ACCESS_DENIED` and nothing else from the response body, whether the salon is DRAFT or
+     * ACTIVE; a nonexistent id must still 404 for everyone.
+     */
+    @Test
+    fun `GET by id enforces owner-member-specialist authorization and never leaks salon fields to an unrelated caller`() {
+        val (ownerToken, _) = registerAndLoginWithId()
+        val (memberToken, memberId) = registerAndLoginWithId()
+        val (specialistToken, specialistUserId) = registerAndLoginWithId()
+        val (strangerToken, _) = registerAndLoginWithId()
+
+        val salon = requireNotNull(
+            restTemplate.exchange(
+                url("/api/v1/salons"),
+                HttpMethod.POST,
+                HttpEntity(
+                    CreateSalonRequest("D7 Privacy Salon", null, "+1 555 0700", "owner.d7@example.com", "7 Side St"),
+                    bearer(ownerToken),
+                ),
+                SalonResponse::class.java,
+            ).body,
+        )
+        // Never activated - stays DRAFT for this whole test, on purpose: D7's acceptance
+        // criterion is specifically about an unauthorized caller learning DRAFT/inactive status.
+        assertFalse(salon.onboardingStatus.name == "ACTIVE")
+
+        // 1) Owner -> allowed, even while DRAFT (pre-existing, intentional contract).
+        val ownerGet = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}"), HttpMethod.GET, HttpEntity<Void>(bearer(ownerToken)), SalonResponse::class.java,
+        )
+        assertEquals(HttpStatus.OK, ownerGet.statusCode)
+        assertEquals(salon.id, ownerGet.body!!.id)
+
+        // 2) Assigned member (MANAGER role) -> allowed, same DRAFT salon.
+        val assign = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/members/$memberId"),
+            HttpMethod.PUT,
+            HttpEntity(AssignMembershipRequest(SalonRole.MANAGER), bearer(ownerToken)),
+            SalonMembershipResponse::class.java,
+        )
+        assertEquals(HttpStatus.OK, assign.statusCode)
+        val memberGet = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}"), HttpMethod.GET, HttpEntity<Void>(bearer(memberToken)), SalonResponse::class.java,
+        )
+        assertEquals(HttpStatus.OK, memberGet.statusCode)
+        assertEquals(salon.id, memberGet.body!!.id)
+
+        // 3) Linked specialist (own userId on the Specialist row) -> allowed, same DRAFT salon.
+        val createSpecialist = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}/specialists"),
+            HttpMethod.POST,
+            HttpEntity(
+                CreateSpecialistRequest(specialistUserId, "Linked Specialist", null, null, null, null),
+                bearer(ownerToken),
+            ),
+            SpecialistResponse::class.java,
+        )
+        assertEquals(HttpStatus.CREATED, createSpecialist.statusCode)
+        val specialistGet = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}"), HttpMethod.GET, HttpEntity<Void>(bearer(specialistToken)), SalonResponse::class.java,
+        )
+        assertEquals(HttpStatus.OK, specialistGet.statusCode)
+        assertEquals(salon.id, specialistGet.body!!.id)
+
+        // 4) Unrelated authenticated caller (no owner/member/specialist relationship) -> 403
+        // ACCESS_DENIED, and the response body is an ApiError, not a SalonResponse - no
+        // active/onboardingStatus/ownerId/phone/email/address field reaches this caller.
+        val strangerGet = restTemplate.exchange(
+            url("/api/v1/salons/${salon.id}"), HttpMethod.GET, HttpEntity<Void>(bearer(strangerToken)), ApiError::class.java,
+        )
+        assertEquals(HttpStatus.FORBIDDEN, strangerGet.statusCode)
+        assertEquals("ACCESS_DENIED", strangerGet.body!!.errorCode)
+
+        // 5) Same unrelated caller against a nonexistent salon id -> 404, same ApiError shape -
+        // confirms the stranger cannot use this endpoint's status code alone to distinguish
+        // "exists, DRAFT, not yours" (403) from "doesn't exist" (404) as two DIFFERENT facts about
+        // DRAFT status specifically: both are 4xx ApiError bodies with no salon fields whatsoever,
+        // and 403 never varies with the target salon's onboarding/active status (verified above:
+        // the same stranger gets 403, not 404 and not 200, regardless of DRAFT state).
+        val notFound = restTemplate.exchange(
+            url("/api/v1/salons/${UUID.randomUUID()}"), HttpMethod.GET, HttpEntity<Void>(bearer(strangerToken)), ApiError::class.java,
+        )
+        assertEquals(HttpStatus.NOT_FOUND, notFound.statusCode)
+        assertEquals("SALON_NOT_FOUND", notFound.body!!.errorCode)
     }
 
     @Test

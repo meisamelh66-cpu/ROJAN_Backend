@@ -19,9 +19,11 @@ import ai.rojan.backend.application.salon.DeactivateSalonCommand
 import ai.rojan.backend.application.salon.DeactivateSalonUseCase
 import ai.rojan.backend.application.salon.GenerateSalonQrCodeCommand
 import ai.rojan.backend.application.salon.GenerateSalonQrCodeUseCase
+import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.application.salon.UpdateSalonCommand
 import ai.rojan.backend.application.salon.UpdateSalonUseCase
 import ai.rojan.backend.domain.common.PageRequest
+import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.media.MediaAssetId
@@ -70,6 +72,7 @@ class SalonController(
     private val mediaAssetRepository: MediaAssetRepository,
     private val mediaStoragePort: MediaStoragePort,
     private val assignIdentityMediaUseCase: AssignIdentityMediaUseCase,
+    private val salonPermissionResolver: SalonPermissionResolver,
 ) {
 
     @PostMapping
@@ -159,17 +162,28 @@ class SalonController(
     }
 
     @GetMapping("/{salonId}")
-    @Operation(summary = "Get a salon by id")
+    @Operation(summary = "Get a salon by id (owner, salon member, or linked specialist only)")
     @ApiResponses(
         ApiResponse(responseCode = "200", description = "Salon found"),
+        ApiResponse(
+            responseCode = "403",
+            description = "Authenticated, but the caller has no relationship (owner/member/specialist) to this salon",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
         ApiResponse(
             responseCode = "404",
             description = "No salon with this id",
             content = [Content(schema = Schema(implementation = ApiError::class))],
         ),
     )
-    fun get(@PathVariable salonId: UUID): SalonResponse =
-        findSalonOrThrow(salonId).toResponse()
+    fun get(@PathVariable salonId: UUID, @AuthenticationPrincipal principal: UserDetails): SalonResponse {
+        val salon = findSalonOrThrow(salonId)
+        val callerId = currentUserResolver.resolve(principal)
+        if (salonPermissionResolver.resolve(salon.id, callerId).isEmpty()) {
+            throw SalonAccessDeniedException(salonId.toString())
+        }
+        return salon.toResponse()
+    }
 
     @PutMapping("/{salonId}")
     @Operation(summary = "Update a salon (owner only)")

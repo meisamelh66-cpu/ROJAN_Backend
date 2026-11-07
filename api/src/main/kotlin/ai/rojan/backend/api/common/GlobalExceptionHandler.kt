@@ -11,6 +11,7 @@ import ai.rojan.backend.domain.common.BannerNotFoundException
 import ai.rojan.backend.domain.common.BannerReorderMismatchException
 import ai.rojan.backend.domain.common.BookingConflictException
 import ai.rojan.backend.domain.common.BookingNotFoundException
+import ai.rojan.backend.domain.common.BookingRateLimitExceededException
 import ai.rojan.backend.domain.common.BookingRoleNotAllowedException
 import ai.rojan.backend.domain.common.BranchNotFoundException
 import ai.rojan.backend.domain.common.CustomerAccessDeniedException
@@ -127,7 +128,7 @@ class GlobalExceptionHandler {
     fun handleOtpRateLimitExceeded(ex: Exception, request: WebRequest) =
         respond(HttpStatus.TOO_MANY_REQUESTS, errorCodeFor(ex), ex.message.orEmpty(), request)
 
-    @ExceptionHandler(LoginRateLimitExceededException::class, RegisterRateLimitExceededException::class, RefreshRateLimitExceededException::class)
+    @ExceptionHandler(LoginRateLimitExceededException::class, RegisterRateLimitExceededException::class, RefreshRateLimitExceededException::class, BookingRateLimitExceededException::class)
     fun handleAuthRateLimitExceeded(ex: Exception, request: WebRequest) =
         respond(HttpStatus.TOO_MANY_REQUESTS, errorCodeFor(ex), ex.message.orEmpty(), request)
 
@@ -262,6 +263,7 @@ class GlobalExceptionHandler {
         is LoginRateLimitExceededException -> "LOGIN_RATE_LIMITED"
         is RegisterRateLimitExceededException -> "REGISTER_RATE_LIMITED"
         is RefreshRateLimitExceededException -> "REFRESH_RATE_LIMITED"
+        is BookingRateLimitExceededException -> "BOOKING_RATE_LIMITED"
         is InactiveUserException -> "INACTIVE_USER"
         is UserNotFoundException, is UsernameNotFoundException -> "USER_NOT_FOUND"
         is SalonNotFoundException -> "SALON_NOT_FOUND"

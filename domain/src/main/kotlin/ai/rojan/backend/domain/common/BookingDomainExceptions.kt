@@ -36,3 +36,7 @@ class BookingRoleNotAllowedException(role: String) :
 
 class SpecialistNotEligibleForServiceException(specialistId: String, serviceId: String) :
     DomainException("Specialist $specialistId is not eligible to perform service $serviceId")
+
+/** D11: thrown regardless of whether the per-customer or per-IP budget tripped - same "always cite the primary identifier, never the IP" convention [ai.rojan.backend.application.auth.AuthenticateUserUseCase.enforceRateLimit]'s own doc comment establishes, so a caller can't tell which check failed. */
+class BookingRateLimitExceededException(customerId: String) :
+    DomainException("Too many booking attempts for: $customerId")

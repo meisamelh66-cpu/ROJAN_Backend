@@ -1,5 +1,6 @@
 package ai.rojan.backend.application.customer
 
+import ai.rojan.backend.application.auth.RecordingRateLimiter
 import ai.rojan.backend.application.booking.CreateBookingUseCase
 import ai.rojan.backend.application.booking.InMemoryBookingRepository
 import ai.rojan.backend.application.booking.SpecialistAvailabilityValidator
@@ -59,7 +60,7 @@ class CreateBookingForCustomerUseCaseTest {
     private val leaveRepository = InMemoryLeaveRepository()
     private val blockRepository = InMemoryBlockRepository()
     private val availabilityValidator = SpecialistAvailabilityValidator(workingHoursRepository, weeklyAvailabilityRepository, overrideRepository, leaveRepository, blockRepository)
-    private val createBookingUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, availabilityValidator)
+    private val createBookingUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, availabilityValidator, RecordingRateLimiter())
     private val useCase = CreateBookingForCustomerUseCase(salonRepository, customerRepository, createBookingUseCase, salonPermissionResolver)
 
     private val ownerId = UserId.new()

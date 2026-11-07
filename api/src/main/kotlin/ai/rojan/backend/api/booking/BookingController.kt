@@ -38,6 +38,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -95,12 +96,18 @@ class BookingController(
             description = "The salon, service, or specialist does not exist",
             content = [Content(schema = Schema(implementation = ApiError::class))],
         ),
+        ApiResponse(
+            responseCode = "429",
+            description = "Too many booking attempts for this customer or caller IP",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
     )
     @Transactional
     fun create(
         @Valid @RequestBody request: CreateBookingRequest,
         @RequestHeader(IDEMPOTENCY_KEY_HEADER, required = false) idempotencyKey: String?,
         @AuthenticationPrincipal principal: UserDetails,
+        httpRequest: HttpServletRequest,
     ): ResponseEntity<BookingResponse> {
         val customerId = currentUserResolver.resolve(principal)
         val fingerprint = idempotencyKey?.let { fingerprintOf(customerId, request) }
@@ -126,6 +133,7 @@ class BookingController(
                 customerId = customerId,
                 startTime = request.startTime,
                 notes = request.notes,
+                callerIp = httpRequest.remoteAddr,
             ),
         )
         val response = booking.toResponse()

@@ -1,5 +1,6 @@
 package ai.rojan.backend.application.booking
 
+import ai.rojan.backend.application.auth.RecordingRateLimiter
 import ai.rojan.backend.application.notification.InMemoryNotificationRepository
 import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
@@ -82,6 +83,7 @@ class NotificationBookingTriggerTest {
         bookingRepository,
         specialistServiceRepository,
         availabilityValidator,
+        RecordingRateLimiter(),
         notificationRepository,
     )
 

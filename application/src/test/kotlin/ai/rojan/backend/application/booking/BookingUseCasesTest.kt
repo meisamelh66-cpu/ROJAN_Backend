@@ -1,5 +1,6 @@
 package ai.rojan.backend.application.booking
 
+import ai.rojan.backend.application.auth.RecordingRateLimiter
 import ai.rojan.backend.application.salon.InMemorySalonMembershipRepository
 import ai.rojan.backend.application.salon.InMemorySalonRepository
 import ai.rojan.backend.application.salon.InMemoryServiceCategoryRepository
@@ -16,6 +17,7 @@ import ai.rojan.backend.domain.booking.BookingId
 import ai.rojan.backend.domain.booking.BookingStatus
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.BookingConflictException
+import ai.rojan.backend.domain.common.BookingRateLimitExceededException
 import ai.rojan.backend.domain.common.InvalidBookingStateException
 import ai.rojan.backend.domain.common.SpecialistNotAvailableException
 import ai.rojan.backend.domain.salon.Salon
@@ -30,6 +32,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
+import java.time.DayOfWeek
+import java.time.Duration
 import java.time.LocalDateTime
 import java.time.LocalTime
 
@@ -61,7 +65,7 @@ class BookingUseCasesTest {
     )
     private val specialist: Specialist = specialistRepository.save(Specialist.create(salon.id, null, "Jamie", null, null))
 
-    private val createUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, availabilityValidator)
+    private val createUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, availabilityValidator, RecordingRateLimiter())
     private val confirmUseCase = ConfirmBookingUseCase(bookingRepository, salonPermissionResolver)
     private val cancelUseCase = CancelBookingUseCase(bookingRepository, salonPermissionResolver)
     private val completeUseCase = CompleteBookingUseCase(bookingRepository, salonPermissionResolver)
@@ -262,5 +266,130 @@ class BookingUseCasesTest {
         assertThrows(SpecialistNotAvailableException::class.java) {
             rescheduleUseCase.execute(RescheduleBookingCommand(booking.id, customer, start.withHour(20)))
         }
+    }
+
+    // ---- D11: public booking creation rate limiting (owner decision: 10 per customer / 15m, 30
+    // per IP / 15m, dual-key, both budgets always consumed) - uses its own CreateBookingUseCase
+    // instance backed by CountingRateLimiterTestFixture (a real counting/windowed RateLimiterPort
+    // test double), separate from the shared `createUseCase` above (which stays wired to the
+    // permissive RecordingRateLimiter so every other test in this file is unaffected - D11's own
+    // acceptance criterion for "existing behavior below threshold unchanged"). ----
+
+    private fun rateLimitedCreateUseCase(limiter: CountingRateLimiterTestFixture) = CreateBookingUseCase(
+        salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, availabilityValidator, limiter,
+    )
+
+    /** D11 slot spacing can exceed 24h for the 30-request IP scenario - open every day of week, not just [start]'s own (already configured in the shared `init` above), so a slot never fails on unrelated-to-rate-limiting unavailability. */
+    private fun openEveryDayForD11() {
+        val allDay = TimeInterval(LocalTime.of(0, 0), LocalTime.MAX)
+        DayOfWeek.entries.forEach { day ->
+            workingHoursRepository.save(WorkingHours.create(salon.id, day, listOf(allDay)))
+            weeklyAvailabilityRepository.save(SpecialistWeeklyAvailability.create(specialist.id, day, listOf(allDay)))
+        }
+    }
+
+    /** One booking per calendar day (always 09:00-09:30) rather than packing same-day slots - simplest way to guarantee zero overlap across up to 31 requests without ever crossing midnight (which [ai.rojan.backend.application.booking.SpecialistAvailabilityValidator] doesn't treat as still-available on the next day). [openEveryDayForD11] already covers every day of week this can land on. */
+    private fun d11Command(customerId: UserId, slot: Int, callerIp: String?) = CreateBookingCommand(
+        salon.id, service.id, specialist.id, customerId,
+        LocalDateTime.of(start.toLocalDate().plusDays(slot.toLong()), LocalTime.of(9, 0)),
+        "D11 rate-limit test", callerIp,
+    )
+
+    @Test
+    fun `D11 - up to 9 requests under the per-customer limit of 10 are all allowed`() {
+        openEveryDayForD11()
+        val useCase = rateLimitedCreateUseCase(CountingRateLimiterTestFixture())
+        repeat(9) { i ->
+            assertEquals(BookingStatus.PENDING, useCase.execute(d11Command(customer, i, "10.0.0.1")).status)
+        }
+    }
+
+    @Test
+    fun `D11 - the 10th request for the same customer is still allowed - the limit is inclusive`() {
+        openEveryDayForD11()
+        val useCase = rateLimitedCreateUseCase(CountingRateLimiterTestFixture())
+        repeat(10) { i ->
+            assertEquals(BookingStatus.PENDING, useCase.execute(d11Command(customer, i, "10.0.0.2")).status)
+        }
+    }
+
+    @Test
+    fun `D11 - the 11th request for the same customer within 15 minutes is rate limited`() {
+        openEveryDayForD11()
+        val useCase = rateLimitedCreateUseCase(CountingRateLimiterTestFixture())
+        repeat(10) { i -> useCase.execute(d11Command(customer, i, "10.0.0.3")) }
+        assertThrows(BookingRateLimitExceededException::class.java) {
+            useCase.execute(d11Command(customer, 10, "10.0.0.3"))
+        }
+    }
+
+    @Test
+    fun `D11 - up to 29 requests for the same IP, from 29 different customers, are all allowed`() {
+        openEveryDayForD11()
+        val useCase = rateLimitedCreateUseCase(CountingRateLimiterTestFixture())
+        repeat(29) { i ->
+            assertEquals(BookingStatus.PENDING, useCase.execute(d11Command(UserId.new(), i, "10.0.0.4")).status)
+        }
+    }
+
+    @Test
+    fun `D11 - the 31st request for the same IP is rate limited even from a 31st, brand-new customer who never called before`() {
+        openEveryDayForD11()
+        val useCase = rateLimitedCreateUseCase(CountingRateLimiterTestFixture())
+        repeat(30) { i -> useCase.execute(d11Command(UserId.new(), i, "10.0.0.5")) }
+        assertThrows(BookingRateLimitExceededException::class.java) {
+            useCase.execute(d11Command(UserId.new(), 30, "10.0.0.5"))
+        }
+    }
+
+    @Test
+    fun `D11 - an exhausted customer budget still rate-limits even though the IP budget has plenty of headroom`() {
+        openEveryDayForD11()
+        val useCase = rateLimitedCreateUseCase(CountingRateLimiterTestFixture())
+        repeat(10) { i -> useCase.execute(d11Command(customer, i, "10.0.0.6")) }
+        // The shared IP has only consumed 10 of its 30-request budget here - the rejection below is
+        // purely the customer key, proving the two budgets are checked independently.
+        assertThrows(BookingRateLimitExceededException::class.java) {
+            useCase.execute(d11Command(customer, 10, "10.0.0.6"))
+        }
+    }
+
+    @Test
+    fun `D11 - an exhausted IP budget still rate-limits a brand-new customer whose own budget is untouched`() {
+        openEveryDayForD11()
+        val useCase = rateLimitedCreateUseCase(CountingRateLimiterTestFixture())
+        repeat(30) { i -> useCase.execute(d11Command(UserId.new(), i, "10.0.0.7")) }
+        val freshCustomer = UserId.new()
+        assertThrows(BookingRateLimitExceededException::class.java) {
+            useCase.execute(d11Command(freshCustomer, 30, "10.0.0.7"))
+        }
+    }
+
+    @Test
+    fun `D11 - customer and IP keys are independent and never collide - exhausting one customer-IP pair never affects a different pair`() {
+        openEveryDayForD11()
+        val useCase = rateLimitedCreateUseCase(CountingRateLimiterTestFixture())
+        repeat(10) { i -> useCase.execute(d11Command(customer, i, "10.0.0.8")) }
+        assertThrows(BookingRateLimitExceededException::class.java) {
+            useCase.execute(d11Command(customer, 10, "10.0.0.8"))
+        }
+
+        val unrelatedCustomer = UserId.new()
+        assertEquals(BookingStatus.PENDING, useCase.execute(d11Command(unrelatedCustomer, 11, "10.0.0.9")).status)
+    }
+
+    @Test
+    fun `D11 - after the 15-minute window elapses, the same customer is allowed again`() {
+        openEveryDayForD11()
+        val limiter = CountingRateLimiterTestFixture()
+        val useCase = rateLimitedCreateUseCase(limiter)
+        repeat(10) { i -> useCase.execute(d11Command(customer, i, "10.0.0.10")) }
+        assertThrows(BookingRateLimitExceededException::class.java) {
+            useCase.execute(d11Command(customer, 10, "10.0.0.10"))
+        }
+
+        limiter.advanceTimeBy(Duration.ofMinutes(15).plusSeconds(1))
+
+        assertEquals(BookingStatus.PENDING, useCase.execute(d11Command(customer, 11, "10.0.0.10")).status)
     }
 }

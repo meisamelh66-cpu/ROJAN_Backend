@@ -6,6 +6,7 @@ import ai.rojan.backend.api.auth.OtpRequestRequest
 import ai.rojan.backend.api.auth.OtpVerifyRequest
 import ai.rojan.backend.api.auth.RegisterRequest
 import ai.rojan.backend.api.auth.UserResponse
+import ai.rojan.backend.api.common.PagedResponse
 import ai.rojan.backend.api.customer.AddCustomerNoteRequest
 import ai.rojan.backend.api.customer.CreateCustomerRequest
 import ai.rojan.backend.api.customer.CustomerResponse
@@ -43,6 +44,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.ActiveProfiles
+import org.springframework.web.util.UriComponentsBuilder
 import java.util.UUID
 
 /**
@@ -140,6 +142,26 @@ class PlatformManagementApiIntegrationTest {
     private fun getSalon(token: String, salonId: UUID): SalonResponse = requireNotNull(
         restTemplate.exchange(url("/api/v1/salons/$salonId"), HttpMethod.GET, HttpEntity<Void>(bearer(token)), SalonResponse::class.java).body,
     )
+
+    /**
+     * D7: `GET /api/v1/salons/{salonId}` (`SalonController.get`) now requires an owner/member/
+     * specialist relationship to the salon, so a PLATFORM_ADMIN with none of those can no longer
+     * use [getSalon] for this. Same existing, already role-gated endpoint
+     * [PlatformAuthoritySalonFlowIntegrationTest] already uses for admin-side salon reads - `name`
+     * is a substring filter, so a caller-supplied unique name (e.g. `"... ${System.nanoTime()}"`)
+     * still identifies exactly one salon.
+     */
+    private fun listPlatformSalons(token: String, name: String): PagedResponse<SalonResponse> {
+        val uri = UriComponentsBuilder.fromHttpUrl(url("/api/v1/platform-authority/salons"))
+            .queryParam("name", name)
+            .build().toUri()
+        return requireNotNull(
+            restTemplate.exchange(
+                uri, HttpMethod.GET, HttpEntity<Void>(bearer(token)),
+                object : org.springframework.core.ParameterizedTypeReference<PagedResponse<SalonResponse>>() {},
+            ).body,
+        )
+    }
 
     private fun assignMembership(ownerToken: String, salonId: UUID, userId: UUID, role: SalonRole): SalonMembershipResponse = requireNotNull(
         restTemplate.exchange(
@@ -271,8 +293,13 @@ class PlatformManagementApiIntegrationTest {
         val loginAfterDeactivate = restTemplate.postForEntity(url("/api/v1/auth/login"), loginRequest, String::class.java)
         assertEquals(HttpStatus.FORBIDDEN, loginAfterDeactivate.statusCode)
 
-        // Deactivating the manager's account never cascades to the salon they own.
-        val salonAfterDeactivate = getSalon(adminToken, ownedSalon.id)
+        // Deactivating the manager's account never cascades to the salon they own. The owner's own
+        // account is now deactivated and can no longer authenticate at all (asserted above), so
+        // there is no valid owner token left to re-check with - the platform-authority list
+        // endpoint (listPlatformSalons) is used instead of getSalon for exactly that reason (D7).
+        val salonAfterDeactivate = requireNotNull(
+            listPlatformSalons(adminToken, ownedSalon.name).content.find { it.id == ownedSalon.id },
+        ) { "salon must still be listed via GET /api/v1/platform-authority/salons" }
         assertTrue(salonAfterDeactivate.active)
 
         val reactivateResponse = restTemplate.exchange(

@@ -513,8 +513,13 @@ class PlatformAuthoritySalonFlowIntegrationTest {
         assertEquals("Edited By Admin", response.body!!.name)
         assertEquals("Tehran", response.body!!.city)
 
+        // D7: GET /api/v1/salons/{salonId} now enforces owner/member/specialist authorization
+        // (SalonController.get) - a PLATFORM_ADMIN has neither, so the persistence re-check below
+        // goes through the salon's own owner, who still has the exact same unrestricted read access
+        // this assertion needs. The PUT response above already proves the admin's edit itself
+        // succeeded; this only proves it was durably persisted via a separate read path.
         val getAfter = restTemplate.exchange(
-            url("/api/v1/salons/${salon.id}"), HttpMethod.GET, HttpEntity<Void>(bearer(adminToken)), SalonResponse::class.java,
+            url("/api/v1/salons/${salon.id}"), HttpMethod.GET, HttpEntity<Void>(bearer(ownerToken)), SalonResponse::class.java,
         )
         assertEquals("Edited By Admin", getAfter.body!!.name, "the edit must really be persisted")
     }
