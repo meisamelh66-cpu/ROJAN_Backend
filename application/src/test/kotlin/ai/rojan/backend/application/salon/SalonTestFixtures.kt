@@ -6,6 +6,9 @@ import ai.rojan.backend.domain.common.SortDirection
 import ai.rojan.backend.domain.salon.Branch
 import ai.rojan.backend.domain.salon.BranchId
 import ai.rojan.backend.domain.salon.BranchRepository
+import ai.rojan.backend.domain.salon.GalleryImage
+import ai.rojan.backend.domain.salon.GalleryImageId
+import ai.rojan.backend.domain.salon.GalleryImageRepository
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
@@ -76,6 +79,13 @@ internal class InMemorySpecialistRepository : SpecialistRepository {
     override fun save(specialist: Specialist): Specialist = specialist.also { store[it.id] = it }
     override fun findById(id: SpecialistId): Specialist? = store[id]
     override fun findBySalonId(salonId: SalonId): List<Specialist> = store.values.filter { it.salonId == salonId }
+}
+
+internal class InMemoryGalleryImageRepository : GalleryImageRepository {
+    private val store = mutableMapOf<GalleryImageId, GalleryImage>()
+    override fun save(image: GalleryImage): GalleryImage = image.also { store[it.id] = it }
+    override fun findBySalonId(salonId: SalonId): List<GalleryImage> =
+        store.values.filter { it.salonId == salonId }.sortedBy { it.displayOrder }
 }
 
 internal class InMemorySalonUserRepository : UserRepository {
