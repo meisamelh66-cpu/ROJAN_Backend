@@ -278,6 +278,24 @@ after creation). Response (`SpecialistResponse`): `id`, `salonId`,
 
 ---
 
+## Gallery
+
+A salon's customer-facing photo gallery. Read-only this phase (D6: Build
+now) - no upload/reorder/delete endpoint exists yet; rows are seeded
+directly until salon-side gallery management is built as its own,
+separate piece of work.
+
+| Method | Path | Auth |
+|---|---|---|
+| GET | `/api/v1/salons/{salonId}/gallery` | Any authenticated user |
+
+Response (`GalleryImageResponse[]`): `id`, `salonId`, `url`,
+`displayOrder`. Always pre-sorted by `displayOrder` ascending. An unknown
+`salonId` or a salon with no images both return a real empty array, never
+an error or fabricated data.
+
+---
+
 ## Availability
 
 Three layers: a salon's **working hours**, a specialist's **schedule**
