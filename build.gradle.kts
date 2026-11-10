@@ -9,8 +9,21 @@ plugins {
     alias(libs.plugins.kotlin.jpa) apply false
     alias(libs.plugins.spring.boot) apply false
     alias(libs.plugins.spring.dependency.management) apply false
+    id("org.owasp.dependencycheck") version "13.0.0"
 }
 
+dependencyCheck {
+    failBuildOnCVSS = 11.0f
+    formats = listOf("HTML", "JSON")
+
+    nvd {
+        apiKey = System.getenv("NVD_API_KEY")
+    }
+
+    data {
+        directory = "${rootProject.projectDir}/.dependency-check-data"
+    }
+}
 allprojects {
     group = "ai.rojan.backend"
     version = "1.0.0"
