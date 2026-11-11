@@ -9,6 +9,7 @@ import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.booking.BookingId
 import ai.rojan.backend.domain.booking.BookingStatus
+import ai.rojan.backend.domain.booking.PaymentMethod
 import ai.rojan.backend.domain.common.AmbiguousSalonContextException
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.SalonNotFoundException
@@ -62,6 +63,7 @@ class GetDashboardInsightsUseCaseTest {
             endTime = startTime.plusMinutes(30),
             status = status,
             notes = null,
+            paymentMethod = PaymentMethod.WALLET,
             createdAt = Instant.now(),
             updatedAt = Instant.now(),
         ).also { bookingRepository.save(it) }

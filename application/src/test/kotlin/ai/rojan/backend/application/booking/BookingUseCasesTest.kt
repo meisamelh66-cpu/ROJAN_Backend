@@ -9,6 +9,7 @@ import ai.rojan.backend.application.salon.InMemorySpecialistServiceRepository
 import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.BookingId
 import ai.rojan.backend.domain.booking.BookingStatus
+import ai.rojan.backend.domain.booking.PaymentMethod
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.common.BookingConflictException
 import ai.rojan.backend.domain.common.InvalidBookingStateException
@@ -70,6 +71,22 @@ class BookingUseCasesTest {
         assertThrows(BookingConflictException::class.java) {
             createBooking(customerId = otherCustomer, startTime = start.plusMinutes(15))
         }
+    }
+
+    // P0-7: the customer's PaymentMethod choice must flow from the request (CreateBookingCommand)
+    // into the persisted domain Booking, not be dropped by the use case.
+    @Test
+    fun `creates a booking with the selected payment method`() {
+        val booking = createUseCase.execute(
+            CreateBookingCommand(salon.id, service.id, specialist.id, customer, start, "First visit", PaymentMethod.PAY_AT_SALON),
+        )
+        assertEquals(PaymentMethod.PAY_AT_SALON, booking.paymentMethod)
+    }
+
+    @Test
+    fun `a booking created without specifying a payment method defaults to WALLET - backward compatible default`() {
+        val booking = createBooking()
+        assertEquals(PaymentMethod.WALLET, booking.paymentMethod)
     }
 
     @Test

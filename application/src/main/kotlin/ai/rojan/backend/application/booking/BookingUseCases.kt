@@ -4,6 +4,7 @@ import ai.rojan.backend.application.salon.SalonPermissionResolver
 import ai.rojan.backend.domain.booking.Booking
 import ai.rojan.backend.domain.booking.BookingId
 import ai.rojan.backend.domain.booking.BookingRepository
+import ai.rojan.backend.domain.booking.PaymentMethod
 import ai.rojan.backend.domain.common.BookingNotFoundException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.ServiceNotFoundException
@@ -32,6 +33,7 @@ data class CreateBookingCommand(
     val customerId: UserId,
     val startTime: LocalDateTime,
     val notes: String?,
+    val paymentMethod: PaymentMethod = PaymentMethod.WALLET,
 )
 
 class CreateBookingUseCase(
@@ -67,6 +69,7 @@ class CreateBookingUseCase(
             startTime = command.startTime,
             endTime = endTime,
             notes = command.notes,
+            paymentMethod = command.paymentMethod,
         )
         val savedBooking = bookingRepository.reserve(booking)
         if (notificationRepository != null) {

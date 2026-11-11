@@ -1,0 +1,2 @@
+ALTER TABLE bookings
+    ADD COLUMN payment_method VARCHAR(16) NOT NULL DEFAULT 'WALLET';

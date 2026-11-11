@@ -164,6 +164,7 @@ class BookingRepositoryAdapter(
                 endTime = booking.endTime,
                 status = booking.status,
                 notes = booking.notes,
+                paymentMethod = booking.paymentMethod,
             )
         return jpaRepository.save(entity).toDomain()
     }
@@ -178,6 +179,7 @@ class BookingRepositoryAdapter(
         endTime = endTime,
         status = status,
         notes = notes,
+        paymentMethod = paymentMethod,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
     )

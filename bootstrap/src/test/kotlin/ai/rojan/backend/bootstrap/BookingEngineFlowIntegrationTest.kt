@@ -24,6 +24,7 @@ import ai.rojan.backend.api.schedule.TimeIntervalDto
 import ai.rojan.backend.api.schedule.WeeklyAvailabilityResponse
 import ai.rojan.backend.api.schedule.WorkingHoursResponse
 import ai.rojan.backend.domain.booking.BookingStatus
+import ai.rojan.backend.domain.booking.PaymentMethod
 import ai.rojan.backend.domain.user.UserRole
 import io.zonky.test.db.AutoConfigureEmbeddedDatabase
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -157,12 +158,26 @@ class BookingEngineFlowIntegrationTest {
         val createBooking = restTemplate.exchange(
             url("/api/v1/bookings"),
             HttpMethod.POST,
-            HttpEntity(CreateBookingRequest(salon.id, service.id, specialist.id, chosenSlot.start, "First visit"), bearer(customerToken)),
+            HttpEntity(
+                CreateBookingRequest(salon.id, service.id, specialist.id, chosenSlot.start, "First visit", PaymentMethod.PAY_AT_SALON),
+                bearer(customerToken),
+            ),
             BookingResponse::class.java,
         )
         assertEquals(HttpStatus.CREATED, createBooking.statusCode)
         val booking = requireNotNull(createBooking.body)
         assertEquals(BookingStatus.PENDING, booking.status)
+        // P0-7: the customer's selected payment method must survive the full
+        // request -> use case -> domain -> Postgres -> response round-trip.
+        assertEquals(PaymentMethod.PAY_AT_SALON, booking.paymentMethod)
+
+        val fetched = restTemplate.exchange(
+            url("/api/v1/bookings/${booking.id}"),
+            HttpMethod.GET,
+            HttpEntity<Void>(bearer(customerToken)),
+            BookingResponse::class.java,
+        )
+        assertEquals(PaymentMethod.PAY_AT_SALON, fetched.body?.paymentMethod)
 
         val slotsAfterBooking = restTemplate.exchange(
             url("/api/v1/salons/${salon.id}/specialists/${specialist.id}/available-slots?serviceId=${service.id}&date=$monday&slotIntervalMinutes=30"),

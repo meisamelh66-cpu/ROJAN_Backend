@@ -411,6 +411,7 @@ class CustomerController(
         endTime = endTime,
         status = status,
         notes = notes,
+        paymentMethod = paymentMethod,
         createdAt = createdAt,
         updatedAt = updatedAt,
     )

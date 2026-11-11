@@ -126,6 +126,7 @@ class BookingController(
                 customerId = customerId,
                 startTime = request.startTime,
                 notes = request.notes,
+                paymentMethod = request.paymentMethod,
             ),
         )
         val response = booking.toResponse()
@@ -156,7 +157,8 @@ class BookingController(
 
     private fun fingerprintOf(customerId: UserId, request: CreateBookingRequest): String {
         val raw = listOf(
-            customerId.value, request.salonId, request.serviceId, request.specialistId, request.startTime, request.notes.orEmpty(),
+            customerId.value, request.salonId, request.serviceId, request.specialistId, request.startTime,
+            request.notes.orEmpty(), request.paymentMethod.name,
         ).joinToString("|")
         return MessageDigest.getInstance("SHA-256").digest(raw.toByteArray()).joinToString("") { "%02x".format(it) }
     }
@@ -249,6 +251,7 @@ class BookingController(
         endTime = endTime,
         status = status,
         notes = notes,
+        paymentMethod = paymentMethod,
         createdAt = createdAt,
         updatedAt = updatedAt,
     )

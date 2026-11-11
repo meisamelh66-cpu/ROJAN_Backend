@@ -40,6 +40,7 @@ class Booking private constructor(
     endTime: LocalDateTime,
     status: BookingStatus,
     notes: String?,
+    val paymentMethod: PaymentMethod,
     val createdAt: Instant,
     updatedAt: Instant,
 ) {
@@ -103,6 +104,7 @@ class Booking private constructor(
             startTime: LocalDateTime,
             endTime: LocalDateTime,
             notes: String?,
+            paymentMethod: PaymentMethod = PaymentMethod.WALLET,
         ): Booking {
             require(startTime < endTime) { "Booking start must be before end" }
             val now = Instant.now()
@@ -116,6 +118,7 @@ class Booking private constructor(
                 endTime = endTime,
                 status = BookingStatus.PENDING,
                 notes = notes?.trim()?.ifBlank { null },
+                paymentMethod = paymentMethod,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -131,10 +134,11 @@ class Booking private constructor(
             endTime: LocalDateTime,
             status: BookingStatus,
             notes: String?,
+            paymentMethod: PaymentMethod,
             createdAt: Instant,
             updatedAt: Instant,
         ): Booking = Booking(
-            id, salonId, serviceId, specialistId, customerId, startTime, endTime, status, notes, createdAt, updatedAt,
+            id, salonId, serviceId, specialistId, customerId, startTime, endTime, status, notes, paymentMethod, createdAt, updatedAt,
         )
     }
 }

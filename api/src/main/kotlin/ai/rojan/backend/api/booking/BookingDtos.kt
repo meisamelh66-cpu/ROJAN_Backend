@@ -1,6 +1,7 @@
 package ai.rojan.backend.api.booking
 
 import ai.rojan.backend.domain.booking.BookingStatus
+import ai.rojan.backend.domain.booking.PaymentMethod
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.Future
 import jakarta.validation.constraints.NotNull
@@ -27,6 +28,9 @@ data class CreateBookingRequest(
     @field:Size(max = 1000)
     @field:Schema(example = "First visit, prefers a quiet chair")
     val notes: String?,
+
+    @field:Schema(description = "Defaults to WALLET when omitted, for backward compatibility with older clients")
+    val paymentMethod: PaymentMethod = PaymentMethod.WALLET,
 )
 
 /** ROJAN Reception Booking Flow (Phase 0): request body for `POST /api/v1/salons/{salonId}/bookings` - the owner-authorized counterpart to [CreateBookingRequest], which has no `customerId` field at all (it always books the caller). [customerId] is a CRM `Customer` id, not a `User` id - the target customer must already be linked to an account (see `CustomerNotLinkedToAccountException`). */
@@ -70,6 +74,7 @@ data class BookingResponse(
     val status: BookingStatus,
 
     val notes: String?,
+    val paymentMethod: PaymentMethod,
     val createdAt: Instant,
     val updatedAt: Instant,
 )

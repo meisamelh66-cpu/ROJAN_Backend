@@ -30,6 +30,27 @@ class BookingTest {
     }
 
     @Test
+    fun `defaults to WALLET when no payment method is supplied - backward compatible default`() {
+        val booking = newBooking()
+        assertEquals(PaymentMethod.WALLET, booking.paymentMethod)
+    }
+
+    @Test
+    fun `records the payment method the customer selected`() {
+        val booking = Booking.create(
+            salonId = SalonId.new(),
+            serviceId = ServiceId.new(),
+            specialistId = SpecialistId.new(),
+            customerId = UserId.new(),
+            startTime = LocalDateTime.of(2026, 8, 10, 9, 0),
+            endTime = LocalDateTime.of(2026, 8, 10, 9, 30),
+            notes = null,
+            paymentMethod = PaymentMethod.PAY_AT_SALON,
+        )
+        assertEquals(PaymentMethod.PAY_AT_SALON, booking.paymentMethod)
+    }
+
+    @Test
     fun `rejects a start time that is not before end`() {
         val same = LocalDateTime.of(2026, 8, 10, 9, 0)
         assertThrows(IllegalArgumentException::class.java) {

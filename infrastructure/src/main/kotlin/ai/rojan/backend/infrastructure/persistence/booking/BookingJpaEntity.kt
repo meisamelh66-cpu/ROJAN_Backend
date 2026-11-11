@@ -1,6 +1,7 @@
 package ai.rojan.backend.infrastructure.persistence.booking
 
 import ai.rojan.backend.domain.booking.BookingStatus
+import ai.rojan.backend.domain.booking.PaymentMethod
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EntityListeners
@@ -46,6 +47,10 @@ class BookingJpaEntity(
 
     @Column(nullable = true)
     var notes: String?,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", nullable = false, length = 16)
+    var paymentMethod: PaymentMethod,
 ) {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
