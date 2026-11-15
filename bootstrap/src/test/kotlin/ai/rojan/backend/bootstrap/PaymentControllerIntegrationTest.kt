@@ -21,7 +21,6 @@ import ai.rojan.backend.api.salon.SpecialistResponse
 import ai.rojan.backend.api.schedule.SetWeeklyAvailabilityRequest
 import ai.rojan.backend.api.schedule.SetWorkingHoursRequest
 import ai.rojan.backend.api.schedule.TimeIntervalDto
-import ai.rojan.backend.domain.booking.PaymentMethod
 import ai.rojan.backend.domain.payment.PaymentStatus
 import ai.rojan.backend.domain.payment.PaymentTransactionMethod
 import ai.rojan.backend.domain.salon.SalonId
@@ -149,7 +148,7 @@ class PaymentControllerIntegrationTest {
     private fun createPendingBooking(fixture: SalonFixture, customerToken: String, day: LocalDate = nextDayOfWeek(DayOfWeek.MONDAY), hour: Int = 10): BookingResponse {
         val request = CreateBookingRequest(
             salonId = fixture.salonId, serviceId = fixture.serviceId, specialistId = fixture.specialistId,
-            startTime = day.atTime(hour, 0), notes = null, paymentMethod = PaymentMethod.WALLET,
+            startTime = day.atTime(hour, 0), notes = null,
         )
         return requireNotNull(
             restTemplate.exchange(url("/api/v1/bookings"), HttpMethod.POST, HttpEntity(request, bearer(customerToken)), BookingResponse::class.java).body,
