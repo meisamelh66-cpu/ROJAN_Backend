@@ -100,6 +100,17 @@ rojan:
     storage-root: ${MEDIA_STORAGE_ROOT:/app/uploads}
     public-base-url: ${MEDIA_PUBLIC_BASE_URL:http://localhost:8080}
 
+  # Payment Gateway Step 6: merchant-id has no default on purpose, same as JWT_SECRET/sms.api-key
+  # above - startup must fail loudly if ZARINPAL_MERCHANT_ID is unset in any profile other than
+  # "test" (see ZarinpalPropertiesConfig), rather than silently booting with an unusable payment
+  # integration. api-url/start-pay-url are Zarinpal's own public, stable, non-secret endpoints - safe
+  # to default, still overridable (e.g. Zarinpal's sandbox environment).
+  zarinpal:
+    merchant-id: ${ZARINPAL_MERCHANT_ID}
+    api-url: ${ZARINPAL_API_URL:https://payment.zarinpal.com/pg/v4/payment}
+    start-pay-url: ${ZARINPAL_START_PAY_URL:https://payment.zarinpal.com/pg/StartPay}
+    timeout-seconds: ${ZARINPAL_TIMEOUT_SECONDS:15}
+
 # SMS Provider Integration: no defaults on purpose, same as JWT_SECRET above
 # - startup must fail loudly if these are unset, rather than silently
 # booting with an SMS integration that can never actually deliver a code.

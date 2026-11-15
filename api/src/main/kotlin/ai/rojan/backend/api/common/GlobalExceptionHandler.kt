@@ -34,6 +34,9 @@ import ai.rojan.backend.domain.common.MediaTypeMismatchException
 import ai.rojan.backend.domain.common.NotificationNotFoundException
 import ai.rojan.backend.domain.common.OtpRateLimitExceededException
 import ai.rojan.backend.domain.common.OtpVerifyRateLimitExceededException
+import ai.rojan.backend.domain.common.BookingNotEligibleForPaymentException
+import ai.rojan.backend.domain.common.IdempotencyKeyOwnedByAnotherCustomerException
+import ai.rojan.backend.domain.common.PaymentTransactionNotFoundException
 import ai.rojan.backend.domain.common.PhoneNumberAlreadyRegisteredException
 import ai.rojan.backend.domain.common.PlatformAccessDeniedException
 import ai.rojan.backend.domain.common.RefreshRateLimitExceededException
@@ -56,6 +59,7 @@ import ai.rojan.backend.domain.common.SpecialistLeaveNotFoundException
 import ai.rojan.backend.domain.common.SpecialistNotEligibleForServiceException
 import ai.rojan.backend.domain.common.SpecialistNotFoundException
 import ai.rojan.backend.domain.common.InvalidVerificationDocumentException
+import ai.rojan.backend.domain.common.UnknownPaymentAuthorityException
 import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.common.VerificationAlreadyPendingException
 import ai.rojan.backend.domain.common.WeeklyAvailabilityNotFoundException
@@ -153,6 +157,8 @@ class GlobalExceptionHandler {
         AppReleaseNotFoundException::class,
         NotificationNotFoundException::class,
         NoResourceFoundException::class,
+        PaymentTransactionNotFoundException::class,
+        UnknownPaymentAuthorityException::class,
     )
     fun handleNotFound(ex: Exception, request: WebRequest) =
         respond(HttpStatus.NOT_FOUND, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -193,6 +199,8 @@ class GlobalExceptionHandler {
         DocumentAlreadyAttachedException::class,
         VerificationAlreadyPendingException::class,
         AppReleaseVersionCodeAlreadyExistsException::class,
+        BookingNotEligibleForPaymentException::class,
+        IdempotencyKeyOwnedByAnotherCustomerException::class,
     )
     fun handleConflict(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -299,6 +307,10 @@ class GlobalExceptionHandler {
         is SalonNotActiveException -> "SALON_NOT_ACTIVE"
         is IdempotencyKeyConflictException -> "IDEMPOTENCY_KEY_CONFLICT"
         is AmbiguousSalonContextException -> "SALON_CONTEXT_REQUIRED"
+        is PaymentTransactionNotFoundException -> "PAYMENT_TRANSACTION_NOT_FOUND"
+        is UnknownPaymentAuthorityException -> "UNKNOWN_PAYMENT_AUTHORITY"
+        is BookingNotEligibleForPaymentException -> "BOOKING_NOT_ELIGIBLE_FOR_PAYMENT"
+        is IdempotencyKeyOwnedByAnotherCustomerException -> "IDEMPOTENCY_KEY_OWNED_BY_ANOTHER_CUSTOMER"
         is MethodArgumentNotValidException -> "VALIDATION_FAILED"
         is IllegalArgumentException -> "INVALID_ARGUMENT"
         is MissingServletRequestParameterException, is MethodArgumentTypeMismatchException, is HttpMessageNotReadableException -> "MALFORMED_REQUEST"
