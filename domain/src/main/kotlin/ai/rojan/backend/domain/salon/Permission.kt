@@ -31,4 +31,7 @@ enum class Permission {
 
     /** Reception Permission Contract: a customer's own booking history (date/service/status) - never the merged CRM timeline. */
     VIEW_CUSTOMER_BOOKING_HISTORY,
+
+    /** Payment Gateway Step 4: owner/manager viewing a salon's own payment transactions - mirrors [VIEW_CRM]'s shape for a different resource. */
+    VIEW_PAYMENTS,
 }
