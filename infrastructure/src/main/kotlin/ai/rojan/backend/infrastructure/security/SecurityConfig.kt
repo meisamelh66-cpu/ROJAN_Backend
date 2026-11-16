@@ -84,6 +84,12 @@ class SecurityConfig(
                     // semi-public-by-nature URLs - confirmed live: salon media GETs 200/404,
                     // user media GETs 401 AUTH_UNAUTHORIZED for the identical request shape.
                     .requestMatchers(HttpMethod.GET, "/media/users/*/media/**").permitAll()
+                    // Payment Gateway Step 5: the gateway's own browser redirect hits this route
+                    // directly - it carries no bearer token and must not be asked to present one.
+                    // The handler itself treats Authority/Status as fully untrusted input and
+                    // re-verifies via PaymentGatewayPort, so "unauthenticated" here only means
+                    // "no JWT required to reach the endpoint", not "no verification happens".
+                    .requestMatchers(HttpMethod.GET, "/api/v1/payments/callback/**").permitAll()
                     .anyRequest().authenticated()
             }
             .addFilterBefore(

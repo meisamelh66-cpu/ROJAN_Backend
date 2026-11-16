@@ -52,6 +52,9 @@ class SalonRoleTest {
                 Permission.VIEW_CUSTOMER_IDENTITY,
                 Permission.CREATE_CUSTOMER_IDENTITY,
                 Permission.VIEW_CUSTOMER_BOOKING_HISTORY,
+                // Payment Gateway Step 5: approved addition - a manager sees the salon's own
+                // payment transactions the same way they already see bookings/CRM.
+                Permission.VIEW_PAYMENTS,
             ),
             permissions,
         )
