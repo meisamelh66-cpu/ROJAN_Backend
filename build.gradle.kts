@@ -47,6 +47,13 @@ dependencyCheck {
         // permitted until the secret's presence is confirmed and execution is separately
         // authorized.
         apiKey = System.getenv("NVD_API_KEY")
+        // CI/Security fix: the live NVD REST API has been intermittently returning HTTP 503,
+        // failing dependencyCheckAggregate outright. datafeedUrl switches NVD updates to the
+        // dependency-check project's own official, publicly-hosted NVD JSON 2.0 mirror (built by
+        // the same maintainers from the NVD API via open-vulnerability-cli, refreshed ~daily,
+        // no authentication required) instead of depending on the live API's availability.
+        // apiKey above is left in place, unused while datafeedUrl is set, as a harmless no-op.
+        datafeedUrl = "https://dependency-check.github.io/DependencyCheck_Builder/nvd_cache/nvdcve-{0}.json.gz"
     }
     // KNOWN, DOCUMENTED LIMITATION (ROJAN_BACKEND_SECURITY_AUDIT_v1.md §12.4): this environment's
     // outbound requests to the CISA KEV feed return 403 Forbidden (a known, filed upstream issue -
