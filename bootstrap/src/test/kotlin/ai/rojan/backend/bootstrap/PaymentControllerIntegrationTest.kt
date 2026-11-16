@@ -42,6 +42,7 @@ import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
+import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
 import java.time.DayOfWeek
@@ -59,6 +60,7 @@ import java.util.UUID
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 @AutoConfigureEmbeddedDatabase(provider = AutoConfigureEmbeddedDatabase.DatabaseProvider.ZONKY)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_CLASS)
 class PaymentControllerIntegrationTest {
 
     @LocalServerPort
