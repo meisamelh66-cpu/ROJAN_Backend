@@ -66,6 +66,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Build the runtime jar (Dockerfile expects it pre-built - see its own doc comment)
         run: |
           chmod +x ./gradlew
