@@ -120,7 +120,7 @@ class InitiatePaymentUseCase(
         var initiation: GatewayInitiationResult? = null
         val result = paymentTransactionRepository.updateAtomically(transaction.id) { current ->
             if (current.status == PaymentStatus.INITIATED) {
-                initiation = paymentGatewayPort.initiate(current.amount, description, callbackUrl)
+                initiation = paymentGatewayPort.initiate(current.amount, description, callbackUrl, current.salonId)
                 current.markAwaitingCallback(gatewayProvider = paymentGatewayPort.providerName, gatewayAuthority = initiation!!.authority)
             }
         } ?: transaction
@@ -153,7 +153,7 @@ class HandlePaymentCallbackUseCase(
         return paymentTransactionRepository.updateAtomically(existing.id) { current ->
             if (current.status != PaymentStatus.AWAITING_CALLBACK) return@updateAtomically
             current.markVerifying()
-            when (val verification = paymentGatewayPort.verify(current.gatewayAuthority!!, current.amount)) {
+            when (val verification = paymentGatewayPort.verify(current.gatewayAuthority!!, current.amount, current.salonId)) {
                 is GatewayVerificationResult.Success -> current.markSucceeded(verification.gatewayReferenceId)
                 is GatewayVerificationResult.Failure -> current.markFailed(verification.reason)
             }

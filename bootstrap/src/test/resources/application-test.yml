@@ -7,6 +7,10 @@
 # overriding here — only the JWT secret, which main's application.yml
 # deliberately has no default for.
 rojan:
+  # P1 Per-Salon Payment Gateway Configuration: test-only AES key for CredentialCipher - same
+  # "clearly fake, never a real secret" posture as rojan.security.jwt.secret below.
+  payment:
+    credential-encryption-key: "gKsW7s0GeMEuLFhp7lerKxk/nCArygS9//mK6zdXO9o="
   security:
     jwt:
       secret: "integration-test-only-signing-key-not-for-production-1234567890"

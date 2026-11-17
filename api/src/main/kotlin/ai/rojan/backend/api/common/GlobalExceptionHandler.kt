@@ -41,6 +41,8 @@ import ai.rojan.backend.domain.common.OtpRateLimitExceededException
 import ai.rojan.backend.domain.common.OtpVerifyRateLimitExceededException
 import ai.rojan.backend.domain.common.BookingNotEligibleForPaymentException
 import ai.rojan.backend.domain.common.IdempotencyKeyOwnedByAnotherCustomerException
+import ai.rojan.backend.domain.common.PaymentGatewayConfigNotFoundException
+import ai.rojan.backend.domain.common.PaymentGatewayNotConfiguredException
 import ai.rojan.backend.domain.common.PaymentTransactionNotFoundException
 import ai.rojan.backend.domain.common.PhoneNumberAlreadyRegisteredException
 import ai.rojan.backend.domain.common.PlatformAccessDeniedException
@@ -166,6 +168,7 @@ class GlobalExceptionHandler {
         NoResourceFoundException::class,
         PaymentTransactionNotFoundException::class,
         UnknownPaymentAuthorityException::class,
+        PaymentGatewayConfigNotFoundException::class,
     )
     fun handleNotFound(ex: Exception, request: WebRequest) =
         respond(HttpStatus.NOT_FOUND, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -214,6 +217,7 @@ class GlobalExceptionHandler {
         AppReleaseConcurrentModificationException::class,
         BookingNotEligibleForPaymentException::class,
         IdempotencyKeyOwnedByAnotherCustomerException::class,
+        PaymentGatewayNotConfiguredException::class,
     )
     fun handleConflict(ex: Exception, request: WebRequest) =
         respond(HttpStatus.CONFLICT, errorCodeFor(ex), ex.message.orEmpty(), request)
@@ -331,6 +335,8 @@ class GlobalExceptionHandler {
         is UnknownPaymentAuthorityException -> "UNKNOWN_PAYMENT_AUTHORITY"
         is BookingNotEligibleForPaymentException -> "BOOKING_NOT_ELIGIBLE_FOR_PAYMENT"
         is IdempotencyKeyOwnedByAnotherCustomerException -> "IDEMPOTENCY_KEY_OWNED_BY_ANOTHER_CUSTOMER"
+        is PaymentGatewayConfigNotFoundException -> "PAYMENT_GATEWAY_CONFIG_NOT_FOUND"
+        is PaymentGatewayNotConfiguredException -> "PAYMENT_GATEWAY_NOT_CONFIGURED"
         is MethodArgumentNotValidException -> "VALIDATION_FAILED"
         is IllegalArgumentException -> "INVALID_ARGUMENT"
         is MissingServletRequestParameterException, is MethodArgumentTypeMismatchException, is HttpMessageNotReadableException -> "MALFORMED_REQUEST"

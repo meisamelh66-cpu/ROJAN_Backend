@@ -1,11 +1,13 @@
 package ai.rojan.backend.application.payment
 
 import ai.rojan.backend.application.port.GatewayInitiationResult
+import ai.rojan.backend.application.port.GatewayTestResult
 import ai.rojan.backend.application.port.GatewayVerificationResult
 import ai.rojan.backend.application.port.PaymentGatewayPort
 import ai.rojan.backend.domain.payment.PaymentTransaction
 import ai.rojan.backend.domain.payment.PaymentTransactionId
 import ai.rojan.backend.domain.payment.PaymentTransactionRepository
+import ai.rojan.backend.domain.salon.SalonId
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -64,14 +66,21 @@ internal class ScriptedPaymentGatewayPort : PaymentGatewayPort {
     var initiateCallCount = 0
         private set
 
-    override fun initiate(amount: Long, description: String, callbackUrl: String): GatewayInitiationResult {
+    var lastInitiateSalonId: SalonId? = null
+        private set
+    var lastVerifySalonId: SalonId? = null
+        private set
+
+    override fun initiate(amount: Long, description: String, callbackUrl: String, salonId: SalonId): GatewayInitiationResult {
         initiateCallCount++
+        lastInitiateSalonId = salonId
         val authority = "SCRIPTED-AUTH-${counter.incrementAndGet()}"
         initiatedAmounts[authority] = amount
         return GatewayInitiationResult(authority, redirectUrlFor(authority))
     }
 
-    override fun verify(authority: String, amount: Long): GatewayVerificationResult {
+    override fun verify(authority: String, amount: Long, salonId: SalonId): GatewayVerificationResult {
+        lastVerifySalonId = salonId
         val reason = scriptedFailures[authority]
         val initiatedAmount = initiatedAmounts[authority]
         return when {
@@ -82,6 +91,8 @@ internal class ScriptedPaymentGatewayPort : PaymentGatewayPort {
     }
 
     override fun redirectUrlFor(authority: String): String = "https://scripted-gateway.test/pay/$authority"
+
+    override fun testCredential(salonId: SalonId): GatewayTestResult = GatewayTestResult.Success
 
     fun scriptVerificationFailure(authority: String, reason: String) {
         scriptedFailures[authority] = reason

@@ -55,8 +55,20 @@ class SalonRoleTest {
                 // Payment Gateway Step 5: approved addition - a manager sees the salon's own
                 // payment transactions the same way they already see bookings/CRM.
                 Permission.VIEW_PAYMENTS,
+                // P1 Per-Salon Payment Gateway Configuration (correction, user-approved): a
+                // manager configures/tests/activates/deactivates the salon's own payment gateway
+                // the same way they already manage its catalog/staff/schedule.
+                Permission.MANAGE_PAYMENT_GATEWAY,
             ),
             permissions,
         )
+    }
+
+    @Test
+    fun `receptionist never receives payment gateway configuration access`() {
+        val permissions = SalonRole.RECEPTIONIST.permissions()
+
+        assertFalse(permissions.contains(Permission.MANAGE_PAYMENT_GATEWAY))
+        assertFalse(permissions.contains(Permission.VIEW_PAYMENTS))
     }
 }

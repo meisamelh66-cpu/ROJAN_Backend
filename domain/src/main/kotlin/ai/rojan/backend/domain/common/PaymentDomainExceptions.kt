@@ -18,3 +18,11 @@ class IdempotencyKeyOwnedByAnotherCustomerException(key: String) :
 /** Payment Gateway Step 4 — a callback referencing a gateway authority this backend never issued. */
 class UnknownPaymentAuthorityException(authority: String) :
     DomainException("No payment transaction found for gateway authority: $authority")
+
+/** P1 Per-Salon Payment Gateway Configuration — a real gateway call (initiate/verify) was attempted for a salon with no active [ai.rojan.backend.domain.payment.PaymentGatewayConfig]. Never a fallback to any global credential. */
+class PaymentGatewayNotConfiguredException(salonId: String) :
+    DomainException("Salon $salonId has no active payment gateway configuration")
+
+/** P1 Per-Salon Payment Gateway Configuration — activate/deactivate/test attempted for a salon that has never saved a [ai.rojan.backend.domain.payment.PaymentGatewayConfig] at all (distinct from one saved but inactive). */
+class PaymentGatewayConfigNotFoundException(salonId: String) :
+    DomainException("Salon $salonId has no payment gateway configuration saved yet")

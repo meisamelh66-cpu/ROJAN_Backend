@@ -1,5 +1,7 @@
 package ai.rojan.backend.application.port
 
+import ai.rojan.backend.domain.salon.SalonId
+
 /**
  * Output port for online-payment gateway calls — deliberately vendor-agnostic, same role
  * [SmsProviderPort] already plays for SMS delivery. No provider-specific type (a JSON response
@@ -11,16 +13,24 @@ package ai.rojan.backend.application.port
  * [amount] is `Long` minor-unit Rials everywhere this port is used, matching
  * [ai.rojan.backend.domain.payment.PaymentTransaction.amount]'s own representation — never a
  * floating-point type.
+ *
+ * P1 Per-Salon Payment Gateway Configuration: [initiate]/[verify]/[testCredential] all take
+ * [salonId] so a real adapter can resolve *that salon's own* credential (never one global, shared
+ * value) — [initiate]/[verify]'s caller always passes the real
+ * [ai.rojan.backend.domain.payment.PaymentTransaction.salonId] of the transaction the call is for,
+ * never a value it invents. The real merchant-id plaintext is decrypted only inside the real
+ * adapter, at the point it's genuinely needed for the outbound call — it never crosses this port's
+ * boundary as a parameter or return value.
  */
 interface PaymentGatewayPort {
     /** A short, stable, storable identifier for whichever provider this instance is (`"ZARINPAL"`, `"FAKE"`, ...) — lets a caller persist which gateway handled a transaction without hardcoding any provider's name itself. */
     val providerName: String
 
-    /** Starts a new payment attempt. [callbackUrl] is where the gateway sends the paying customer's browser back to once they finish (or abandon) payment. */
-    fun initiate(amount: Long, description: String, callbackUrl: String): GatewayInitiationResult
+    /** Starts a new payment attempt, using [salonId]'s own gateway credential. [callbackUrl] is where the gateway sends the paying customer's browser back to once they finish (or abandon) payment. */
+    fun initiate(amount: Long, description: String, callbackUrl: String, salonId: SalonId): GatewayInitiationResult
 
-    /** Confirms whether a prior [initiate] attempt, identified by its own [authority], genuinely succeeded for exactly [amount] — the caller's own stored amount, never trusted from anywhere else. */
-    fun verify(authority: String, amount: Long): GatewayVerificationResult
+    /** Confirms whether a prior [initiate] attempt, identified by its own [authority], genuinely succeeded for exactly [amount] — the caller's own stored amount, never trusted from anywhere else. Uses [salonId]'s own gateway credential, same as [initiate]. */
+    fun verify(authority: String, amount: Long, salonId: SalonId): GatewayVerificationResult
 
     /**
      * Payment Gateway Step 4 — a pure, no-network function of [authority] alone, used only to let a caller that
@@ -31,6 +41,16 @@ interface PaymentGatewayPort {
      * implement this with zero network access, same as the fake.
      */
     fun redirectUrlFor(authority: String): String
+
+    /**
+     * P1 Per-Salon Payment Gateway Configuration — a real, minimal, non-persisting connectivity/
+     * credential-validity probe for [salonId]'s own currently-saved credential (active or not — a
+     * Manager may test a credential before activating it). Never creates a
+     * [ai.rojan.backend.domain.payment.PaymentTransaction]; a real adapter implements this however
+     * fits its own API (Zarinpal: a minimal real `request.json` call with a nominal, fixed test
+     * amount/description/callback, discarding any authority it gets back).
+     */
+    fun testCredential(salonId: SalonId): GatewayTestResult
 }
 
 /** [authority] is an opaque, gateway-issued token for this one attempt. [redirectUrl] is where the caller sends the customer's browser to actually pay. */
@@ -45,4 +65,11 @@ sealed interface GatewayVerificationResult {
 
     /** [reason] is a human-readable, logging-safe description — never the gateway's raw response body. */
     data class Failure(val reason: String) : GatewayVerificationResult
+}
+
+sealed interface GatewayTestResult {
+    data object Success : GatewayTestResult
+
+    /** [reason] is a human-readable, logging-safe description — never the gateway's raw response body, never the merchant id. */
+    data class Failure(val reason: String) : GatewayTestResult
 }

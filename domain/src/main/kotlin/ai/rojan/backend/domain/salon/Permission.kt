@@ -34,4 +34,7 @@ enum class Permission {
 
     /** Payment Gateway Step 4: owner/manager viewing a salon's own payment transactions - mirrors [VIEW_CRM]'s shape for a different resource. */
     VIEW_PAYMENTS,
+
+    /** P1 Per-Salon Payment Gateway Configuration: get/save/activate/deactivate/test a salon's own gateway credential. Granted to the owner (always, implicitly) and to [SalonRole.MANAGER] (correction, user-approved) - a manager runs the salon day-to-day and configures its payment gateway the same way they already manage its catalog/staff/schedule; this is scoped to *that one salon's own* config, never another's (cross-salon is enforced via [SalonPermissionResolver.require] regardless of role), so it carries none of [MANAGE_SALON]/[MANAGE_MEMBERSHIP]'s privilege-escalation concern. */
+    MANAGE_PAYMENT_GATEWAY,
 }

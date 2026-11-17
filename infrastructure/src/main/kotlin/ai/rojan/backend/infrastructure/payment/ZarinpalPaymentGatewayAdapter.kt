@@ -1,8 +1,13 @@
 package ai.rojan.backend.infrastructure.payment
 
+import ai.rojan.backend.application.port.CredentialEncryptionPort
 import ai.rojan.backend.application.port.GatewayInitiationResult
+import ai.rojan.backend.application.port.GatewayTestResult
 import ai.rojan.backend.application.port.GatewayVerificationResult
 import ai.rojan.backend.application.port.PaymentGatewayPort
+import ai.rojan.backend.domain.common.PaymentGatewayNotConfiguredException
+import ai.rojan.backend.domain.payment.PaymentGatewayConfigRepository
+import ai.rojan.backend.domain.salon.SalonId
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.context.annotation.Profile
@@ -24,6 +29,13 @@ import java.time.Duration
  * [PaymentGatewayException] (never a raw [IOException], Jackson exception, or Zarinpal error code
  * reaching Application/Domain). Uses the JDK's own `java.net.http.HttpClient`, same as that SMS
  * adapter, rather than adding a new HTTP-client Gradle dependency for one outbound integration.
+ *
+ * P1 Per-Salon Payment Gateway Configuration: `merchant_id` is no longer a fixed, injected,
+ * global value - [resolveActiveMerchantId]/[resolveSavedMerchantId] look up *that specific call's
+ * own* salon in [paymentGatewayConfigRepository] and decrypt its stored credential via
+ * [credentialEncryptionPort], right here, at the one point a real outbound Zarinpal call genuinely
+ * needs the plaintext. A salon with no saved config throws [PaymentGatewayNotConfiguredException] -
+ * there is no fallback to any global/shared merchant id.
  *
  * Amount: Zarinpal's v4 `amount` field is Rial by default, with an optional `currency` field of
  * `"IRR"`/`"IRT"` - this backend's own [ai.rojan.backend.domain.payment.PaymentTransaction.amount] is
@@ -50,6 +62,8 @@ import java.time.Duration
 @Profile("!test")
 class ZarinpalPaymentGatewayAdapter(
     private val zarinpalProperties: ZarinpalProperties,
+    private val paymentGatewayConfigRepository: PaymentGatewayConfigRepository,
+    private val credentialEncryptionPort: CredentialEncryptionPort,
 ) : PaymentGatewayPort {
 
     override val providerName: String = "ZARINPAL"
@@ -59,11 +73,11 @@ class ZarinpalPaymentGatewayAdapter(
         .connectTimeout(Duration.ofSeconds(zarinpalProperties.timeoutSeconds))
         .build()
 
-    override fun initiate(amount: Long, description: String, callbackUrl: String): GatewayInitiationResult {
+    override fun initiate(amount: Long, description: String, callbackUrl: String, salonId: SalonId): GatewayInitiationResult {
         val root = postJson(
             path = "request.json",
             body = linkedMapOf(
-                "merchant_id" to zarinpalProperties.merchantId,
+                "merchant_id" to resolveActiveMerchantId(salonId),
                 "amount" to amount,
                 "currency" to CURRENCY,
                 "callback_url" to callbackUrl,
@@ -79,11 +93,11 @@ class ZarinpalPaymentGatewayAdapter(
         return GatewayInitiationResult(authority = authority, redirectUrl = redirectUrlFor(authority))
     }
 
-    override fun verify(authority: String, amount: Long): GatewayVerificationResult {
+    override fun verify(authority: String, amount: Long, salonId: SalonId): GatewayVerificationResult {
         val root = postJson(
             path = "verify.json",
             body = linkedMapOf(
-                "merchant_id" to zarinpalProperties.merchantId,
+                "merchant_id" to resolveActiveMerchantId(salonId),
                 "amount" to amount,
                 "authority" to authority,
             ),
@@ -99,6 +113,40 @@ class ZarinpalPaymentGatewayAdapter(
 
     override fun redirectUrlFor(authority: String): String =
         "${zarinpalProperties.startPayUrl.trimEnd('/')}/$authority"
+
+    /** A minimal, non-persisting real `request.json` call against [salonId]'s own currently-saved credential (active or not). Never returns an authority to the caller - this is a pure validity probe, not a real payment attempt. */
+    override fun testCredential(salonId: SalonId): GatewayTestResult {
+        val root = try {
+            postJson(
+                path = "request.json",
+                body = linkedMapOf(
+                    "merchant_id" to resolveSavedMerchantId(salonId),
+                    "amount" to TEST_AMOUNT,
+                    "currency" to CURRENCY,
+                    "callback_url" to TEST_CALLBACK_URL,
+                    "description" to TEST_DESCRIPTION,
+                ),
+            )
+        } catch (ex: PaymentGatewayException) {
+            return GatewayTestResult.Failure(ex.message ?: "Zarinpal connectivity test failed")
+        }
+        val code = root.get("data")?.get("code")?.asInt(-1) ?: -1
+        return if (isSuccessCode(code)) GatewayTestResult.Success else GatewayTestResult.Failure(describeFailure(root))
+    }
+
+    /** Used by [initiate]/[verify] — a real payment only ever routes through a credential the salon has explicitly [ai.rojan.backend.domain.payment.PaymentGatewayConfig.isActive] activated. */
+    private fun resolveActiveMerchantId(salonId: SalonId): String {
+        val config = paymentGatewayConfigRepository.findBySalonId(salonId)?.takeIf { it.isActive }
+            ?: throw PaymentGatewayNotConfiguredException(salonId.value.toString())
+        return credentialEncryptionPort.decrypt(config.encryptedMerchantId)
+    }
+
+    /** Used by [testCredential] only — a Manager may test a credential before activating it, so this deliberately does not require [ai.rojan.backend.domain.payment.PaymentGatewayConfig.isActive]. */
+    private fun resolveSavedMerchantId(salonId: SalonId): String {
+        val config = paymentGatewayConfigRepository.findBySalonId(salonId)
+            ?: throw PaymentGatewayNotConfiguredException(salonId.value.toString())
+        return credentialEncryptionPort.decrypt(config.encryptedMerchantId)
+    }
 
     private fun isSuccessCode(code: Int) = code == CODE_SUCCESS || code == CODE_ALREADY_VERIFIED
 
@@ -146,6 +194,9 @@ class ZarinpalPaymentGatewayAdapter(
         const val CURRENCY = "IRR"
         const val CODE_SUCCESS = 100
         const val CODE_ALREADY_VERIFIED = 101
+        const val TEST_AMOUNT = 1_000L
+        const val TEST_DESCRIPTION = "ROJAN payment gateway connectivity test"
+        const val TEST_CALLBACK_URL = "https://api.rojanai.ir/api/v1/payments/callback/zarinpal"
     }
 }
 
