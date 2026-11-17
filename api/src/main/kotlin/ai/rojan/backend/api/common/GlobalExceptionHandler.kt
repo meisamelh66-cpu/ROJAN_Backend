@@ -53,6 +53,7 @@ import ai.rojan.backend.domain.common.InvalidMembershipAssignmentException
 import ai.rojan.backend.domain.common.SalonDocumentNotFoundException
 import ai.rojan.backend.domain.common.SalonInviteAcceptRateLimitExceededException
 import ai.rojan.backend.domain.common.SalonInviteNotFoundException
+import ai.rojan.backend.domain.common.SalonMembershipNotFoundException
 import ai.rojan.backend.domain.common.SalonNotActiveException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.SalonNotReadyForActivationException
@@ -159,6 +160,7 @@ class GlobalExceptionHandler {
         CustomerNotFoundException::class,
         CustomerTagNotFoundException::class,
         SalonInviteNotFoundException::class,
+        SalonMembershipNotFoundException::class,
         MediaAssetNotFoundException::class,
         SalonDocumentNotFoundException::class,
         SalonVerificationNotFoundException::class,
@@ -292,6 +294,7 @@ class GlobalExceptionHandler {
         is CustomerNotFoundException -> "CUSTOMER_NOT_FOUND"
         is CustomerTagNotFoundException -> "CUSTOMER_TAG_NOT_FOUND"
         is SalonInviteNotFoundException -> "SALON_INVITE_NOT_FOUND"
+        is SalonMembershipNotFoundException -> "SALON_MEMBERSHIP_NOT_FOUND"
         is MediaAssetNotFoundException -> "MEDIA_ASSET_NOT_FOUND"
         is MediaTypeInvalidException -> "MEDIA_TYPE_INVALID"
         is MediaSizeExceededException -> "MEDIA_SIZE_EXCEEDED"

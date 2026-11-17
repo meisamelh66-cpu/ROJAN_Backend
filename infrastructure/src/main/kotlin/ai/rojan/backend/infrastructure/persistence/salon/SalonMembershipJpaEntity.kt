@@ -26,6 +26,9 @@ class SalonMembershipJpaEntity(
 
     @Column(nullable = false, length = 16)
     var role: String,
+
+    @Column(nullable = false)
+    var active: Boolean = true,
 ) {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

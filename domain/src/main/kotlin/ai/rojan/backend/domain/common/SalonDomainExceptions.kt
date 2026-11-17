@@ -18,6 +18,10 @@ class SalonNotActiveException(salonId: String) :
 
 class InvalidMembershipAssignmentException(message: String) : DomainException(message)
 
+/** Staff Access Phase 1: disable/re-enable targets a membership that must already exist - distinct from [UserNotFoundException] (no ROJAN account at all) and from a first-time [ai.rojan.backend.domain.salon.SalonMembershipRepository.assign] (which creates one). */
+class SalonMembershipNotFoundException(identifier: String) :
+    DomainException("Salon membership not found: $identifier")
+
 /**
  * Covers "doesn't exist", "wrong salon", and "exists but not currently
  * usable" (expired/revoked/already-accepted) uniformly - same precedent as

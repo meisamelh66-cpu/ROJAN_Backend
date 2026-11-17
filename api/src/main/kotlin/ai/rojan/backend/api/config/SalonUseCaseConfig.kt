@@ -25,11 +25,13 @@ import ai.rojan.backend.application.salon.GetPublicCategoryServicesUseCase
 import ai.rojan.backend.application.salon.GetSalonCompletenessUseCase
 import ai.rojan.backend.application.salon.GetSalonInviteUseCase
 import ai.rojan.backend.application.salon.ListSalonInvitesUseCase
+import ai.rojan.backend.application.salon.LookupStaffCandidateUseCase
 import ai.rojan.backend.application.salon.RemoveMembershipUseCase
 import ai.rojan.backend.application.salon.ResolveMySalonAccessUseCase
 import ai.rojan.backend.application.salon.RevokeSalonInviteUseCase
 import ai.rojan.backend.application.salon.RemoveServiceFromSpecialistUseCase
 import ai.rojan.backend.application.salon.SalonPermissionResolver
+import ai.rojan.backend.application.salon.SetMembershipActiveUseCase
 import ai.rojan.backend.application.salon.UpdateBranchUseCase
 import ai.rojan.backend.application.salon.UpdateSalonCompletionProfileUseCase
 import ai.rojan.backend.application.salon.UpdateSalonUseCase
@@ -98,6 +100,20 @@ class SalonUseCaseConfig {
         membershipRepository: SalonMembershipRepository,
         salonPermissionResolver: SalonPermissionResolver,
     ) = RemoveMembershipUseCase(salonRepository, membershipRepository, salonPermissionResolver)
+
+    @Bean
+    fun setMembershipActiveUseCase(
+        salonRepository: SalonRepository,
+        membershipRepository: SalonMembershipRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = SetMembershipActiveUseCase(salonRepository, membershipRepository, salonPermissionResolver)
+
+    @Bean
+    fun lookupStaffCandidateUseCase(
+        salonRepository: SalonRepository,
+        userRepository: UserRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = LookupStaffCandidateUseCase(salonRepository, userRepository, salonPermissionResolver)
 
     @Bean
     fun createBranchUseCase(salonRepository: SalonRepository, branchRepository: BranchRepository) =

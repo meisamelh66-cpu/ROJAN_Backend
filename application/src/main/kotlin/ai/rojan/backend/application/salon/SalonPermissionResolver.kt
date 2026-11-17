@@ -23,12 +23,20 @@ class SalonPermissionResolver(
     private val membershipRepository: SalonMembershipRepository,
     private val specialistRepository: SpecialistRepository,
 ) {
-    /** Owner: every permission. Member: their [ai.rojan.backend.domain.salon.SalonRole]'s set. Own specialist link: [Permission.MANAGE_SCHEDULE_OWN] only. Otherwise: none. */
+    /**
+     * Owner: every permission. Member: their [ai.rojan.backend.domain.salon.SalonRole]'s set - but
+     * only while [ai.rojan.backend.domain.salon.SalonMembership.active] (Staff Access Phase 1: a
+     * disabled membership keeps its row/role but grants nothing - it falls through to a specialist
+     * link, then to none, exactly as if the membership row didn't exist). Own specialist link:
+     * [Permission.MANAGE_SCHEDULE_OWN] only. Otherwise: none.
+     */
     fun resolve(salonId: SalonId, callerId: UserId): Set<Permission> {
         val salon = salonRepository.findById(salonId) ?: return emptySet()
         if (salon.ownerId == callerId) return Permission.entries.toSet()
 
-        membershipRepository.findBySalonIdAndUserId(salonId, callerId)?.let { return it.role.permissions() }
+        membershipRepository.findBySalonIdAndUserId(salonId, callerId)
+            ?.takeIf { it.active }
+            ?.let { return it.role.permissions() }
 
         specialistRepository.findBySalonIdAndUserId(salonId, callerId)?.let { return setOf(Permission.MANAGE_SCHEDULE_OWN) }
 

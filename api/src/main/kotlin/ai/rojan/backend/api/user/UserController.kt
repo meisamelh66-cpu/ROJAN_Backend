@@ -152,6 +152,7 @@ class UserController(
         salonId = salon.id.value,
         salonName = salon.name,
         active = salon.active,
+        membershipActive = membership.active,
         role = membership.role,
         permissions = permissions,
     )

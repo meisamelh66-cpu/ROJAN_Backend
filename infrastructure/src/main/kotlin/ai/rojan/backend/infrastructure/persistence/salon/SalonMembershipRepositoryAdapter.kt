@@ -16,18 +16,25 @@ class SalonMembershipRepositoryAdapter(
 
     override fun assign(salonId: SalonId, userId: UserId, role: SalonRole): SalonMembership {
         val entity = jpaRepository.findBySalonIdAndUserId(salonId.value, userId.value)
-            ?.apply { this.role = role.name }
+            ?.apply { this.role = role.name; this.active = true }
             ?: SalonMembershipJpaEntity(
                 id = SalonMembershipId.new().value,
                 salonId = salonId.value,
                 userId = userId.value,
                 role = role.name,
+                active = true,
             )
         return jpaRepository.save(entity).toDomain()
     }
 
     override fun remove(salonId: SalonId, userId: UserId) {
         jpaRepository.deleteBySalonIdAndUserId(salonId.value, userId.value)
+    }
+
+    override fun setActive(salonId: SalonId, userId: UserId, active: Boolean): SalonMembership? {
+        val entity = jpaRepository.findBySalonIdAndUserId(salonId.value, userId.value) ?: return null
+        entity.active = active
+        return jpaRepository.save(entity).toDomain()
     }
 
     override fun findBySalonIdAndUserId(salonId: SalonId, userId: UserId): SalonMembership? =
@@ -44,6 +51,7 @@ class SalonMembershipRepositoryAdapter(
         salonId = SalonId(salonId),
         userId = UserId(userId),
         role = SalonRole.valueOf(role),
+        active = active,
         createdAt = createdAt ?: Instant.EPOCH,
         updatedAt = updatedAt ?: Instant.EPOCH,
     )

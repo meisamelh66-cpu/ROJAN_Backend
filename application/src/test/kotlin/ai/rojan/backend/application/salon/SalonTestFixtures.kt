@@ -226,6 +226,7 @@ internal class InMemorySalonMembershipRepository : SalonMembershipRepository {
         val existing = store[salonId to userId]
         if (existing != null) {
             existing.changeRole(role)
+            existing.activate()
             return existing
         }
         val membership = SalonMembership.create(salonId, userId, role)
@@ -235,6 +236,12 @@ internal class InMemorySalonMembershipRepository : SalonMembershipRepository {
 
     override fun remove(salonId: SalonId, userId: UserId) {
         store.remove(salonId to userId)
+    }
+
+    override fun setActive(salonId: SalonId, userId: UserId, active: Boolean): SalonMembership? {
+        val existing = store[salonId to userId] ?: return null
+        if (active) existing.activate() else existing.deactivate()
+        return existing
     }
 
     override fun findBySalonIdAndUserId(salonId: SalonId, userId: UserId): SalonMembership? = store[salonId to userId]

@@ -30,6 +30,8 @@ data class MembershipAccessDto(
     val salonId: UUID,
     val salonName: String,
     val active: Boolean,
+    /** Staff Access Phase 1: the membership's own active/disabled state - distinct from [active] above (the salon's). [permissions] is already empty when this is `false` (see [ai.rojan.backend.application.salon.SalonPermissionResolver.resolve]); exposed explicitly so a client can tell "disabled" apart from "this role simply has no permissions". */
+    val membershipActive: Boolean,
     val role: SalonRole,
     val permissions: Set<Permission>,
 )

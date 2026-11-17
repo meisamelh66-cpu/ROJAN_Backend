@@ -1,6 +1,7 @@
 package ai.rojan.backend.application.salon
 
 import ai.rojan.backend.domain.common.InvalidMembershipAssignmentException
+import ai.rojan.backend.domain.common.SalonMembershipNotFoundException
 import ai.rojan.backend.domain.common.SalonNotFoundException
 import ai.rojan.backend.domain.common.UserNotFoundException
 import ai.rojan.backend.domain.salon.Permission
@@ -55,5 +56,28 @@ class RemoveMembershipUseCase(
         salonPermissionResolver.require(salon.id, command.callerId, Permission.MANAGE_MEMBERSHIP)
 
         membershipRepository.remove(salon.id, command.targetUserId)
+    }
+}
+
+data class SetMembershipActiveCommand(val salonId: SalonId, val callerId: UserId, val targetUserId: UserId, val active: Boolean)
+
+/**
+ * Disable (or re-enable) an existing membership in place - the "normal staff deactivation" path,
+ * deliberately distinct from [RemoveMembershipUseCase]'s hard delete (true removal keeps its own,
+ * separate semantics; this never deletes the row, never touches [SalonMembership.role] - role and
+ * permissions remain attached while disabled, per the Staff Access Phase 1 contract).
+ */
+class SetMembershipActiveUseCase(
+    private val salonRepository: SalonRepository,
+    private val membershipRepository: SalonMembershipRepository,
+    private val salonPermissionResolver: SalonPermissionResolver,
+) {
+    fun execute(command: SetMembershipActiveCommand): SalonMembership {
+        val salon = salonRepository.findById(command.salonId)
+            ?: throw SalonNotFoundException(command.salonId.value.toString())
+        salonPermissionResolver.require(salon.id, command.callerId, Permission.MANAGE_MEMBERSHIP)
+
+        return membershipRepository.setActive(salon.id, command.targetUserId, command.active)
+            ?: throw SalonMembershipNotFoundException(command.targetUserId.value.toString())
     }
 }
