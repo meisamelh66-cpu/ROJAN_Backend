@@ -206,7 +206,7 @@ class PaymentUseCasesTest {
         // Deliberately constructs a transaction whose own stored amount differs from what the gateway
         // actually recorded at initiate time - the real, concrete shape an amount-mismatch takes.
         val mismatchedAmount = 999_999L
-        val authority = gateway.initiate(100_000, "x", "https://cb").authority
+        val authority = gateway.initiate(100_000, "x", "https://cb", salon.id).authority
         val transaction = PaymentTransaction.reconstitute(
             id = PaymentTransactionId.new(),
             salonId = salon.id,

@@ -35,6 +35,14 @@ enum class SalonRole {
             // payment transactions the same way they already see bookings/CRM - approved by the
             // user explicitly when Step 5's audit found this gap (MANAGER had no VIEW_PAYMENTS).
             Permission.VIEW_PAYMENTS,
+            // P1 Per-Salon Payment Gateway Configuration (correction, user-approved): a manager
+            // runs the salon day-to-day and must be able to configure/test/activate/deactivate its
+            // own payment gateway the same way they already manage its catalog/staff/schedule -
+            // this permission was initially left owner-only by mistake (wrongly modeled after
+            // MANAGE_SALON/MANAGE_MEMBERSHIP's privilege-escalation concern, which does not apply
+            // here: granting it to MANAGER lets a manager configure *this salon's own* gateway,
+            // never grant/revoke anyone's access or change salon identity/ownership).
+            Permission.MANAGE_PAYMENT_GATEWAY,
         )
         // Reception Permission Contract Update ADR v1: booking-operational access plus the
         // three narrow customer-identity permissions - deliberately no VIEW_CRM/MANAGE_CRM.

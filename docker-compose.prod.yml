@@ -132,6 +132,16 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-rojan-ai-backend}
       JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-15}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+      # P1 Per-Salon Payment Gateway Configuration: the AES-256-GCM key every
+      # salon's own stored Zarinpal merchant id (payment_gateway_configs.
+      # encrypted_merchant_id) is encrypted/decrypted with - see
+      # PaymentCredentialProperties.kt's own doc comment. No default on
+      # purpose, same fail-loud posture as JWT_SECRET above, and bound in
+      # every profile (not just prod) - see that class for why. This is NOT
+      # a Zarinpal merchant id - there is no global merchant id anymore;
+      # each salon's own credential is configured separately (Manager app,
+      # Settings → Payment Gateway) and stored encrypted with this key.
+      PAYMENT_CREDENTIAL_ENCRYPTION_KEY: ${PAYMENT_CREDENTIAL_ENCRYPTION_KEY:?PAYMENT_CREDENTIAL_ENCRYPTION_KEY must be set to a base64-encoded 32-byte (256-bit) key, e.g. openssl rand -base64 32 — see .env.example}
       # RealSmsProviderAdapter (the Simple-endpoint adapter) is always
       # instantiated and its properties bind eagerly at Spring startup in
       # every non-test profile, regardless of SMS_PROVIDER's value — see
