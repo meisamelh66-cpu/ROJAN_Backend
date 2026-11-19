@@ -55,6 +55,7 @@ services:
       REDIS_PORT: 6379
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set to a random string of at least 32 characters — see README.md}
+      PAYMENT_CREDENTIAL_ENCRYPTION_KEY: ${PAYMENT_CREDENTIAL_ENCRYPTION_KEY}
       # LocalDevSmsProvider (Local OTP Test Support v1): opts into the dev-only
       # logging SMS adapter so OTP login/register is exercisable without real
       # MeliPayamak credentials - RealSmsProviderAdapter's own SMS_API_URL/

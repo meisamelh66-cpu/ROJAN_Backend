@@ -55,10 +55,12 @@ internal class InMemoryOtpRepository : OtpRepository {
 
 internal data class SentSms(val phoneNumber: PhoneNumber, val message: String)
 
-internal class RecordingSmsProvider : SmsProviderPort {
+/** [failWith] lets a test simulate the real SMS provider adapter's own failure mode (`SmsDeliveryException` - network/timeout/non-2xx/unparseable, see `infrastructure.sms.RealSmsProviderAdapter`/`MeliPayamakSharedPatternProvider`) without a real HTTP call. */
+internal class RecordingSmsProvider(private val failWith: Throwable? = null) : SmsProviderPort {
     val sent = mutableListOf<SentSms>()
 
     override fun send(phoneNumber: PhoneNumber, message: String) {
+        failWith?.let { throw it }
         sent += SentSms(phoneNumber, message)
     }
 

@@ -124,4 +124,27 @@ class RequestOtpUseCaseTest {
         assertEquals(1, smsProvider.sent.size)
         assertTrue(rateLimiter.consumedKeys.none { it.startsWith("otp:request:ip:") })
     }
+
+    /**
+     * Staff Access E2E OTP diagnostic: closes the one real coverage gap found while
+     * investigating a real-device OTP failure - this use case never catches an SMS
+     * provider failure specially (see `infrastructure.sms.RealSmsProviderAdapter`'s own
+     * doc comment: it "surfaces via GlobalExceptionHandler's existing catch-all as a
+     * 500"). Verifies that propagation actually happens, and - separately - that the
+     * OTP record is already persisted *before* the provider is ever called, so a
+     * provider-side failure never loses the record the user might still receive by
+     * some other channel (e.g. a delayed SMS, or a future admin resend).
+     */
+    @Test
+    fun `propagates an SMS provider failure uncaught, after the OTP record is already persisted`() {
+        val failingProvider = RecordingSmsProvider(failWith = RuntimeException("simulated provider failure"))
+        val useCase = RequestOtpUseCase(otpRepository, failingProvider, RecordingRateLimiter(), testPolicy())
+
+        assertThrows<RuntimeException> {
+            useCase.execute(RequestOtpCommand(phoneNumber = "+989123456789", callerIp = "1.2.3.4"))
+        }
+
+        val stored = otpRepository.findByPhoneNumber(PhoneNumber("+989123456789"))
+        assertTrue(stored != null, "expected the OTP record to already be persisted despite the provider failure")
+    }
 }

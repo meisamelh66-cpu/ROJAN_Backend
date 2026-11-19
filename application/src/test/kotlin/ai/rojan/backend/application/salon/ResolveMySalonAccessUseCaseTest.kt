@@ -116,6 +116,37 @@ class ResolveMySalonAccessUseCaseTest {
         assertTrue(access.memberships.isEmpty())
     }
 
+    /**
+     * P0-3 Staff Access, source-only continuation: distinct from "revoked"
+     * above (true removal, [SalonMembershipRepository.remove]) - a *disabled*
+     * membership is a different state ([SalonMembershipRepository.setActive])
+     * that [SalonPermissionResolver.resolve] already treats as zero
+     * permissions (its own doc comment: "a disabled membership keeps its
+     * row/role but grants nothing"). This had no coverage at this specific
+     * use case - the one that actually backs `GET /users/me/salon-access` -
+     * so it was unverified whether a disabled membership stays visible
+     * (active=false, permissions empty) or silently disappears like a
+     * removed one. It must stay visible: the row/role still exist, so the
+     * client can distinguish "disabled here" from "never a member here".
+     */
+    @Test
+    fun `a disabled membership still appears, with active false and zero permissions - not omitted like a removal`() {
+        val owner = UserId.new()
+        val receptionist = UserId.new()
+        val salon = newSalon(owner)
+        membershipRepository.assign(salon.id, receptionist, SalonRole.RECEPTIONIST)
+
+        membershipRepository.setActive(salon.id, receptionist, false)
+
+        val access = useCase.execute(ResolveMySalonAccessCommand(receptionist))
+
+        assertEquals(1, access.memberships.size)
+        val membershipAccess = access.memberships[0]
+        assertEquals(false, membershipAccess.membership.active)
+        assertEquals(SalonRole.RECEPTIONIST, membershipAccess.membership.role)
+        assertTrue(membershipAccess.permissions.isEmpty())
+    }
+
     @Test
     fun `a user with owner, manager, and specialist relationships across different salons sees all three`() {
         val user = UserId.new()
