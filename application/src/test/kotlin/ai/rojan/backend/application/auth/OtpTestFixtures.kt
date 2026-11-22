@@ -1,11 +1,17 @@
 package ai.rojan.backend.application.auth
 
+import ai.rojan.backend.application.port.IssuedToken
 import ai.rojan.backend.application.port.RateLimiterPort
 import ai.rojan.backend.application.port.RefreshTokenStorePort
 import ai.rojan.backend.application.port.SmsProviderPort
+import ai.rojan.backend.application.port.TokenProviderPort
+import ai.rojan.backend.application.port.TokenSubject
+import ai.rojan.backend.application.port.TokenType
 import ai.rojan.backend.domain.auth.OneTimePassword
 import ai.rojan.backend.domain.auth.OtpRepository
 import ai.rojan.backend.domain.auth.PhoneNumber
+import ai.rojan.backend.domain.auth.ReviewerAccessGrant
+import ai.rojan.backend.domain.auth.ReviewerAccessRepository
 import ai.rojan.backend.domain.common.PageRequest
 import ai.rojan.backend.domain.common.PageResult
 import ai.rojan.backend.domain.common.SortDirection
@@ -15,6 +21,7 @@ import ai.rojan.backend.domain.user.UserId
 import ai.rojan.backend.domain.user.UserRepository
 import ai.rojan.backend.domain.user.UserRole
 import java.time.Duration
+import java.time.Instant
 
 internal class InMemoryOtpUserRepository : UserRepository {
     private val store = mutableMapOf<UserId, User>()
@@ -123,4 +130,24 @@ internal class RecordingRefreshTokenStore : RefreshTokenStorePort {
     override fun revokeFamily(familyId: String) {
         families.remove(familyId)
     }
+}
+
+/** Shared in-memory fake for [ReviewerAccessRepository] — Cafe Bazaar reviewer-access tests. At most one row per phone, mirroring the real schema's `phone_number` primary key. */
+internal class InMemoryReviewerAccessRepository : ReviewerAccessRepository {
+    private val store = mutableMapOf<PhoneNumber, ReviewerAccessGrant>()
+
+    override fun findByPhoneNumber(phoneNumber: PhoneNumber): ReviewerAccessGrant? = store[phoneNumber]
+
+    override fun save(grant: ReviewerAccessGrant): ReviewerAccessGrant {
+        store[grant.phoneNumber] = grant
+        return grant
+    }
+}
+
+/** Same shape as [VerifyOtpUseCaseTest]'s own private `FakeOtpTokenProvider`, kept here (not `private`) so reviewer-access tests in a different file can share it without duplicating it a third time. */
+internal class FakeReviewerTokenProvider : TokenProviderPort {
+    override fun generateAccessToken(user: User) = IssuedToken("access-${user.id.value}", Instant.now().plusSeconds(900), jti = "access-jti-${user.id.value}")
+    override fun generateRefreshToken(user: User, familyId: String) = IssuedToken("refresh-${user.id.value}", Instant.now().plusSeconds(2_592_000), jti = "refresh-jti-${user.id.value}")
+    override fun validateAndExtractSubject(token: String) =
+        TokenSubject(userId = token.substringAfter("-"), email = null, role = "", type = TokenType.ACCESS, jti = "jti-${token.substringAfter("-")}")
 }

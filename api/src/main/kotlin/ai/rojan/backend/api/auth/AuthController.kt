@@ -41,6 +41,7 @@ class AuthController(
     private val refreshTokenUseCase: RefreshTokenUseCase,
     private val requestOtpUseCase: RequestOtpUseCase,
     private val verifyOtpUseCase: VerifyOtpUseCase,
+    private val tryReviewerAccessLoginUseCase: ai.rojan.backend.application.auth.TryReviewerAccessLoginUseCase,
     private val logoutUseCase: LogoutUseCase,
 ) {
 
@@ -183,6 +184,13 @@ class AuthController(
         ),
     )
     fun verifyOtp(@Valid @RequestBody request: OtpVerifyRequest): AuthResponse {
+        // Cafe Bazaar reviewer access: an isolated, additive check consulted
+        // first. Returns null for every request it doesn't apply to (no
+        // grant row for this phone, wrong code, expired, deactivated, or the
+        // account no longer exists) - verifyOtpUseCase below then runs
+        // exactly as it always has, completely unmodified, for 100% of
+        // requests this doesn't match.
+        tryReviewerAccessLoginUseCase.execute(request.phoneNumber, request.code)?.let { return it.toResponse() }
         val result = verifyOtpUseCase.execute(
             VerifyOtpCommand(phoneNumber = request.phoneNumber, code = request.code, fullName = request.fullName),
         )
