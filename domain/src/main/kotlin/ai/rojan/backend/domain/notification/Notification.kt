@@ -14,6 +14,8 @@ value class NotificationId(val value: UUID) {
 
 enum class NotificationType {
     BOOKING_CREATED,
+    BOOKING_CONFIRMED,
+    BOOKING_COMPLETED,
     BOOKING_CANCELLED,
 }
 
