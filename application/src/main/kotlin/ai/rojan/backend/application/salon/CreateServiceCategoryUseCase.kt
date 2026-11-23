@@ -1,10 +1,12 @@
 package ai.rojan.backend.application.salon
 
 import ai.rojan.backend.domain.common.SalonNotFoundException
+import ai.rojan.backend.domain.common.ServiceCategoryAlreadyExistsException
 import ai.rojan.backend.domain.salon.Permission
 import ai.rojan.backend.domain.salon.SalonId
 import ai.rojan.backend.domain.salon.SalonRepository
 import ai.rojan.backend.domain.salon.ServiceCategory
+import ai.rojan.backend.domain.salon.ServiceCategoryNameNormalizer
 import ai.rojan.backend.domain.salon.ServiceCategoryRepository
 import ai.rojan.backend.domain.user.UserId
 
@@ -24,6 +26,12 @@ class CreateServiceCategoryUseCase(
         val salon = salonRepository.findById(command.salonId)
             ?: throw SalonNotFoundException(command.salonId.value.toString())
         salonPermissionResolver.require(salon.id, command.callerId, Permission.MANAGE_CATALOG)
+
+        val normalizedName = ServiceCategoryNameNormalizer.normalize(command.name)
+        val duplicate = serviceCategoryRepository.findBySalonId(salon.id)
+            .any { it.active && ServiceCategoryNameNormalizer.normalize(it.name) == normalizedName }
+        if (duplicate) throw ServiceCategoryAlreadyExistsException(command.name)
+
         val category = ServiceCategory.create(
             salonId = salon.id,
             name = command.name,

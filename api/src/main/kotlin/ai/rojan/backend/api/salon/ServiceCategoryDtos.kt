@@ -32,3 +32,15 @@ data class ServiceCategoryResponse(
     val createdAt: Instant,
     val updatedAt: Instant,
 )
+
+/**
+ * Default Beauty Salon Category Catalog - a suggestion, never a persisted
+ * [ServiceCategoryResponse]: no [id]/[salonId] because nothing was created
+ * yet. Distinguishable from a real category by this shape alone (callers
+ * never see an [id] to confuse the two) - a salon only gets a real category
+ * row once it actually creates one via `POST .../categories`.
+ */
+data class DefaultServiceCategoryResponse(
+    val name: String,
+    val serviceTypes: List<String>,
+)
