@@ -66,6 +66,7 @@ class AppReleaseUseCasesTest {
     private fun createCommand(
         applicationId: String = AppTarget.MANAGER.applicationId,
         versionCode: Int = 2,
+        clientVersionCode: Int? = null,
         minSupportedVersionCode: Int = 1,
         isMandatory: Boolean = false,
         status: AppReleaseStatus = AppReleaseStatus.PUBLISHED,
@@ -76,6 +77,7 @@ class AppReleaseUseCasesTest {
         applicationId = applicationId,
         versionName = "1.0.$versionCode",
         versionCode = versionCode,
+        clientVersionCode = clientVersionCode ?: versionCode,
         minSupportedVersionCode = minSupportedVersionCode,
         isMandatory = isMandatory,
         status = status,
@@ -344,6 +346,47 @@ class AppReleaseUseCasesTest {
         val result = latestUseCase.execute(LatestAppReleaseQuery(AppTarget.MANAGER.applicationId, 20))
         assertTrue(result.updateAvailable)
         assertFalse(result.forceUpdate)
+    }
+
+    // ---------- App Release: update-check compares the real client/Android versionCode, never the backend's own internal identity versionCode ----------
+
+    @Test
+    fun `a caller at the real Manager client versionCode sees no update, even though the backend's own internal versionCode is higher`() {
+        // Reproduces the live Manager 1.0.6 incident: Android ships versionCode=6, but this row's
+        // own internal versionCode had to be 7 (6 was already claimed by an earlier, defunct row
+        // for the same app+channel). clientVersionCode is the one field that must track the real
+        // Android build; the backend's own versionCode stays free to diverge for uniqueness reasons.
+        createUseCase.execute(createCommand(versionCode = 100, clientVersionCode = 6))
+        val result = latestUseCase.execute(LatestAppReleaseQuery(AppTarget.MANAGER.applicationId, 6))
+        assertFalse(result.updateAvailable, "a caller at the real latest clientVersionCode must never be told to update")
+        assertFalse(result.forceUpdate)
+    }
+
+    @Test
+    fun `a caller behind the real client versionCode still sees an update, independent of the backend's internal versionCode`() {
+        createUseCase.execute(createCommand(versionCode = 101, clientVersionCode = 6))
+        val result = latestUseCase.execute(LatestAppReleaseQuery(AppTarget.MANAGER.applicationId, 5))
+        assertTrue(result.updateAvailable, "a caller behind the real clientVersionCode must still see an update")
+    }
+
+    @Test
+    fun `clientVersionCode defaults to versionCode when not explicitly set - every pre-existing app is unaffected`() {
+        val release = createUseCase.execute(createCommand(versionCode = 102))
+        assertEquals(102, release.clientVersionCode)
+    }
+
+    @Test
+    fun `clientVersionCode stays editable after publish, unlike the locked artifact fields`() {
+        val release = createUseCase.execute(createCommand(versionCode = 103, clientVersionCode = 104))
+        val corrected = updateUseCase.execute(unchangedUpdate(release).copy(clientVersionCode = 103))
+        assertEquals(103, corrected.clientVersionCode)
+    }
+
+    @Test
+    fun `an edit that does not send clientVersionCode leaves the stored value unchanged`() {
+        val release = createUseCase.execute(createCommand(versionCode = 105, clientVersionCode = 55))
+        val edited = updateUseCase.execute(unchangedUpdate(release).copy(releaseNotes = "unrelated edit"))
+        assertEquals(55, edited.clientVersionCode)
     }
 
     @Test

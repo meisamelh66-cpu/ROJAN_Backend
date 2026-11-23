@@ -63,7 +63,23 @@ enum class AppReleaseChannel { PRODUCTION, BETA }
  * artifact - [versionName], [downloadUrl], [sha256], [fileSizeBytes] - can never change again, not
  * even after archiving. Clients may already have verified and installed exactly those bytes; a
  * different build must be a new release with a new versionCode. [minSupportedVersionCode],
- * [isMandatory], [releaseNotes], [releaseDate] and the signer metadata stay editable.
+ * [isMandatory], [releaseNotes], [releaseDate], [clientVersionCode] and the signer metadata stay
+ * editable.
+ *
+ * [versionCode] vs [clientVersionCode]: [versionCode] is this row's own identity/uniqueness key
+ * (part of the `target`+`channel`+`versionCode` uniqueness constraint, and what orders "latest" -
+ * see [AppReleaseRepository.findLatestPublished]) - it is an internal database concern, not
+ * guaranteed to equal the real Android `versionCode` a client build carries. A row's own
+ * [versionCode] can be forced to skip ahead of the real Android versionCode when an earlier,
+ * already-existing row for the same app+channel has already claimed that number (exactly what
+ * happened for ROJAN Manager 1.0.6: Android ships versionCode 6, but an earlier, defunct row
+ * already occupied this table's versionCode 6, so this row's own versionCode became 7).
+ * [clientVersionCode] is the one field every update check must compare against instead - it is
+ * meant to always equal the real installed app's `versionCode`, independent of this row's own
+ * identity number. Defaults to [versionCode] on [create] (the common case: no uniqueness collision,
+ * so both numbers coincide), but - unlike the locked artifact fields above - stays correctable via
+ * [updateMetadata] even after publish, specifically so a drift like the Manager incident can be
+ * fixed without needing a whole new release.
  *
  * Concurrency: [version] is the stored row's optimistic-lock version; a save based on an outdated
  * version fails with [ai.rojan.backend.domain.common.AppReleaseConcurrentModificationException]
@@ -80,6 +96,7 @@ class AppRelease private constructor(
     val channel: AppReleaseChannel,
     versionName: String,
     val versionCode: Int,
+    clientVersionCode: Int,
     minSupportedVersionCode: Int,
     isMandatory: Boolean,
     status: AppReleaseStatus,
@@ -105,6 +122,10 @@ class AppRelease private constructor(
     val version: Long? = null,
 ) {
     var versionName: String = versionName
+        private set
+
+    /** The real Android `versionCode` to compare a caller against - see this class's own doc comment for why this is a separate field from [versionCode]. */
+    var clientVersionCode: Int = clientVersionCode
         private set
 
     var minSupportedVersionCode: Int = minSupportedVersionCode
@@ -173,6 +194,8 @@ class AppRelease private constructor(
         releaseDate: LocalDate,
         signerSubject: String? = null,
         signerThumbprint: String? = null,
+        /** Null means "leave unchanged" - same convention as [signerSubject]/[signerThumbprint]. Deliberately never locked by [isArtifactLocked]: this is exactly the field a drift like the Manager incident needs to be correctable through, after publish, without a whole new release. */
+        clientVersionCode: Int? = null,
     ) {
         val normalizedVersionName = versionName.trim()
         val normalizedDownloadUrl = downloadUrl.trim()
@@ -182,6 +205,7 @@ class AppRelease private constructor(
         validateDownloadUrl(normalizedDownloadUrl)
         require(SHA256_PATTERN.matches(normalizedSha256)) { "SHA-256 must be exactly 64 lowercase hex characters" }
         require(fileSizeBytes > 0) { "File size must be positive" }
+        clientVersionCode?.let { require(it > 0) { "Client version code must be positive" } }
         val newSignerSubject = signerSubject?.let { normalizeSignerSubject(it) } ?: this.signerSubject
         val newSignerThumbprint = signerThumbprint?.let { normalizeSignerThumbprint(it) } ?: this.signerThumbprint
 
@@ -202,6 +226,7 @@ class AppRelease private constructor(
         this.releaseDate = releaseDate
         this.signerSubject = newSignerSubject
         this.signerThumbprint = newSignerThumbprint
+        this.clientVersionCode = clientVersionCode ?: this.clientVersionCode
         touch()
     }
 
@@ -305,12 +330,15 @@ class AppRelease private constructor(
             channel: AppReleaseChannel = AppReleaseChannel.PRODUCTION,
             signerSubject: String? = null,
             signerThumbprint: String? = null,
+            /** Defaults to [versionCode] - correct for every app today, where this row's own identity number and the real Android versionCode coincide. Pass a different value only when [versionCode] had to skip ahead to avoid a uniqueness collision with an earlier row - see this class's own doc comment. */
+            clientVersionCode: Int = versionCode,
         ): AppRelease {
             val normalizedVersionName = versionName.trim()
             val normalizedDownloadUrl = downloadUrl.trim()
             val normalizedSha256 = sha256.lowercase()
             validateVersionName(normalizedVersionName)
             require(versionCode > 0) { "Version code must be positive" }
+            require(clientVersionCode > 0) { "Client version code must be positive" }
             validateVersion(target, normalizedVersionName, versionCode, minSupportedVersionCode)
             validateDownloadUrl(normalizedDownloadUrl)
             require(SHA256_PATTERN.matches(normalizedSha256)) { "SHA-256 must be exactly 64 lowercase hex characters" }
@@ -328,6 +356,7 @@ class AppRelease private constructor(
                 channel = channel,
                 versionName = normalizedVersionName,
                 versionCode = versionCode,
+                clientVersionCode = clientVersionCode,
                 minSupportedVersionCode = minSupportedVersionCode,
                 isMandatory = isMandatory,
                 status = status,
@@ -353,6 +382,7 @@ class AppRelease private constructor(
             channel: AppReleaseChannel,
             versionName: String,
             versionCode: Int,
+            clientVersionCode: Int,
             minSupportedVersionCode: Int,
             isMandatory: Boolean,
             status: AppReleaseStatus,
@@ -371,7 +401,7 @@ class AppRelease private constructor(
             updatedAt: Instant,
             version: Long?,
         ): AppRelease = AppRelease(
-            id, target, channel, versionName, versionCode, minSupportedVersionCode, isMandatory, status, downloadUrl,
+            id, target, channel, versionName, versionCode, clientVersionCode, minSupportedVersionCode, isMandatory, status, downloadUrl,
             sha256, fileSizeBytes, releaseNotes, releaseDate, isActive, signerSubject, signerThumbprint,
             publishedAt, publishedBy, createdBy, createdAt, updatedAt, version,
         )

@@ -52,7 +52,13 @@ class PublicAppReleaseController(
         updateAvailable = updateAvailable,
         forceUpdate = forceUpdate,
         latestVersion = release.versionName,
-        latestVersionCode = release.versionCode,
+        // The real Android versionCode, not this row's own internal identity/uniqueness versionCode
+        // - see ai.rojan.backend.domain.apprelease.AppRelease's own doc comment. Reporting the
+        // internal versionCode here was harmless to Android's own update-check math (it only reads
+        // updateAvailable/forceUpdate, never this field), but was a misleading, self-contradictory
+        // public contract otherwise - a client at the real latest version being told
+        // "latestVersionCode: 7" while also being told "updateAvailable: false" at its own 6.
+        latestVersionCode = release.clientVersionCode,
         minSupportedVersionCode = release.minSupportedVersionCode,
         isMandatory = release.isMandatory,
         channel = release.channel,

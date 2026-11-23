@@ -108,10 +108,12 @@ class AppReleaseApiIntegrationTest {
         status: String = "PUBLISHED",
         channel: String? = null,
         downloadUrl: String = "https://rojanai.ir/download/test/$versionName.bin",
+        clientVersionCode: Int? = null,
     ): Map<String, Any?> = buildMap {
         put("applicationId", applicationId)
         put("versionName", versionName)
         put("versionCode", versionCode)
+        if (clientVersionCode != null) put("clientVersionCode", clientVersionCode)
         put("minSupportedVersionCode", 1)
         put("isMandatory", false)
         put("status", status)
@@ -168,6 +170,25 @@ class AppReleaseApiIntegrationTest {
         assertEquals(54_050_274L, body["fileSizeBytes"].longValue())
         assertEquals("2026-09-27", body["releaseDate"].textValue())
         assertTrue(body["publishedAt"].isTextual, "publishedAt should be an ISO instant, was ${body["publishedAt"]}")
+    }
+
+    @Test
+    fun `the public latest response reports the real client versionCode, not the backend's own internal identity versionCode, when they diverge`() {
+        // Reproduces the live Manager 1.0.6 incident over real HTTP: Android ships versionCode=6,
+        // but this row's own internal versionCode had to be 7 (6 was already claimed by an earlier,
+        // defunct row for this app+channel). A caller at the real 6 must see updateAvailable=false,
+        // and the public contract's own latestVersionCode must report 6, never the internal 7 -
+        // otherwise a client at the real latest version would be told "latestVersionCode: 7" while
+        // also being told "updateAvailable: false" at its own 6, a self-contradictory response.
+        val token = seedPlatformAdmin()
+        // versionCode=900: comfortably above every other PRODUCTION-channel Manager versionCode any
+        // other test in this shared-database class creates, so this row is unambiguously "latest"
+        // for Manager/PRODUCTION regardless of JUnit's test execution order.
+        createOk(token, releaseBody("ai.rojan.designlab.manager", "1.0.6", 900, clientVersionCode = 6))
+
+        val response = objectMapper.readTree(latest("ai.rojan.designlab.manager", 6).body)
+        assertEquals(6, response["latestVersionCode"].intValue())
+        assertFalse(response["updateAvailable"].booleanValue())
     }
 
     @Test

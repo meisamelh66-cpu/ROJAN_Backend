@@ -38,6 +38,10 @@ class AppReleaseJpaEntity(
     @Column(name = "version_code", nullable = false)
     val versionCode: Int,
 
+    /** The real Android versionCode to compare a caller against - see the domain [ai.rojan.backend.domain.apprelease.AppRelease]'s own doc comment for why this is separate from [versionCode]. Mutable (unlike [versionCode]) - it stays correctable even after publish. */
+    @Column(name = "client_version_code", nullable = false)
+    var clientVersionCode: Int,
+
     @Column(name = "min_supported_version_code", nullable = false)
     var minSupportedVersionCode: Int,
 
