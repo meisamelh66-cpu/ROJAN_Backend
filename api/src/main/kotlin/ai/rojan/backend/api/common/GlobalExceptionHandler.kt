@@ -60,6 +60,7 @@ import ai.rojan.backend.domain.common.SalonNotReadyForActivationException
 import ai.rojan.backend.domain.common.SalonSlugAlreadyTakenException
 import ai.rojan.backend.domain.common.SalonVerificationNotFoundException
 import ai.rojan.backend.domain.common.ScheduleOverrideNotFoundException
+import ai.rojan.backend.domain.common.ServiceCategoryAlreadyExistsException
 import ai.rojan.backend.domain.common.ServiceCategoryNotFoundException
 import ai.rojan.backend.domain.common.ServiceNotFoundException
 import ai.rojan.backend.domain.common.SpecialistBlockNotFoundException
@@ -214,6 +215,7 @@ class GlobalExceptionHandler {
         DocumentAlreadyAttachedException::class,
         VerificationAlreadyPendingException::class,
         AppReleaseVersionCodeAlreadyExistsException::class,
+        ServiceCategoryAlreadyExistsException::class,
         InvalidAppReleaseStatusTransitionException::class,
         PublishedAppReleaseArtifactImmutableException::class,
         AppReleaseConcurrentModificationException::class,
@@ -283,6 +285,7 @@ class GlobalExceptionHandler {
         is SalonNotFoundException -> "SALON_NOT_FOUND"
         is BranchNotFoundException -> "BRANCH_NOT_FOUND"
         is ServiceCategoryNotFoundException -> "SERVICE_CATEGORY_NOT_FOUND"
+        is ServiceCategoryAlreadyExistsException -> "SERVICE_CATEGORY_ALREADY_EXISTS"
         is ServiceNotFoundException -> "SERVICE_NOT_FOUND"
         is SpecialistNotFoundException -> "SPECIALIST_NOT_FOUND"
         is WorkingHoursNotFoundException -> "WORKING_HOURS_NOT_FOUND"

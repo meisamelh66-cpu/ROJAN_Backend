@@ -48,6 +48,10 @@ class BranchNotFoundException(identifier: String) :
 class ServiceCategoryNotFoundException(identifier: String) :
     DomainException("Service category not found: $identifier")
 
+/** Default Beauty Salon Category Catalog - thrown when a salon already has an active category whose [ai.rojan.backend.domain.salon.ServiceCategoryNameNormalizer]-normalized name matches the requested one. */
+class ServiceCategoryAlreadyExistsException(name: String) :
+    DomainException("Service category already exists for this salon: $name")
+
 class ServiceNotFoundException(identifier: String) :
     DomainException("Service not found: $identifier")
 

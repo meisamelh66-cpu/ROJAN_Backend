@@ -1,6 +1,7 @@
 package ai.rojan.backend.application.salon
 
 import ai.rojan.backend.domain.common.SalonAccessDeniedException
+import ai.rojan.backend.domain.common.ServiceCategoryAlreadyExistsException
 import ai.rojan.backend.domain.common.ServiceCategoryNotFoundException
 import ai.rojan.backend.domain.salon.ServiceCategoryId
 import ai.rojan.backend.domain.user.UserId
@@ -44,6 +45,34 @@ class ServiceCategoryUseCasesTest {
         assertThrows<SalonAccessDeniedException> {
             createUseCase.execute(CreateServiceCategoryCommand(salon.id, stranger, "Nails", null))
         }
+    }
+
+    @Test
+    fun `rejects adding a second category with the same name to the same salon`() {
+        createCategory()
+
+        assertThrows<ServiceCategoryAlreadyExistsException> {
+            createUseCase.execute(CreateServiceCategoryCommand(salon.id, owner, "Hair", null))
+        }
+    }
+
+    @Test
+    fun `rejects a duplicate Persian category name that differs only by Arabic-script letter variants and extra spacing`() {
+        createUseCase.execute(CreateServiceCategoryCommand(salon.id, owner, "رنگ و مش", null))
+
+        assertThrows<ServiceCategoryAlreadyExistsException> {
+            createUseCase.execute(CreateServiceCategoryCommand(salon.id, owner, "رنگ  و  مش", null))
+        }
+    }
+
+    @Test
+    fun `allows a new category once the same-named one was deactivated`() {
+        val category = createCategory()
+        deactivateUseCase.execute(DeactivateServiceCategoryCommand(category.id, owner))
+
+        val recreated = createCategory()
+
+        assertEquals("Hair", recreated.name)
     }
 
     @Test
