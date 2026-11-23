@@ -22,6 +22,8 @@ data class CreateAppReleaseCommand(
     val applicationId: String,
     val versionName: String,
     val versionCode: Int,
+    /** Defaults to [versionCode] - see [ai.rojan.backend.domain.apprelease.AppRelease]'s own doc comment for when the two need to diverge. */
+    val clientVersionCode: Int = versionCode,
     val minSupportedVersionCode: Int,
     val isMandatory: Boolean,
     val status: AppReleaseStatus,
@@ -53,6 +55,7 @@ class CreateAppReleaseUseCase(
             target = target,
             versionName = command.versionName,
             versionCode = command.versionCode,
+            clientVersionCode = command.clientVersionCode,
             minSupportedVersionCode = command.minSupportedVersionCode,
             isMandatory = command.isMandatory,
             status = command.status,
@@ -87,6 +90,8 @@ data class UpdateAppReleaseCommand(
     val signerSubject: String? = null,
     /** Null means "leave unchanged" - see [AppRelease.updateMetadata]. */
     val signerThumbprint: String? = null,
+    /** Null means "leave unchanged" - see [AppRelease.updateMetadata]. The one field this operation may change even on a published/locked release - see [AppRelease]'s own doc comment. */
+    val clientVersionCode: Int? = null,
 )
 
 /**
@@ -118,6 +123,7 @@ class UpdateAppReleaseUseCase(
             releaseDate = command.releaseDate,
             signerSubject = command.signerSubject,
             signerThumbprint = command.signerThumbprint,
+            clientVersionCode = command.clientVersionCode,
         )
         release.transitionTo(command.status, command.callerId)
         return appReleaseRepository.save(release)
@@ -246,6 +252,15 @@ data class LatestAppReleaseResult(
  * this specific release was marked mandatory, or the caller's version has fallen below the release's
  * own [AppRelease.minSupportedVersionCode] floor - a caller already on or above the latest version
  * is never told to force-update, regardless of either flag.
+ *
+ * [LatestAppReleaseQuery.callerVersionCode] is always compared against [AppRelease.clientVersionCode],
+ * never [AppRelease.versionCode] - the latter is this row's own internal identity/uniqueness number,
+ * which is not guaranteed to equal the real Android versionCode a caller sends (see [AppRelease]'s
+ * own doc comment). Comparing against [AppRelease.versionCode] directly was the root cause of a real
+ * production incident: ROJAN Manager 1.0.6 ships Android versionCode 6, but this table's own
+ * versionCode for that release had to be 7 (6 was already taken by an earlier, defunct row), so the
+ * Manager app was permanently told `6 < 7` - an update dialog with no real update behind it, on
+ * every single launch.
  */
 class GetLatestAppReleaseUseCase(
     private val appReleaseRepository: AppReleaseRepository,
@@ -255,7 +270,7 @@ class GetLatestAppReleaseUseCase(
         val release = appReleaseRepository.findLatestPublished(target, query.channel)
             ?: throw AppReleaseNotFoundException("${query.applicationId} (${query.channel})")
 
-        val updateAvailable = query.callerVersionCode < release.versionCode
+        val updateAvailable = query.callerVersionCode < release.clientVersionCode
         val forceUpdate = updateAvailable &&
             (release.isMandatory || query.callerVersionCode < release.minSupportedVersionCode)
 

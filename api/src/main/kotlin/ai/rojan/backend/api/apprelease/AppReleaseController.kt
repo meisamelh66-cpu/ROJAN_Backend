@@ -102,6 +102,7 @@ class AppReleaseController(
                 applicationId = request.applicationId,
                 versionName = request.versionName,
                 versionCode = request.versionCode,
+                clientVersionCode = request.clientVersionCode ?: request.versionCode,
                 minSupportedVersionCode = request.minSupportedVersionCode,
                 isMandatory = request.isMandatory,
                 status = request.status,
@@ -141,6 +142,7 @@ class AppReleaseController(
                 releaseDate = request.releaseDate,
                 signerSubject = request.signerSubject,
                 signerThumbprint = request.signerThumbprint,
+                clientVersionCode = request.clientVersionCode,
             ),
         ).toResponse()
     }
@@ -186,6 +188,7 @@ class AppReleaseController(
         channel = channel,
         versionName = versionName,
         versionCode = versionCode,
+        clientVersionCode = clientVersionCode,
         minSupportedVersionCode = minSupportedVersionCode,
         isMandatory = isMandatory,
         status = status,

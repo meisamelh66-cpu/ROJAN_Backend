@@ -48,6 +48,7 @@ class AppReleaseRepositoryAdapter(
                 }
                 version = release.version
                 versionName = release.versionName
+                clientVersionCode = release.clientVersionCode
                 minSupportedVersionCode = release.minSupportedVersionCode
                 isMandatory = release.isMandatory
                 status = release.status
@@ -68,6 +69,7 @@ class AppReleaseRepositoryAdapter(
                 channel = release.channel,
                 versionName = release.versionName,
                 versionCode = release.versionCode,
+                clientVersionCode = release.clientVersionCode,
                 minSupportedVersionCode = release.minSupportedVersionCode,
                 isMandatory = release.isMandatory,
                 status = release.status,
@@ -98,6 +100,7 @@ class AppReleaseRepositoryAdapter(
         channel = channel,
         versionName = versionName,
         versionCode = versionCode,
+        clientVersionCode = clientVersionCode,
         minSupportedVersionCode = minSupportedVersionCode,
         isMandatory = isMandatory,
         status = status,

@@ -17,6 +17,8 @@ data class AppReleaseResponse(
     val channel: AppReleaseChannel,
     val versionName: String,
     val versionCode: Int,
+    /** The real Android versionCode a caller is compared against - see the domain [ai.rojan.backend.domain.apprelease.AppRelease]'s own doc comment for why this can differ from [versionCode]. */
+    val clientVersionCode: Int,
     val minSupportedVersionCode: Int,
     val isMandatory: Boolean,
     val status: AppReleaseStatus,
@@ -53,6 +55,10 @@ data class CreateAppReleaseRequest(
 
     @field:Min(1)
     val versionCode: Int,
+
+    /** Null defaults to [versionCode] (the common case). Set explicitly only when [versionCode] had to skip ahead to avoid a uniqueness collision with an earlier row for this app+channel - see the domain's own doc comment. */
+    @field:Min(1)
+    val clientVersionCode: Int? = null,
 
     @field:Min(1)
     val minSupportedVersionCode: Int,
@@ -125,6 +131,10 @@ data class UpdateAppReleaseRequest(
     /** Null leaves the stored value unchanged. SHA-1 (40 hex) or SHA-256 (64 hex); spaces/colons tolerated. */
     @field:Size(max = 200)
     val signerThumbprint: String? = null,
+
+    /** Null leaves the stored value unchanged. The one field this operation may change even on a published/locked release - see the domain's own doc comment for why. */
+    @field:Min(1)
+    val clientVersionCode: Int? = null,
 )
 
 /**
