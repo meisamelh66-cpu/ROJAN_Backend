@@ -189,6 +189,7 @@ class BookingController(
         ),
         ApiResponse(responseCode = "403", description = "Caller is not the salon owner"),
     )
+    @Transactional
     fun confirm(@PathVariable bookingId: UUID, @AuthenticationPrincipal principal: UserDetails): BookingResponse {
         val callerId = currentUserResolver.resolve(principal)
         return confirmBookingUseCase.execute(ConfirmBookingCommand(BookingId(bookingId), callerId)).toResponse()
@@ -213,6 +214,7 @@ class BookingController(
 
     @PatchMapping("/{bookingId}/complete")
     @Operation(summary = "Mark a confirmed booking completed (salon owner only)")
+    @Transactional
     fun complete(@PathVariable bookingId: UUID, @AuthenticationPrincipal principal: UserDetails): BookingResponse {
         val callerId = currentUserResolver.resolve(principal)
         return completeBookingUseCase.execute(CompleteBookingCommand(BookingId(bookingId), callerId)).toResponse()

@@ -14,6 +14,8 @@ import ai.rojan.backend.application.schedule.InMemoryLeaveRepository
 import ai.rojan.backend.application.schedule.InMemoryScheduleOverrideRepository
 import ai.rojan.backend.application.schedule.InMemoryWeeklyAvailabilityRepository
 import ai.rojan.backend.application.schedule.InMemoryWorkingHoursRepository
+import ai.rojan.backend.domain.common.InvalidBookingStateException
+import ai.rojan.backend.domain.common.SalonAccessDeniedException
 import ai.rojan.backend.domain.notification.NotificationType
 import ai.rojan.backend.domain.salon.Salon
 import ai.rojan.backend.domain.salon.Service
@@ -26,6 +28,7 @@ import ai.rojan.backend.domain.user.UserId
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -93,6 +96,18 @@ class NotificationBookingTriggerTest {
         notificationRepository,
     )
 
+    private val confirmUseCase = ConfirmBookingUseCase(
+        bookingRepository,
+        salonPermissionResolver,
+        notificationRepository,
+    )
+
+    private val completeUseCase = CompleteBookingUseCase(
+        bookingRepository,
+        salonPermissionResolver,
+        notificationRepository,
+    )
+
     @Test
     fun `successful booking creation generates exactly one BOOKING_CREATED notification`() {
         val booking = createUseCase.execute(
@@ -130,5 +145,94 @@ class NotificationBookingTriggerTest {
         org.junit.jupiter.api.Assertions.assertNotNull(cancelNotif)
         assertEquals(booking.id.value.toString(), cancelNotif!!.referenceId)
         assertTrue(cancelNotif.title.contains("لغو"))
+    }
+
+    @Test
+    fun `confirming a pending booking generates exactly one BOOKING_CONFIRMED notification`() {
+        val booking = createUseCase.execute(
+            CreateBookingCommand(salon.id, service.id, specialist.id, customer, startTime, null),
+        )
+
+        confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner))
+
+        // Total notifications now: 2 (1 CREATED, 1 CONFIRMED)
+        val notifications = notificationRepository.findBySalonId(salon.id, ai.rojan.backend.domain.common.PageRequest(0, 10)).content
+        assertEquals(2, notifications.size)
+
+        val confirmNotif = notifications.find { it.type == NotificationType.BOOKING_CONFIRMED }
+        org.junit.jupiter.api.Assertions.assertNotNull(confirmNotif)
+        assertEquals(booking.id.value.toString(), confirmNotif!!.referenceId)
+        assertEquals("BOOKING", confirmNotif.referenceType)
+        assertTrue(confirmNotif.title.contains("تأیید"))
+    }
+
+    @Test
+    fun `completing a confirmed booking generates exactly one BOOKING_COMPLETED notification`() {
+        val booking = createUseCase.execute(
+            CreateBookingCommand(salon.id, service.id, specialist.id, customer, startTime, null),
+        )
+        confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner))
+
+        completeUseCase.execute(CompleteBookingCommand(booking.id, owner))
+
+        // Total notifications now: 3 (1 CREATED, 1 CONFIRMED, 1 COMPLETED)
+        val notifications = notificationRepository.findBySalonId(salon.id, ai.rojan.backend.domain.common.PageRequest(0, 10)).content
+        assertEquals(3, notifications.size)
+
+        val completeNotif = notifications.find { it.type == NotificationType.BOOKING_COMPLETED }
+        org.junit.jupiter.api.Assertions.assertNotNull(completeNotif)
+        assertEquals(booking.id.value.toString(), completeNotif!!.referenceId)
+        assertTrue(completeNotif.title.contains("تکمیل"))
+    }
+
+    @Test
+    fun `confirming a booking that is not PENDING throws and generates no new notification`() {
+        val booking = createUseCase.execute(
+            CreateBookingCommand(salon.id, service.id, specialist.id, customer, startTime, null),
+        )
+        confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner)) // now CONFIRMED, not PENDING
+
+        assertThrows<InvalidBookingStateException> {
+            confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner))
+        }
+
+        // Still exactly 2 (1 CREATED, 1 CONFIRMED) - the rejected second confirm never reached the
+        // notification side effect, since the state-transition guard fires first.
+        assertEquals(2, notificationRepository.findBySalonId(salon.id, ai.rojan.backend.domain.common.PageRequest(0, 10)).content.size)
+    }
+
+    @Test
+    fun `completing a booking that is not CONFIRMED throws and generates no new notification`() {
+        val booking = createUseCase.execute(
+            CreateBookingCommand(salon.id, service.id, specialist.id, customer, startTime, null),
+        )
+        // Still PENDING - never confirmed.
+
+        assertThrows<InvalidBookingStateException> {
+            completeUseCase.execute(CompleteBookingCommand(booking.id, owner))
+        }
+
+        // Still exactly 1 (CREATED only) - the rejected complete never reached the notification
+        // side effect.
+        assertEquals(1, notificationRepository.findBySalonId(salon.id, ai.rojan.backend.domain.common.PageRequest(0, 10)).content.size)
+    }
+
+    @Test
+    fun `confirming or completing without MANAGE_BOOKINGS permission throws and generates no notification`() {
+        val booking = createUseCase.execute(
+            CreateBookingCommand(salon.id, service.id, specialist.id, customer, startTime, null),
+        )
+        val stranger = UserId.new()
+
+        assertThrows<SalonAccessDeniedException> {
+            confirmUseCase.execute(ConfirmBookingCommand(booking.id, stranger))
+        }
+        assertThrows<SalonAccessDeniedException> {
+            completeUseCase.execute(CompleteBookingCommand(booking.id, stranger))
+        }
+
+        // Still exactly 1 (CREATED only) - neither rejected call ever reached the notification side
+        // effect, and the booking itself is still PENDING (confirm never actually ran).
+        assertEquals(1, notificationRepository.findBySalonId(salon.id, ai.rojan.backend.domain.common.PageRequest(0, 10)).content.size)
     }
 }

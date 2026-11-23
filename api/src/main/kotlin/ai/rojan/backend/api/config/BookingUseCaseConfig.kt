@@ -58,8 +58,11 @@ class BookingUseCaseConfig {
     )
 
     @Bean
-    fun confirmBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =
-        ConfirmBookingUseCase(bookingRepository, salonPermissionResolver)
+    fun confirmBookingUseCase(
+        bookingRepository: BookingRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+        notificationRepository: NotificationRepository,
+    ) = ConfirmBookingUseCase(bookingRepository, salonPermissionResolver, notificationRepository)
 
     @Bean
     fun cancelBookingUseCase(
@@ -69,8 +72,11 @@ class BookingUseCaseConfig {
     ) = CancelBookingUseCase(bookingRepository, salonPermissionResolver, notificationRepository)
 
     @Bean
-    fun completeBookingUseCase(bookingRepository: BookingRepository, salonPermissionResolver: SalonPermissionResolver) =
-        CompleteBookingUseCase(bookingRepository, salonPermissionResolver)
+    fun completeBookingUseCase(
+        bookingRepository: BookingRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+        notificationRepository: NotificationRepository,
+    ) = CompleteBookingUseCase(bookingRepository, salonPermissionResolver, notificationRepository)
 
     @Bean
     fun rescheduleBookingUseCase(

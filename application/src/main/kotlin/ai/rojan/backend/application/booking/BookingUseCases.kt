@@ -144,12 +144,36 @@ data class ConfirmBookingCommand(val bookingId: BookingId, val callerId: UserId)
 class ConfirmBookingUseCase(
     private val bookingRepository: BookingRepository,
     private val salonPermissionResolver: SalonPermissionResolver,
+    private val notificationRepository: NotificationRepository? = null,
 ) {
     fun execute(command: ConfirmBookingCommand): Booking {
         val booking = findBookingOrThrow(bookingRepository, command.bookingId)
         salonPermissionResolver.require(booking.salonId, command.callerId, Permission.MANAGE_BOOKINGS)
         booking.confirm()
-        return bookingRepository.save(booking)
+        val savedBooking = bookingRepository.save(booking)
+        if (notificationRepository != null) {
+            val exists = notificationRepository.existsByReference(
+                savedBooking.salonId,
+                "BOOKING",
+                savedBooking.id.value.toString(),
+                NotificationType.BOOKING_CONFIRMED,
+            )
+            if (!exists) {
+                notificationRepository.save(
+                    Notification.create(
+                        salonId = savedBooking.salonId,
+                        type = NotificationType.BOOKING_CONFIRMED,
+                        title = "نوبت تأیید شد",
+                        message = "نوبت شما در ساعت ${savedBooking.startTime} تأیید شد.",
+                        severity = NotificationSeverity.SUCCESS,
+                        category = "bookings",
+                        referenceId = savedBooking.id.value.toString(),
+                        referenceType = "BOOKING",
+                    )
+                )
+            }
+        }
+        return savedBooking
     }
 }
 
@@ -196,12 +220,36 @@ data class CompleteBookingCommand(val bookingId: BookingId, val callerId: UserId
 class CompleteBookingUseCase(
     private val bookingRepository: BookingRepository,
     private val salonPermissionResolver: SalonPermissionResolver,
+    private val notificationRepository: NotificationRepository? = null,
 ) {
     fun execute(command: CompleteBookingCommand): Booking {
         val booking = findBookingOrThrow(bookingRepository, command.bookingId)
         salonPermissionResolver.require(booking.salonId, command.callerId, Permission.MANAGE_BOOKINGS)
         booking.complete()
-        return bookingRepository.save(booking)
+        val savedBooking = bookingRepository.save(booking)
+        if (notificationRepository != null) {
+            val exists = notificationRepository.existsByReference(
+                savedBooking.salonId,
+                "BOOKING",
+                savedBooking.id.value.toString(),
+                NotificationType.BOOKING_COMPLETED,
+            )
+            if (!exists) {
+                notificationRepository.save(
+                    Notification.create(
+                        salonId = savedBooking.salonId,
+                        type = NotificationType.BOOKING_COMPLETED,
+                        title = "نوبت تکمیل شد",
+                        message = "نوبت شما در ساعت ${savedBooking.startTime} تکمیل شد.",
+                        severity = NotificationSeverity.SUCCESS,
+                        category = "bookings",
+                        referenceId = savedBooking.id.value.toString(),
+                        referenceType = "BOOKING",
+                    )
+                )
+            }
+        }
+        return savedBooking
     }
 }
 
