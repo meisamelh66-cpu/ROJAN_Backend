@@ -13,16 +13,18 @@ import java.time.LocalDate
 import java.util.UUID
 
 /**
- * App Release Update-Check Fix (V52): proves the migration's own backfill in isolation. A
- * `@SpringBootTest` always runs every migration (V52 included) before the Spring context - and
- * therefore the test - ever starts, so it can never observe a pre-V52 row. This test drives
- * Flyway's own Java API directly against a disposable embedded Postgres instead: migrate only
- * through V51, insert raw rows shaped exactly like real pre-existing production rows (no
- * client_version_code column yet), then migrate to latest (V52) and assert every one backfilled to
- * client_version_code == version_code - the correct value for every row that existed before this
- * column did (true for every app today except the one already-known, already-live Manager
- * 1.0.6/versionCode=7 row, which is corrected separately via an explicit UpdateAppRelease call, not
- * by this migration).
+ * App Release Update-Check Fix (V52 + V53): proves both migrations' effects in isolation. A
+ * `@SpringBootTest` always runs every migration before the Spring context - and therefore the
+ * test - ever starts, so it can never observe a pre-V52 row or a not-yet-corrected one. This test
+ * drives Flyway's own Java API directly against a disposable embedded Postgres instead: migrate
+ * only through V51, insert raw rows shaped exactly like real pre-existing production rows (no
+ * client_version_code column yet), then migrate to latest and assert:
+ * - V52 backfills every row to client_version_code == version_code (true for every app, including
+ *   Manager's own 1.0.6/versionCode=7 row, immediately after V52 and before V53 runs);
+ * - V53 then corrects only the one specific, already-known Manager 1.0.6/versionCode=7 row to
+ *   client_version_code=6, leaving every other row (Customer, Reception, and any other Manager
+ *   release that doesn't match that exact versionCode+versionName) untouched;
+ * - V53 is a safe no-op on a database with no such row at all (every fresh test/dev environment).
  */
 class AppReleaseClientVersionCodeMigrationTest {
 
@@ -48,10 +50,10 @@ class AppReleaseClientVersionCodeMigrationTest {
     fun `every pre-existing row is backfilled to client_version_code equal to its own version_code`() {
         flyway("51").migrate()
 
+        // Deliberately excludes the Manager 1.0.6/versionCode=7 shape - V53 (which also runs when
+        // migrating to latest) corrects that one specific row away from this general rule; its own
+        // behavior is covered separately below.
         val legacyRows = listOf(
-            // Manager's own real incident shape: version_code=7, no client_version_code column yet
-            // at the time this row would have been inserted in production.
-            Triple("ai.rojan.designlab.manager", "1.0.6", 7),
             Triple("ai.rojan.designlab", "2.0.0", 20),
             Triple("ai.rojan.designlab.reception", "1.0.1", 1_000_001),
         )
@@ -65,22 +67,85 @@ class AppReleaseClientVersionCodeMigrationTest {
 
         embeddedPostgres.postgresDatabase.connection.use { connection ->
             legacyRows.forEach { (applicationId, _, versionCode) ->
-                connection.prepareStatement(
-                    "SELECT client_version_code FROM app_releases WHERE application_id = ? AND version_code = ?",
-                ).apply {
-                    setString(1, applicationId)
-                    setInt(2, versionCode)
-                }.executeQuery().use { rs ->
-                    assertTrue(rs.next(), "expected a row for $applicationId / $versionCode")
-                    assertEquals(
-                        versionCode,
-                        rs.getInt("client_version_code"),
-                        "$applicationId's pre-existing row must backfill client_version_code to its own version_code",
-                    )
-                }
+                assertEquals(
+                    versionCode,
+                    clientVersionCodeOf(connection, applicationId, versionCode),
+                    "$applicationId's pre-existing row must backfill client_version_code to its own version_code",
+                )
             }
         }
     }
+
+    @Test
+    fun `V53 corrects only the Manager 1-0-6 versionCode=7 row, leaving every other row untouched`() {
+        flyway("51").migrate()
+
+        val rows = listOf(
+            Triple("ai.rojan.designlab.manager", "1.0.6", 7), // the real incident row
+            Triple("ai.rojan.designlab", "2.0.0", 20),
+            Triple("ai.rojan.designlab.reception", "1.0.1", 1_000_001),
+        )
+        embeddedPostgres.postgresDatabase.connection.use { connection ->
+            rows.forEach { (applicationId, versionName, versionCode) ->
+                insertLegacyAppRelease(connection, applicationId, versionName, versionCode)
+            }
+        }
+
+        flyway().migrate() // V52 backfills all three to client_version_code == version_code, then V53 corrects only the Manager row.
+
+        embeddedPostgres.postgresDatabase.connection.use { connection ->
+            assertEquals(6, clientVersionCodeOf(connection, "ai.rojan.designlab.manager", 7), "the known Manager 1.0.6 incident row must be corrected to 6")
+            assertEquals(20, clientVersionCodeOf(connection, "ai.rojan.designlab", 20), "Customer's row must be untouched by the Manager-only correction")
+            assertEquals(1_000_001, clientVersionCodeOf(connection, "ai.rojan.designlab.reception", 1_000_001), "Reception's row must be untouched by the Manager-only correction")
+        }
+    }
+
+    @Test
+    fun `a Manager row with a different versionCode or versionName than the real incident is never touched`() {
+        flyway("51").migrate()
+
+        // Neither matches the exact incident shape (versionCode=7, versionName="1.0.6") - the
+        // correction must never touch either.
+        val otherManagerRows = listOf(
+            Triple("ai.rojan.designlab.manager", "1.0.7", 8),
+            Triple("ai.rojan.designlab.manager", "1.0.5", 5),
+        )
+        embeddedPostgres.postgresDatabase.connection.use { connection ->
+            otherManagerRows.forEach { (applicationId, versionName, versionCode) ->
+                insertLegacyAppRelease(connection, applicationId, versionName, versionCode)
+            }
+        }
+
+        flyway().migrate()
+
+        embeddedPostgres.postgresDatabase.connection.use { connection ->
+            otherManagerRows.forEach { (_, _, versionCode) ->
+                assertEquals(
+                    versionCode,
+                    clientVersionCodeOf(connection, "ai.rojan.designlab.manager", versionCode),
+                    "a non-matching Manager row must keep client_version_code == version_code",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `V53 is a no-op, and does not fail, on a database with no matching row at all`() {
+        // No rows inserted - every fresh test/dev database, and any environment where this
+        // incident never happened, must sail through V53 untouched.
+        flyway().migrate()
+    }
+
+    private fun clientVersionCodeOf(connection: Connection, applicationId: String, versionCode: Int): Int =
+        connection.prepareStatement(
+            "SELECT client_version_code FROM app_releases WHERE application_id = ? AND version_code = ?",
+        ).apply {
+            setString(1, applicationId)
+            setInt(2, versionCode)
+        }.executeQuery().use { rs ->
+            assertTrue(rs.next(), "expected a row for $applicationId / $versionCode")
+            rs.getInt("client_version_code")
+        }
 
     /** Inserts a row shaped exactly like a real pre-V52 app_releases row (plus the users row its created_by FK needs) - no client_version_code column reference at all, since it does not exist yet at this point in the migration sequence. */
     private fun insertLegacyAppRelease(connection: Connection, applicationId: String, versionName: String, versionCode: Int) {
