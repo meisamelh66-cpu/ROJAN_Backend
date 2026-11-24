@@ -21,7 +21,8 @@ import java.time.Instant
 import java.time.LocalDateTime
 import org.springframework.data.domain.PageRequest as SpringPageRequest
 
-private val ACTIVE_STATUSES = listOf(BookingStatus.PENDING, BookingStatus.CONFIRMED)
+/** Reception Check-in (Phase 4): CHECKED_IN is still an occupied slot - a checked-in booking must keep blocking the specialist's time exactly like PENDING/CONFIRMED, same as [Booking.isActive]. */
+private val ACTIVE_STATUSES = listOf(BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN)
 
 /**
  * Repository-pattern adapter for [BookingRepository]. [reserve] is the sole

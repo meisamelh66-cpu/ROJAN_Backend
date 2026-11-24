@@ -66,7 +66,7 @@ data class BookingResponse(
     val startTime: LocalDateTime,
     val endTime: LocalDateTime,
 
-    @field:Schema(description = "PENDING -> CONFIRMED -> COMPLETED, or CANCELLED from PENDING/CONFIRMED")
+    @field:Schema(description = "PENDING -> CONFIRMED -> [CHECKED_IN, optional] -> COMPLETED, or CANCELLED from PENDING/CONFIRMED")
     val status: BookingStatus,
 
     val notes: String?,

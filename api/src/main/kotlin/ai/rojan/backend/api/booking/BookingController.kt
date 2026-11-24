@@ -7,6 +7,8 @@ import ai.rojan.backend.api.common.PagedResponse
 import ai.rojan.backend.api.common.toPagedResponse
 import ai.rojan.backend.application.booking.CancelBookingCommand
 import ai.rojan.backend.application.booking.CancelBookingUseCase
+import ai.rojan.backend.application.booking.CheckInBookingCommand
+import ai.rojan.backend.application.booking.CheckInBookingUseCase
 import ai.rojan.backend.application.booking.CompleteBookingCommand
 import ai.rojan.backend.application.booking.CompleteBookingUseCase
 import ai.rojan.backend.application.booking.ConfirmBookingCommand
@@ -67,6 +69,7 @@ class BookingController(
     private val bookingRepository: BookingRepository,
     private val createBookingUseCase: CreateBookingUseCase,
     private val confirmBookingUseCase: ConfirmBookingUseCase,
+    private val checkInBookingUseCase: CheckInBookingUseCase,
     private val cancelBookingUseCase: CancelBookingUseCase,
     private val completeBookingUseCase: CompleteBookingUseCase,
     private val rescheduleBookingUseCase: RescheduleBookingUseCase,
@@ -193,6 +196,23 @@ class BookingController(
     fun confirm(@PathVariable bookingId: UUID, @AuthenticationPrincipal principal: UserDetails): BookingResponse {
         val callerId = currentUserResolver.resolve(principal)
         return confirmBookingUseCase.execute(ConfirmBookingCommand(BookingId(bookingId), callerId)).toResponse()
+    }
+
+    @PatchMapping("/{bookingId}/check-in")
+    @Operation(summary = "Mark a confirmed booking's customer as arrived (Reception/Manager/owner)")
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "Booking checked in"),
+        ApiResponse(
+            responseCode = "409",
+            description = "The booking is not currently CONFIRMED",
+            content = [Content(schema = Schema(implementation = ApiError::class))],
+        ),
+        ApiResponse(responseCode = "403", description = "Caller lacks MANAGE_BOOKINGS at this salon"),
+    )
+    @Transactional
+    fun checkIn(@PathVariable bookingId: UUID, @AuthenticationPrincipal principal: UserDetails): BookingResponse {
+        val callerId = currentUserResolver.resolve(principal)
+        return checkInBookingUseCase.execute(CheckInBookingCommand(BookingId(bookingId), callerId)).toResponse()
     }
 
     @PatchMapping("/{bookingId}/cancel")

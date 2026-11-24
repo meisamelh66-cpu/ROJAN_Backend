@@ -177,6 +177,29 @@ class ConfirmBookingUseCase(
     }
 }
 
+data class CheckInBookingCommand(val bookingId: BookingId, val callerId: UserId)
+
+/**
+ * Reception Check-in (Phase 4): the booking-engine side of the Reception/Manager "customer has
+ * arrived" action. Same authorization model as [ConfirmBookingUseCase]/[CompleteBookingUseCase] -
+ * [Permission.MANAGE_BOOKINGS], resolved by [SalonPermissionResolver] exactly as before (owner,
+ * [ai.rojan.backend.domain.salon.SalonRole.MANAGER], and [ai.rojan.backend.domain.salon.SalonRole.RECEPTIONIST]
+ * all hold it) - no new permission, no Reception-specific check. Deliberately no notification (unlike
+ * confirm/cancel/create): check-in is an operational, in-salon action the customer is physically
+ * present for, not something they need to be told about remotely.
+ */
+class CheckInBookingUseCase(
+    private val bookingRepository: BookingRepository,
+    private val salonPermissionResolver: SalonPermissionResolver,
+) {
+    fun execute(command: CheckInBookingCommand): Booking {
+        val booking = findBookingOrThrow(bookingRepository, command.bookingId)
+        salonPermissionResolver.require(booking.salonId, command.callerId, Permission.MANAGE_BOOKINGS)
+        booking.checkIn()
+        return bookingRepository.save(booking)
+    }
+}
+
 data class CancelBookingCommand(val bookingId: BookingId, val callerId: UserId)
 
 class CancelBookingUseCase(
