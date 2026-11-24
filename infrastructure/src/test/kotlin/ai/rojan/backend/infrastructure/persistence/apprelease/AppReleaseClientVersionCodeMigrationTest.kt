@@ -13,18 +13,22 @@ import java.time.LocalDate
 import java.util.UUID
 
 /**
- * App Release Update-Check Fix (V52 + V53): proves both migrations' effects in isolation. A
- * `@SpringBootTest` always runs every migration before the Spring context - and therefore the
- * test - ever starts, so it can never observe a pre-V52 row or a not-yet-corrected one. This test
- * drives Flyway's own Java API directly against a disposable embedded Postgres instead: migrate
- * only through V51, insert raw rows shaped exactly like real pre-existing production rows (no
- * client_version_code column yet), then migrate to latest and assert:
+ * App Release Update-Check Fix (V52 + V53 + V54): proves all three migrations' effects in
+ * isolation. A `@SpringBootTest` always runs every migration before the Spring context - and
+ * therefore the test - ever starts, so it can never observe a pre-V52 row or a not-yet-corrected
+ * one. This test drives Flyway's own Java API directly against a disposable embedded Postgres
+ * instead: migrate only through V51, insert raw rows shaped exactly like real pre-existing
+ * production rows (no client_version_code column yet), then migrate to latest and assert:
  * - V52 backfills every row to client_version_code == version_code (true for every app, including
- *   Manager's own 1.0.6/versionCode=7 row, immediately after V52 and before V53 runs);
+ *   Manager's own 1.0.6/versionCode=7 and 1.0.7/versionCode=8 rows, immediately after V52 and
+ *   before V53/V54 run);
  * - V53 then corrects only the one specific, already-known Manager 1.0.6/versionCode=7 row to
- *   client_version_code=6, leaving every other row (Customer, Reception, and any other Manager
- *   release that doesn't match that exact versionCode+versionName) untouched;
- * - V53 is a safe no-op on a database with no such row at all (every fresh test/dev environment).
+ *   client_version_code=6, leaving every other row untouched;
+ * - V54 then corrects only the Manager 1.0.7/versionCode=8 row to client_version_code=7, leaving
+ *   the already-corrected 1.0.6 row and every other row (Customer, Reception, and any other
+ *   Manager release that doesn't match that exact versionCode+versionName) untouched;
+ * - both V53 and V54 are safe no-ops on a database with no matching row at all (every fresh
+ *   test/dev environment).
  */
 class AppReleaseClientVersionCodeMigrationTest {
 
@@ -101,13 +105,13 @@ class AppReleaseClientVersionCodeMigrationTest {
     }
 
     @Test
-    fun `a Manager row with a different versionCode or versionName than the real incident is never touched`() {
+    fun `a Manager row with a different versionCode or versionName than either known incident is never touched`() {
         flyway("51").migrate()
 
-        // Neither matches the exact incident shape (versionCode=7, versionName="1.0.6") - the
-        // correction must never touch either.
+        // Matches neither known incident shape (versionCode=7/versionName="1.0.6" for V53, or
+        // versionCode=8/versionName="1.0.7" for V54) - the corrections must never touch either.
         val otherManagerRows = listOf(
-            Triple("ai.rojan.designlab.manager", "1.0.7", 8),
+            Triple("ai.rojan.designlab.manager", "1.0.8", 9),
             Triple("ai.rojan.designlab.manager", "1.0.5", 5),
         )
         embeddedPostgres.postgresDatabase.connection.use { connection ->
@@ -133,6 +137,39 @@ class AppReleaseClientVersionCodeMigrationTest {
     fun `V53 is a no-op, and does not fail, on a database with no matching row at all`() {
         // No rows inserted - every fresh test/dev database, and any environment where this
         // incident never happened, must sail through V53 untouched.
+        flyway().migrate()
+    }
+
+    @Test
+    fun `V54 corrects only the Manager 1-0-7 versionCode=8 row, leaving the 1-0-6 row and every other row untouched`() {
+        flyway("51").migrate()
+
+        val rows = listOf(
+            Triple("ai.rojan.designlab.manager", "1.0.6", 7), // V53's own incident row - must stay corrected to 6, not re-touched by V54
+            Triple("ai.rojan.designlab.manager", "1.0.7", 8), // the new incident row - V54's own target
+            Triple("ai.rojan.designlab", "2.0.0", 20),
+            Triple("ai.rojan.designlab.reception", "1.0.1", 1_000_001),
+        )
+        embeddedPostgres.postgresDatabase.connection.use { connection ->
+            rows.forEach { (applicationId, versionName, versionCode) ->
+                insertLegacyAppRelease(connection, applicationId, versionName, versionCode)
+            }
+        }
+
+        flyway().migrate() // V52 backfills all four, V53 corrects the 1.0.6 row to 6, V54 corrects the 1.0.7 row to 7.
+
+        embeddedPostgres.postgresDatabase.connection.use { connection ->
+            assertEquals(6, clientVersionCodeOf(connection, "ai.rojan.designlab.manager", 7), "V53's own 1.0.6 incident row must remain corrected to 6, untouched by V54")
+            assertEquals(7, clientVersionCodeOf(connection, "ai.rojan.designlab.manager", 8), "the new Manager 1.0.7 incident row must be corrected to 7")
+            assertEquals(20, clientVersionCodeOf(connection, "ai.rojan.designlab", 20), "Customer's row must be untouched by the Manager-only correction")
+            assertEquals(1_000_001, clientVersionCodeOf(connection, "ai.rojan.designlab.reception", 1_000_001), "Reception's row must be untouched by the Manager-only correction")
+        }
+    }
+
+    @Test
+    fun `V54 is a no-op, and does not fail, on a database with no matching row at all`() {
+        // No rows inserted - every fresh test/dev database, and any environment where this
+        // second incident never happened, must sail through V54 untouched.
         flyway().migrate()
     }
 
