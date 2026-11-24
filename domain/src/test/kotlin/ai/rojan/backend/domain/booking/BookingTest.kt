@@ -82,6 +82,43 @@ class BookingTest {
     }
 
     @Test
+    fun `checkIn moves a confirmed booking to checked-in, and still counts as active`() {
+        val booking = newBooking()
+        booking.confirm()
+        booking.checkIn()
+        assertEquals(BookingStatus.CHECKED_IN, booking.status)
+        assertEquals(true, booking.isActive)
+    }
+
+    @Test
+    fun `checkIn rejects a booking that is not confirmed - pending, checked-in, cancelled, or completed`() {
+        assertThrows(InvalidBookingStateException::class.java) { newBooking().checkIn() }
+
+        val checkedIn = newBooking()
+        checkedIn.confirm()
+        checkedIn.checkIn()
+        assertThrows(InvalidBookingStateException::class.java) { checkedIn.checkIn() }
+
+        val cancelled = newBooking()
+        cancelled.cancel()
+        assertThrows(InvalidBookingStateException::class.java) { cancelled.checkIn() }
+
+        val completed = newBooking()
+        completed.confirm()
+        completed.complete()
+        assertThrows(InvalidBookingStateException::class.java) { completed.checkIn() }
+    }
+
+    @Test
+    fun `complete accepts a checked-in booking too - check-in is optional, not mandatory`() {
+        val booking = newBooking()
+        booking.confirm()
+        booking.checkIn()
+        booking.complete()
+        assertEquals(BookingStatus.COMPLETED, booking.status)
+    }
+
+    @Test
     fun `reschedule updates the time window while pending or confirmed`() {
         val booking = newBooking()
         val newStart = LocalDateTime.of(2026, 8, 11, 14, 0)

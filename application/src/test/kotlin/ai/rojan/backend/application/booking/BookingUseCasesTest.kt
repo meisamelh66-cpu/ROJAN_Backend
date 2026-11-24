@@ -8,6 +8,7 @@ import ai.rojan.backend.application.salon.InMemoryServiceRepository
 import ai.rojan.backend.application.salon.InMemorySpecialistRepository
 import ai.rojan.backend.application.salon.InMemorySpecialistServiceRepository
 import ai.rojan.backend.application.salon.SalonPermissionResolver
+import ai.rojan.backend.domain.salon.SalonRole
 import ai.rojan.backend.application.schedule.InMemoryBlockRepository
 import ai.rojan.backend.application.schedule.InMemoryLeaveRepository
 import ai.rojan.backend.application.schedule.InMemoryScheduleOverrideRepository
@@ -67,6 +68,7 @@ class BookingUseCasesTest {
 
     private val createUseCase = CreateBookingUseCase(salonRepository, serviceRepository, specialistRepository, bookingRepository, specialistServiceRepository, availabilityValidator, RecordingRateLimiter())
     private val confirmUseCase = ConfirmBookingUseCase(bookingRepository, salonPermissionResolver)
+    private val checkInUseCase = CheckInBookingUseCase(bookingRepository, salonPermissionResolver)
     private val cancelUseCase = CancelBookingUseCase(bookingRepository, salonPermissionResolver)
     private val completeUseCase = CompleteBookingUseCase(bookingRepository, salonPermissionResolver)
     private val rescheduleUseCase = RescheduleBookingUseCase(bookingRepository, serviceRepository, salonPermissionResolver, availabilityValidator)
@@ -192,6 +194,109 @@ class BookingUseCasesTest {
         val booking = createBooking()
         assertThrows(InvalidBookingStateException::class.java) {
             completeUseCase.execute(CompleteBookingCommand(booking.id, owner))
+        }
+    }
+
+    @Test
+    fun `owner can check in a confirmed booking`() {
+        val booking = createBooking()
+        confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner))
+        val checkedIn = checkInUseCase.execute(CheckInBookingCommand(booking.id, owner))
+        assertEquals(BookingStatus.CHECKED_IN, checkedIn.status)
+    }
+
+    @Test
+    fun `a receptionist membership can check in and complete a booking - the real Phase 4 requirement`() {
+        val receptionist = UserId.new()
+        membershipRepository.assign(salon.id, receptionist, SalonRole.RECEPTIONIST)
+        val booking = createBooking()
+        confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner))
+
+        val checkedIn = checkInUseCase.execute(CheckInBookingCommand(booking.id, receptionist))
+        assertEquals(BookingStatus.CHECKED_IN, checkedIn.status)
+
+        val completed = completeUseCase.execute(CompleteBookingCommand(booking.id, receptionist))
+        assertEquals(BookingStatus.COMPLETED, completed.status)
+    }
+
+    @Test
+    fun `a manager membership can also check in a booking - management capability is retained`() {
+        val manager = UserId.new()
+        membershipRepository.assign(salon.id, manager, SalonRole.MANAGER)
+        val booking = createBooking()
+        confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner))
+
+        val checkedIn = checkInUseCase.execute(CheckInBookingCommand(booking.id, manager))
+        assertEquals(BookingStatus.CHECKED_IN, checkedIn.status)
+    }
+
+    @Test
+    fun `rejects check-in from the customer - MANAGE_BOOKINGS only, customers can never check themselves in`() {
+        val booking = createBooking()
+        confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner))
+        assertThrows(SalonAccessDeniedException::class.java) {
+            checkInUseCase.execute(CheckInBookingCommand(booking.id, customer))
+        }
+    }
+
+    @Test
+    fun `rejects check-in from a disabled receptionist membership`() {
+        val receptionist = UserId.new()
+        membershipRepository.assign(salon.id, receptionist, SalonRole.RECEPTIONIST)
+        membershipRepository.setActive(salon.id, receptionist, false)
+        val booking = createBooking()
+        confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner))
+
+        assertThrows(SalonAccessDeniedException::class.java) {
+            checkInUseCase.execute(CheckInBookingCommand(booking.id, receptionist))
+        }
+    }
+
+    @Test
+    fun `rejects check-in of a booking that is still pending`() {
+        val booking = createBooking()
+        assertThrows(InvalidBookingStateException::class.java) {
+            checkInUseCase.execute(CheckInBookingCommand(booking.id, owner))
+        }
+    }
+
+    @Test
+    fun `checking in twice is rejected - not idempotent, same strict style as confirm`() {
+        val booking = createBooking()
+        confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner))
+        checkInUseCase.execute(CheckInBookingCommand(booking.id, owner))
+        assertThrows(InvalidBookingStateException::class.java) {
+            checkInUseCase.execute(CheckInBookingCommand(booking.id, owner))
+        }
+    }
+
+    @Test
+    fun `rejects check-in of a cancelled booking`() {
+        val booking = createBooking()
+        cancelUseCase.execute(CancelBookingCommand(booking.id, owner))
+        assertThrows(InvalidBookingStateException::class.java) {
+            checkInUseCase.execute(CheckInBookingCommand(booking.id, owner))
+        }
+    }
+
+    @Test
+    fun `rejects check-in of an already-completed booking`() {
+        val booking = createBooking()
+        confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner))
+        completeUseCase.execute(CompleteBookingCommand(booking.id, owner))
+        assertThrows(InvalidBookingStateException::class.java) {
+            checkInUseCase.execute(CheckInBookingCommand(booking.id, owner))
+        }
+    }
+
+    @Test
+    fun `a checked-in booking still blocks the time slot from a new overlapping booking`() {
+        val booking = createBooking()
+        confirmUseCase.execute(ConfirmBookingCommand(booking.id, owner))
+        checkInUseCase.execute(CheckInBookingCommand(booking.id, owner))
+
+        assertThrows(BookingConflictException::class.java) {
+            createBooking(customerId = otherCustomer)
         }
     }
 

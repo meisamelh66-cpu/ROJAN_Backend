@@ -1,6 +1,7 @@
 package ai.rojan.backend.api.config
 
 import ai.rojan.backend.application.booking.CancelBookingUseCase
+import ai.rojan.backend.application.booking.CheckInBookingUseCase
 import ai.rojan.backend.application.booking.CompleteBookingUseCase
 import ai.rojan.backend.application.booking.ConfirmBookingUseCase
 import ai.rojan.backend.application.booking.CreateBookingUseCase
@@ -63,6 +64,12 @@ class BookingUseCaseConfig {
         salonPermissionResolver: SalonPermissionResolver,
         notificationRepository: NotificationRepository,
     ) = ConfirmBookingUseCase(bookingRepository, salonPermissionResolver, notificationRepository)
+
+    @Bean
+    fun checkInBookingUseCase(
+        bookingRepository: BookingRepository,
+        salonPermissionResolver: SalonPermissionResolver,
+    ) = CheckInBookingUseCase(bookingRepository, salonPermissionResolver)
 
     @Bean
     fun cancelBookingUseCase(

@@ -12,6 +12,7 @@ import java.util.UUID
 enum class BookingStatus {
     PENDING,
     CONFIRMED,
+    CHECKED_IN,
     CANCELLED,
     COMPLETED,
 }
@@ -74,9 +75,31 @@ class Booking private constructor(
         updatedAt = Instant.now()
     }
 
-    fun complete() {
+    /**
+     * Reception Check-in (Phase 4): an optional intermediate step between [confirm] and
+     * [complete] - strictly `CONFIRMED -> CHECKED_IN` only, same strict-transition style as every
+     * other method here (no idempotent re-check-in, no check-in from [BookingStatus.PENDING]/
+     * [BookingStatus.CANCELLED]/[BookingStatus.COMPLETED]). Deliberately optional, not mandatory:
+     * [complete] still accepts a booking straight from [BookingStatus.CONFIRMED] (see below) so
+     * salons with no Reception/check-in step of their own are completely unaffected.
+     */
+    fun checkIn() {
         if (status != BookingStatus.CONFIRMED) {
-            throw InvalidBookingStateException("Only a confirmed booking can be completed (current status: $status)")
+            throw InvalidBookingStateException("Only a confirmed booking can be checked in (current status: $status)")
+        }
+        status = BookingStatus.CHECKED_IN
+        updatedAt = Instant.now()
+    }
+
+    /**
+     * Reception Check-in (Phase 4): widened to accept either [BookingStatus.CONFIRMED] (check-in
+     * skipped - every salon's existing behavior, unchanged) or [BookingStatus.CHECKED_IN] (the new,
+     * optional path) - never from [BookingStatus.PENDING]/[BookingStatus.CANCELLED]/already
+     * [BookingStatus.COMPLETED].
+     */
+    fun complete() {
+        if (status != BookingStatus.CONFIRMED && status != BookingStatus.CHECKED_IN) {
+            throw InvalidBookingStateException("Only a confirmed or checked-in booking can be completed (current status: $status)")
         }
         status = BookingStatus.COMPLETED
         updatedAt = Instant.now()
@@ -92,7 +115,7 @@ class Booking private constructor(
         updatedAt = Instant.now()
     }
 
-    val isActive: Boolean get() = status == BookingStatus.PENDING || status == BookingStatus.CONFIRMED
+    val isActive: Boolean get() = status == BookingStatus.PENDING || status == BookingStatus.CONFIRMED || status == BookingStatus.CHECKED_IN
 
     companion object {
         fun create(
