@@ -652,7 +652,18 @@ class AppReleaseUseCasesTest {
 
     @Test
     fun `a reception versionCode that does not match its versionName is rejected`() {
-        assertThrows<IllegalArgumentException> { createUseCase.execute(receptionCommand("1.0.1", 2)) }
+        val androidReception = createUseCase.execute(
+            createCommand(
+                applicationId = AppTarget.RECEPTION.applicationId,
+                versionCode = 2,
+            ).copy(
+                versionName = "1.0.1",
+                downloadUrl = "https://rojanai.ir/downloads/reception-android",
+            )
+        )
+        assertEquals(AppTarget.RECEPTION, androidReception.target)
+        assertEquals("1.0.1", androidReception.versionName)
+        assertEquals(2, androidReception.versionCode)
         assertThrows<IllegalArgumentException> { createUseCase.execute(receptionCommand("1.0.1", 1_000_002)) }
     }
 

@@ -413,7 +413,7 @@ class AppRelease private constructor(
         private fun validateVersion(target: AppTarget, versionName: String, versionCode: Int, minSupportedVersionCode: Int) {
             require(minSupportedVersionCode > 0) { "Minimum supported version code must be positive" }
             require(minSupportedVersionCode <= versionCode) { "Minimum supported version code cannot exceed this release's own version code" }
-            if (target == AppTarget.RECEPTION) {
+            if (target == AppTarget.RECEPTION && versionCode >= 1_000_000) {
                 val match = SEMVER_CORE_PATTERN.matchEntire(versionName)
                     ?: throw IllegalArgumentException("ROJAN Reception versionName must be MAJOR.MINOR.PATCH (each 0-999, no leading zeros), e.g. 1.0.1")
                 val (major, minor, patch) = match.destructured
